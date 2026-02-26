@@ -5,8 +5,8 @@ var builder = DistributedApplication.CreateBuilder(args);
 var authdb = builder.AddConnectionString("authdb");
 var rsdb = builder.AddConnectionString("rsdb");
 
-// shared Redis instance
-var redis = builder.AddRedis("cache");
+// Configure connection to existing Azure Managed Redis
+var redis = builder.AddConnectionString("cache");
 
 var apiService = builder.AddProject<Projects.rs_ruralia_ApiService>("apiservice")
     .WithHttpHealthCheck("/health")

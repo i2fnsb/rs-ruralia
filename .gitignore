@@ -399,3 +399,11 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Ignore appsettings files with secrets (keep templates for reference)
+**/appsettings.json
+**/appsettings.Development.json
+**/appsettings.*.json
+# Keep example/template files
+!**/appsettings.Example.json
+!**/appsettings.Template.json
