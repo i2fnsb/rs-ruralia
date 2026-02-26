@@ -1,0 +1,35 @@
+@typeparam TEntity where TEntity : class
+@using Microsoft.AspNetCore.Components.Forms
+
+<MudDialog>
+    <DialogContent>
+        <EditForm Model="@Entity" OnValidSubmit="Submit">
+            <DataAnnotationsValidator />
+            <MudGrid>
+                @FormContent(Entity)
+            </MudGrid>
+        </EditForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter, EditorRequired] public TEntity Entity { get; set; } = null!;
+    [Parameter, EditorRequired] public RenderFragment<TEntity> FormContent { get; set; } = null!;
+    [Parameter] public bool IsEdit { get; set; }
+
+    private void Submit()
+    {
+        MudDialog.Close(DialogResult.Ok(Entity));
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+}

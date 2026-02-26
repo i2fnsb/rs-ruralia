@@ -1,0 +1,386 @@
+@page "/service-areas"
+@rendermode InteractiveServer
+@attribute [Authorize]
+
+<PageTitle>Service Areas</PageTitle>
+
+<h1>Service Areas</h1>
+
+<div class="mb-3">
+    <button class="btn btn-primary" @onclick="LoadServiceAreas" disabled="@isLoading">
+        @if (isLoading)
+        {
+            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            <span>Loading...</span>
+        }
+        else
+        {
+            <span>Load Service Areas</span>
+        }
+    </button>
+    
+    <button class="btn btn-success ms-2" @onclick="StartCreate">
+        <i class="bi bi-plus-circle"></i> Add New
+    </button>
+</div>
+
+@if (errorMessage != null)
+{
+    <div class="alert alert-danger mt-3" role="alert">
+        <strong>Error:</strong> @errorMessage
+        @if (errorDetails != null && errorDetails.Length > 0)
+        {
+            <ul class="mb-0 mt-2">
+                @foreach (var detail in errorDetails)
+                {
+                    <li>@detail</li>
+                }
+            </ul>
+        }
+    </div>
+}
+
+@if (successMessage != null)
+{
+    <div class="alert alert-success mt-3" role="alert">
+        @successMessage
+    </div>
+}
+
+@if (serviceAreas != null && serviceAreas.Length > 0)
+{
+    <div class="mt-4">
+        <h3>Found @serviceAreas.Length service area(s)</h3>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Feature Object ID</th>
+                        <th>Org Key</th>
+                        <th>Current Mileage</th>
+                        <th>Abolish/Merge Year</th>
+                        <th>Maximum Mill Rate</th>
+                        <th>Current Mill Rate</th>
+                        <th>Fire Mill Rate</th>
+                        <th>Mill Levy</th>
+                        <th>Tax Authority Code</th>
+                        <th>Initial Tax Year</th>
+                        <th>Match Feature Layer</th>
+                        <th>Service Area Code ID</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (isCreating)
+                    {
+                        <tr class="table-warning">
+                            <td><em>New</em></td>
+                            <td><input type="text" class="form-control form-control-sm" @bind="editModel!.Name" /></td>
+                            <td><input type="text" class="form-control form-control-sm" @bind="editModel.FeatureObjectId" /></td>
+                            <td><input type="number" class="form-control form-control-sm" @bind="editModel.OrgKey" /></td>
+                            <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="editModel.CurrentMileage" /></td>
+                            <td><input type="number" class="form-control form-control-sm" @bind="editModel.AbolishMergeYear" /></td>
+                            <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="editModel.MaximumMillRate" /></td>
+                            <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="editModel.CurrentMillRate" /></td>
+                            <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="editModel.FireMillRate" /></td>
+                            <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="editModel.MillLevy" /></td>
+                            <td><input type="text" class="form-control form-control-sm" @bind="editModel.TaxAuthorityCode" /></td>
+                            <td><input type="number" class="form-control form-control-sm" @bind="editModel.InitialTaxYear" /></td>
+                            <td>
+                                <select class="form-select form-select-sm" @bind="editModel.MatchFeatureLayer">
+                                    <option value="">-</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </td>
+                            <td><input type="number" class="form-control form-control-sm" @bind="editModel.ServiceAreaCodeId" /></td>
+                            <td>
+                                <button class="btn btn-sm btn-success me-1" @onclick="SaveCreate" disabled="@isSaving">
+                                    @if (isSaving) { <span class="spinner-border spinner-border-sm"></span> } else { <i class="bi bi-check"></i> }
+                                </button>
+                                <button class="btn btn-sm btn-secondary" @onclick="CancelEdit" disabled="@isSaving">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var area in serviceAreas)
+                    {
+                        @if (editingId == area.Id)
+                        {
+                            <tr class="table-warning">
+                                <td>@area.Id</td>
+                                <td><input type="text" class="form-control form-control-sm" @bind="editModel!.Name" /></td>
+                                <td><input type="text" class="form-control form-control-sm" @bind="editModel.FeatureObjectId" /></td>
+                                <td><input type="number" class="form-control form-control-sm" @bind="editModel.OrgKey" /></td>
+                                <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="editModel.CurrentMileage" /></td>
+                                <td><input type="number" class="form-control form-control-sm" @bind="editModel.AbolishMergeYear" /></td>
+                                <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="editModel.MaximumMillRate" /></td>
+                                <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="editModel.CurrentMillRate" /></td>
+                                <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="editModel.FireMillRate" /></td>
+                                <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="editModel.MillLevy" /></td>
+                                <td><input type="text" class="form-control form-control-sm" @bind="editModel.TaxAuthorityCode" /></td>
+                                <td><input type="number" class="form-control form-control-sm" @bind="editModel.InitialTaxYear" /></td>
+                                <td>
+                                    <select class="form-select form-select-sm" @bind="editModel.MatchFeatureLayer">
+                                        <option value="">-</option>
+                                        <option value="true">Yes</option>
+                                        <option value="false">No</option>
+                                    </select>
+                                </td>
+                                <td><input type="number" class="form-control form-control-sm" @bind="editModel.ServiceAreaCodeId" /></td>
+                                <td>
+                                    <button class="btn btn-sm btn-success me-1" @onclick="SaveEdit" disabled="@isSaving">
+                                        @if (isSaving) { <span class="spinner-border spinner-border-sm"></span> } else { <i class="bi bi-check"></i> }
+                                    </button>
+                                    <button class="btn btn-sm btn-secondary" @onclick="CancelEdit" disabled="@isSaving">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            <tr>
+                                <td>@area.Id</td>
+                                <td>@area.Name</td>
+                                <td>@area.FeatureObjectId</td>
+                                <td>@area.OrgKey</td>
+                                <td>@area.CurrentMileage?.ToString("N2")</td>
+                                <td>@area.AbolishMergeYear</td>
+                                <td>@area.MaximumMillRate?.ToString("N2")</td>
+                                <td>@area.CurrentMillRate?.ToString("N2")</td>
+                                <td>@area.FireMillRate?.ToString("N2")</td>
+                                <td>@area.MillLevy?.ToString("N2")</td>
+                                <td>@area.TaxAuthorityCode</td>
+                                <td>@area.InitialTaxYear</td>
+                                <td>@(area.MatchFeatureLayer == true ? "Yes" : area.MatchFeatureLayer == false ? "No" : "-")</td>
+                                <td>@area.ServiceAreaCodeId</td>
+                                <td>
+                                    <button class="btn btn-sm btn-primary me-1" @onclick="() => StartEdit(area)" disabled="@(editingId != null || isCreating)">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-danger" @onclick="() => DeleteServiceArea(area.Id)" disabled="@(editingId != null || isCreating || isSaving)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+else if (!isLoading && serviceAreas != null)
+{
+    <p class="mt-3">No service areas found.</p>
+}
+
+@code {
+    private ServiceArea[]? serviceAreas;
+    private bool isLoading = false;
+    private bool isSaving = false;
+    private bool isCreating = false;
+    private string? errorMessage;
+    private string[]? errorDetails;
+    private string? successMessage;
+    private int? editingId;
+    private ServiceArea? editModel;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadServiceAreas();
+    }
+
+    private async Task LoadServiceAreas()
+    {
+        isLoading = true;
+        errorMessage = null;
+        errorDetails = null;
+        successMessage = null;
+        
+        try
+        {
+            var result = await ServiceAreasApi.GetAllServiceAreasAsync();
+            
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                serviceAreas = result.Data.ToArray();
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to load service areas";
+                errorDetails = result?.Errors;
+                serviceAreas = Array.Empty<ServiceArea>();
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = "Network error. Please check your connection and try again.";
+            serviceAreas = Array.Empty<ServiceArea>();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unexpected error: {ex.Message}";
+            serviceAreas = Array.Empty<ServiceArea>();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void StartEdit(ServiceArea area)
+    {
+        editingId = area.Id;
+        editModel = new ServiceArea
+        {
+            Id = area.Id,
+            Name = area.Name,
+            FeatureObjectId = area.FeatureObjectId,
+            OrgKey = area.OrgKey,
+            CurrentMileage = area.CurrentMileage,
+            AbolishMergeYear = area.AbolishMergeYear,
+            MaximumMillRate = area.MaximumMillRate,
+            CurrentMillRate = area.CurrentMillRate,
+            FireMillRate = area.FireMillRate,
+            MillLevy = area.MillLevy,
+            TaxAuthorityCode = area.TaxAuthorityCode,
+            InitialTaxYear = area.InitialTaxYear,
+            MatchFeatureLayer = area.MatchFeatureLayer,
+            ServiceAreaCodeId = area.ServiceAreaCodeId
+        };
+        errorMessage = null;
+        errorDetails = null;
+        successMessage = null;
+    }
+
+    private void StartCreate()
+    {
+        isCreating = true;
+        editModel = new ServiceArea();
+        errorMessage = null;
+        errorDetails = null;
+        successMessage = null;
+    }
+
+    private async Task SaveEdit()
+    {
+        if (editModel == null) return;
+
+        isSaving = true;
+        errorMessage = null;
+        errorDetails = null;
+        successMessage = null;
+
+        try
+        {
+            var result = await ServiceAreasApi.UpdateServiceAreaAsync(editModel.Id, editModel);
+            
+            if (result?.IsSuccess == true)
+            {
+                successMessage = "Service area updated successfully!";
+                editingId = null;
+                editModel = null;
+                await LoadServiceAreas();
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to update service area";
+                errorDetails = result?.Errors;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error updating service area: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task SaveCreate()
+    {
+        if (editModel == null) return;
+
+        isSaving = true;
+        errorMessage = null;
+        errorDetails = null;
+        successMessage = null;
+
+        try
+        {
+            var result = await ServiceAreasApi.CreateServiceAreaAsync(editModel);
+            
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                successMessage = $"Service area '{result.Data.Name}' created successfully!";
+                isCreating = false;
+                editModel = null;
+                await LoadServiceAreas();
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to create service area";
+                errorDetails = result?.Errors;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error creating service area: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void CancelEdit()
+    {
+        editingId = null;
+        isCreating = false;
+        editModel = null;
+        errorMessage = null;
+        errorDetails = null;
+        successMessage = null;
+    }
+
+    private async Task DeleteServiceArea(int id)
+    {
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this service area?"))
+            return;
+
+        isSaving = true;
+        errorMessage = null;
+        errorDetails = null;
+        successMessage = null;
+
+        try
+        {
+            var result = await ServiceAreasApi.DeleteServiceAreaAsync(id);
+            
+            if (result?.IsSuccess == true)
+            {
+                successMessage = "Service area deleted successfully!";
+                await LoadServiceAreas();
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to delete service area";
+                errorDetails = result?.Errors;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error deleting service area: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}

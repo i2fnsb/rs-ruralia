@@ -1,0 +1,41 @@
+@page "/vendor"
+@attribute [Authorize(Policy = Policies.VendorOrAbove)]
+
+<PageTitle>Vendor</PageTitle>
+
+<div class="container mt-5">
+    <div class="alert alert-success">
+        <h3><span class="bi bi-briefcase-fill"></span> Vendor Area</h3>
+        <p><strong>Access Level:</strong> Vendor and Above (Admin, FNSB User, Commissioner, Vendor)</p>
+    </div>
+
+    <h4>Welcome, Vendor!</h4>
+    <p>This page is accessible to users with <strong>vendor</strong>, <strong>commissioner</strong>, <strong>fnsbuser</strong>, or <strong>admin</strong> roles.</p>
+
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5>Vendor Capabilities</h5>
+        </div>
+        <div class="card-body">
+            <ul>
+                <li>Submit bids and proposals</li>
+                <li>View contract information</li>
+                <li>Update vendor profile</li>
+                <li>Access vendor portal</li>
+            </ul>
+        </div>
+    </div>
+
+    <AuthorizeView>
+        <Authorized>
+            <div class="mt-4">
+                <p><strong>Your Email:</strong> @context.User.Identity?.Name</p>
+                <p><strong>Your Roles:</strong> @string.Join(", ", context.User.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value))</p>
+            </div>
+        </Authorized>
+    </AuthorizeView>
+</div>
+
+@code {
+
+}

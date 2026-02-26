@@ -1,0 +1,433 @@
+@inject IJSRuntime JSRuntime
+
+<div id="@_mapId" style="height: @Height; width: 100%;"></div>
+
+@code {
+    [Parameter]
+    public string? FeatureLayerUrl { get; set; }
+
+    [Parameter]
+    public Dictionary<string, string>? QueryParameters { get; set; }
+
+    [Parameter]
+    public string? RoadsLayerUrl { get; set; }
+
+    [Parameter]
+    public bool ShowRoads { get; set; } = false;
+
+    [Parameter]
+    public string Height { get; set; } = "500px";
+
+    [Parameter]
+    public double InitialLatitude { get; set; } = 64.8378; // Fairbanks, AK default
+
+    [Parameter]
+    public double InitialLongitude { get; set; } = -147.7164;
+
+    [Parameter]
+    public float InitialZoom { get; set; } = 10;
+
+    [Parameter]
+    public string? Title { get; set; }
+
+    private string _mapId = $"map_{Guid.NewGuid():N}";
+    private bool _isInitialized = false;
+    private DotNetObjectReference<FeatureLayerMap>? _objRef;
+    private string? _serviceAreaGeometry;
+    private string? _serviceAreaName;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _objRef = DotNetObjectReference.Create(this);
+            await InitializeMap();
+        }
+    }
+
+    private async Task InitializeMap()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("initializeMap", _mapId, InitialLatitude, InitialLongitude, InitialZoom);
+            _isInitialized = true;
+
+            // Load feature layer if URL is provided
+            if (!string.IsNullOrEmpty(FeatureLayerUrl))
+            {
+                await LoadFeatureLayer();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error initializing map: {ex.Message}");
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_isInitialized)
+        {
+            if (!string.IsNullOrEmpty(FeatureLayerUrl))
+            {
+                await LoadFeatureLayer();
+            }
+
+            if (ShowRoads && !string.IsNullOrEmpty(RoadsLayerUrl) && !string.IsNullOrEmpty(_serviceAreaGeometry))
+            {
+                await LoadRoadsLayer();
+            }
+        }
+    }
+
+    private async Task LoadFeatureLayer()
+    {
+        if (string.IsNullOrEmpty(FeatureLayerUrl) || !_isInitialized)
+            return;
+
+        try
+        {
+            // Build the query URL
+            var queryUrl = BuildFeatureLayerQueryUrl();
+
+            // Fetch GeoJSON data from the feature layer
+            var geoJsonData = await FetchGeoJsonFromFeatureLayer(queryUrl);
+
+            if (!string.IsNullOrEmpty(geoJsonData))
+            {
+                // Store the service area geometry and name for spatial queries
+                _serviceAreaGeometry = ExtractGeometry(geoJsonData);
+                _serviceAreaName = ExtractServiceAreaName(geoJsonData);
+
+                // Add the service area layer
+                await JSRuntime.InvokeVoidAsync("addGeoJsonLayer", _mapId, geoJsonData, Title ?? "Feature", "serviceArea", 
+                    new { color = "#3388ff", weight = 3, opacity = 0.8, fillOpacity = 0.3 });
+
+                // Load roads if enabled
+                if (ShowRoads && !string.IsNullOrEmpty(RoadsLayerUrl))
+                {
+                    await LoadRoadsLayer();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading feature layer: {ex.Message}");
+        }
+    }
+
+    private async Task LoadRoadsLayer()
+    {
+        if (string.IsNullOrEmpty(RoadsLayerUrl) || string.IsNullOrEmpty(_serviceAreaGeometry) || !_isInitialized)
+            return;
+
+        try
+        {
+            // Use POST request for roads query to avoid URL length limits with complex geometries
+            var roadsGeoJsonData = await FetchRoadsWithSpatialQuery();
+
+            if (!string.IsNullOrEmpty(roadsGeoJsonData))
+            {
+                // Add the roads layer with different styling
+                await JSRuntime.InvokeVoidAsync("addGeoJsonLayer", _mapId, roadsGeoJsonData, "Roads", "roads",
+                    new { color = "#ff6b35", weight = 2, opacity = 0.9, fillOpacity = 0 });
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading roads layer: {ex.Message}");
+        }
+    }
+
+    private string BuildFeatureLayerQueryUrl()
+    {
+        var baseUrl = FeatureLayerUrl?.TrimEnd('/');
+
+        // Check if it's an ArcGIS Feature Service
+        if (!baseUrl?.Contains("/query") == true)
+        {
+            baseUrl += "/query";
+        }
+
+        var queryString = "?f=geojson&outFields=*";
+
+        // Add query parameters
+        if (QueryParameters != null && QueryParameters.Count > 0)
+        {
+            foreach (var param in QueryParameters)
+            {
+                queryString += $"&{param.Key}={Uri.EscapeDataString(param.Value)}";
+            }
+        }
+        else
+        {
+            // Default query - get all features
+            queryString += "&where=1=1";
+        }
+
+        return baseUrl + queryString;
+    }
+
+    private async Task<string?> FetchRoadsWithSpatialQuery()
+    {
+        try
+        {
+            var baseUrl = RoadsLayerUrl?.TrimEnd('/');
+
+            if (!baseUrl?.Contains("/query") == true)
+            {
+                baseUrl += "/query";
+            }
+
+            using var httpClient = new HttpClient();
+
+            // Build WHERE clause to match service area name with road's MAINT_AUTH field
+            var whereClause = "1=1";
+            if (!string.IsNullOrEmpty(_serviceAreaName))
+            {
+                // Escape single quotes in the name for SQL
+                var escapedName = _serviceAreaName.Replace("'", "''");
+                whereClause = $"MAINT_AUTH = '{escapedName}'";
+            }
+
+            // Build form data for POST request
+            var formData = new Dictionary<string, string>
+            {
+                { "f", "geojson" },
+                { "outFields", "*" },
+                { "returnGeometry", "true" },
+                { "geometry", _serviceAreaGeometry! },
+                { "geometryType", "esriGeometryPolygon" },
+                { "spatialRel", "esriSpatialRelIntersects" },
+                { "where", whereClause }
+            };
+
+            var content = new FormUrlEncodedContent(formData);
+            var response = await httpClient.PostAsync(baseUrl, content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                return await response.Content.ReadAsStringAsync();
+            }
+            else
+            {
+                Console.WriteLine($"Roads query failed: {response.StatusCode}");
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Error details: {errorContent}");
+                return null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching roads with spatial query: {ex.Message}");
+            return null;
+        }
+    }
+
+    private string? ExtractGeometry(string geoJsonData)
+    {
+        try
+        {
+            using var jsonDoc = System.Text.Json.JsonDocument.Parse(geoJsonData);
+
+            if (jsonDoc.RootElement.TryGetProperty("features", out var features) && 
+                features.GetArrayLength() > 0)
+            {
+                var firstFeature = features[0];
+                if (firstFeature.TryGetProperty("geometry", out var geometry))
+                {
+                    // Convert GeoJSON geometry to Esri JSON geometry
+                    return ConvertGeoJsonToEsriGeometry(geometry);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error extracting geometry: {ex.Message}");
+        }
+
+        return null;
+    }
+
+    private string? ExtractServiceAreaName(string geoJsonData)
+    {
+        try
+        {
+            using var jsonDoc = System.Text.Json.JsonDocument.Parse(geoJsonData);
+
+            if (jsonDoc.RootElement.TryGetProperty("features", out var features) && 
+                features.GetArrayLength() > 0)
+            {
+                var firstFeature = features[0];
+                if (firstFeature.TryGetProperty("properties", out var properties))
+                {
+                    // Try common name fields
+                    if (properties.TryGetProperty("Name", out var nameValue) && nameValue.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        return nameValue.GetString();
+                    }
+                    if (properties.TryGetProperty("name", out var nameValueLower) && nameValueLower.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        return nameValueLower.GetString();
+                    }
+                    if (properties.TryGetProperty("NAME", out var nameValueUpper) && nameValueUpper.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        return nameValueUpper.GetString();
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error extracting service area name: {ex.Message}");
+        }
+
+        return null;
+    }
+
+    private string ConvertGeoJsonToEsriGeometry(System.Text.Json.JsonElement geoJsonGeometry)
+    {
+        try
+        {
+            var geometryType = geoJsonGeometry.GetProperty("type").GetString();
+            var coordinates = geoJsonGeometry.GetProperty("coordinates");
+
+            if (geometryType == "Polygon")
+            {
+                // Esri expects: {"rings": [[[x1,y1],[x2,y2]...]]}
+                var rings = new System.Text.StringBuilder();
+                rings.Append("{\"rings\":[");
+
+                var ringCount = 0;
+                foreach (var ring in coordinates.EnumerateArray())
+                {
+                    if (ringCount > 0) rings.Append(",");
+                    rings.Append("[");
+
+                    var pointCount = 0;
+                    foreach (var point in ring.EnumerateArray())
+                    {
+                        if (pointCount > 0) rings.Append(",");
+                        var x = point[0].GetDouble();
+                        var y = point[1].GetDouble();
+                        rings.Append($"[{x},{y}]");
+                        pointCount++;
+                    }
+
+                    rings.Append("]");
+                    ringCount++;
+                }
+
+                rings.Append("]}");
+                return rings.ToString();
+            }
+            else if (geometryType == "MultiPolygon")
+            {
+                var rings = new System.Text.StringBuilder();
+                rings.Append("{\"rings\":[");
+
+                var ringCount = 0;
+                foreach (var polygon in coordinates.EnumerateArray())
+                {
+                    foreach (var ring in polygon.EnumerateArray())
+                    {
+                        if (ringCount > 0) rings.Append(",");
+                        rings.Append("[");
+
+                        var pointCount = 0;
+                        foreach (var point in ring.EnumerateArray())
+                        {
+                            if (pointCount > 0) rings.Append(",");
+                            var x = point[0].GetDouble();
+                            var y = point[1].GetDouble();
+                            rings.Append($"[{x},{y}]");
+                            pointCount++;
+                        }
+
+                        rings.Append("]");
+                        ringCount++;
+                    }
+                }
+
+                rings.Append("]}");
+                return rings.ToString();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error converting geometry: {ex.Message}");
+        }
+
+        return "{}";
+    }
+
+    private async Task<string?> FetchGeoJsonFromFeatureLayer(string url)
+    {
+        try
+        {
+            using var httpClient = new HttpClient();
+            var response = await httpClient.GetStringAsync(url);
+            return response;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching GeoJSON: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Reload the feature layer with updated parameters
+    /// </summary>
+    public async Task RefreshMap()
+    {
+        if (_isInitialized)
+        {
+            await LoadFeatureLayer();
+        }
+    }
+
+    /// <summary>
+    /// Toggle roads layer visibility
+    /// </summary>
+    public async Task ToggleRoads(bool show)
+    {
+        ShowRoads = show;
+
+        if (ShowRoads && !string.IsNullOrEmpty(RoadsLayerUrl) && !string.IsNullOrEmpty(_serviceAreaGeometry))
+        {
+            await LoadRoadsLayer();
+        }
+        else if (!ShowRoads)
+        {
+            await JSRuntime.InvokeVoidAsync("removeGeoJsonLayer", _mapId, "roads");
+        }
+    }
+
+    /// <summary>
+    /// Update the map center
+    /// </summary>
+    public async Task SetCenter(double latitude, double longitude)
+    {
+        if (_isInitialized)
+        {
+            await JSRuntime.InvokeVoidAsync("setMapCenter", _mapId, latitude, longitude);
+        }
+    }
+
+    /// <summary>
+    /// Update the zoom level
+    /// </summary>
+    public async Task SetZoom(float zoom)
+    {
+        if (_isInitialized)
+        {
+            await JSRuntime.InvokeVoidAsync("setMapZoom", _mapId, zoom);
+        }
+    }
+
+    public void Dispose()
+    {
+        _objRef?.Dispose();
+    }
+}

@@ -1,0 +1,237 @@
+@typeparam TEntity where TEntity : class
+@inject IDialogService DialogService
+
+<MudGrid>
+    <MudItem xs="12">
+        @if (IsLoading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+        else if (!string.IsNullOrEmpty(ErrorMessage))
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Filled">@ErrorMessage</MudAlert>
+        }
+        else if (HistoryRecords != null && HistoryRecords.Any())
+        {
+            <MudText Typo="Typo.h6" Class="mb-3">
+                History (@HistoryRecords.Count() records)
+            </MudText>
+            
+            <MudTimeline TimelineOrientation="TimelineOrientation.Vertical" TimelinePosition="TimelinePosition.Start">
+                @foreach (var record in HistoryRecords.OrderByDescending(GetValidFrom))
+                {
+                    var isCurrent = IsCurrentRecord(record);
+                    var validFrom = GetValidFrom(record);
+                    var validTo = GetValidTo(record);
+                    
+                    <MudTimelineItem Color="@(isCurrent ? Color.Success : Color.Default)" Size="Size.Small">
+                        <ItemOpposite>
+                            <MudText Color="@(isCurrent ? Color.Success : Color.Default)" Typo="Typo.body2">
+                                @validFrom.ToString("g")
+                                @if (isCurrent)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Class="ml-2">Current</MudChip>
+                                }
+                            </MudText>
+                        </ItemOpposite>
+                        <ItemContent>
+                            <MudPaper Elevation="2" Class="pa-3">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+                                    <div>
+                                        @TimelineHeader(record)
+                                        @if (GetModifiedBy != null)
+                                        {
+                                            var modifiedBy = GetModifiedBy(record);
+                                            @if (!string.IsNullOrEmpty(modifiedBy))
+                                            {
+                                                <MudText Typo="Typo.caption">Modified by: @modifiedBy</MudText>
+                                            }
+                                        }
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            Valid: @validFrom.ToString("g") - @(isCurrent ? "Present" : validTo.ToString("g"))
+                                        </MudText>
+                                    </div>
+                                    @if (!isCurrent)
+                                    {
+                                        <MudStack Row="true" Spacing="1">
+                                            <MudTooltip Text="View this version">
+                                                <MudIconButton Icon="@Icons.Material.Filled.Visibility" 
+                                                               Size="Size.Small" 
+                                                               Color="Color.Info"
+                                                               OnClick="@(() => ToggleExpandRecord(record))" />
+                                            </MudTooltip>
+                                            @if (CanEdit && OnRestore.HasDelegate)
+                                            {
+                                                <MudTooltip Text="Restore this version">
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Restore" 
+                                                                   Size="Size.Small" 
+                                                                   Color="Color.Warning"
+                                                                   OnClick="@(() => ConfirmRestore(record))" />
+                                                </MudTooltip>
+                                            }
+                                        </MudStack>
+                                    }
+                                </MudStack>
+                                
+                                @if (IsRecordExpanded(record))
+                                {
+                                    <MudDivider Class="my-2" />
+                                    @if (DetailContent != null)
+                                    {
+                                        @DetailContent(record)
+                                    }
+                                }
+                            </MudPaper>
+                        </ItemContent>
+                    </MudTimelineItem>
+                }
+            </MudTimeline>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Filled">
+                @(NoHistoryMessage ?? "No history available")
+            </MudAlert>
+        }
+    </MudItem>
+</MudGrid>
+
+@code {
+    /// <summary>
+    /// The collection of historical records to display
+    /// </summary>
+    [Parameter, EditorRequired]
+    public IEnumerable<TEntity>? HistoryRecords { get; set; }
+
+    /// <summary>
+    /// Function to get the ValidFrom date from an entity
+    /// </summary>
+    [Parameter, EditorRequired]
+    public Func<TEntity, DateTime> GetValidFrom { get; set; } = default!;
+
+    /// <summary>
+    /// Function to get the ValidTo date from an entity
+    /// </summary>
+    [Parameter, EditorRequired]
+    public Func<TEntity, DateTime> GetValidTo { get; set; } = default!;
+
+    /// <summary>
+    /// Function to determine if a record is the current version (optional, defaults to ValidTo check)
+    /// </summary>
+    [Parameter]
+    public Func<TEntity, bool>? IsCurrentRecord { get; set; }
+
+    /// <summary>
+    /// Function to get the modified by user from an entity (optional)
+    /// </summary>
+    [Parameter]
+    public Func<TEntity, string?>? GetModifiedBy { get; set; }
+
+    /// <summary>
+    /// Render fragment for the timeline header content
+    /// </summary>
+    [Parameter, EditorRequired]
+    public RenderFragment<TEntity> TimelineHeader { get; set; } = default!;
+
+    /// <summary>
+    /// Render fragment for the expanded detail content
+    /// </summary>
+    [Parameter]
+    public RenderFragment<TEntity>? DetailContent { get; set; }
+
+    /// <summary>
+    /// Callback when a historical record should be restored
+    /// </summary>
+    [Parameter]
+    public EventCallback<TEntity> OnRestore { get; set; }
+
+    /// <summary>
+    /// Whether the current user can edit/restore records
+    /// </summary>
+    [Parameter]
+    public bool CanEdit { get; set; }
+
+    /// <summary>
+    /// Whether the history is currently loading
+    /// </summary>
+    [Parameter]
+    public bool IsLoading { get; set; }
+
+    /// <summary>
+    /// Error message to display if loading failed
+    /// </summary>
+    [Parameter]
+    public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// Custom message to display when there are no history records
+    /// </summary>
+    [Parameter]
+    public string? NoHistoryMessage { get; set; }
+
+    /// <summary>
+    /// Title for the restore confirmation dialog
+    /// </summary>
+    [Parameter]
+    public string RestoreDialogTitle { get; set; } = "Restore Historical Version";
+
+    /// <summary>
+    /// Function to generate the restore confirmation message (optional)
+    /// </summary>
+    [Parameter]
+    public Func<TEntity, string>? GetRestoreConfirmationMessage { get; set; }
+
+    private DateTime? expandedRecordValidFrom;
+
+    private bool IsRecordExpanded(TEntity record)
+    {
+        return expandedRecordValidFrom == GetValidFrom(record);
+    }
+
+    private void ToggleExpandRecord(TEntity record)
+    {
+        var validFrom = GetValidFrom(record);
+        if (expandedRecordValidFrom == validFrom)
+        {
+            expandedRecordValidFrom = null;
+        }
+        else
+        {
+            expandedRecordValidFrom = validFrom;
+        }
+    }
+
+    private async Task ConfirmRestore(TEntity record)
+    {
+        var validFrom = GetValidFrom(record);
+        var message = GetRestoreConfirmationMessage?.Invoke(record) 
+            ?? $"Are you sure you want to restore the version from {validFrom:g}? This will update the current record with the historical data.";
+
+        var result = await DialogService.ShowMessageBox(
+            RestoreDialogTitle,
+            message,
+            yesText: "Restore",
+            cancelText: "Cancel",
+            options: new DialogOptions { MaxWidth = MaxWidth.Small });
+
+        if (result == true && OnRestore.HasDelegate)
+        {
+            await OnRestore.InvokeAsync(record);
+        }
+    }
+
+    private bool DefaultIsCurrentRecord(TEntity record)
+    {
+        var validTo = GetValidTo(record);
+        return validTo == DateTime.MaxValue || validTo.Year == 9999;
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Use default implementation if not provided
+        if (IsCurrentRecord == null)
+        {
+            IsCurrentRecord = DefaultIsCurrentRecord;
+        }
+    }
+}

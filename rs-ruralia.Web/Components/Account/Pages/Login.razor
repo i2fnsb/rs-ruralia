@@ -1,0 +1,122 @@
+@page "/Account/Login"
+@rendermode InteractiveServer
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using rs_ruralia.Web.Data
+@using rs_ruralia.Web.Authorization
+
+@inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Login</PageTitle>
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h3>Login</h3>
+                </div>
+                <div class="card-body">
+                    <StatusMessage Message="@_errorMessage" IsError="true" />
+                    <EditForm Model="Input" OnValidSubmit="LoginUserAsync" FormName="login">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" role="alert" />
+
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <InputText id="email" @bind-Value="Input.Email" class="form-control" autocomplete="username" placeholder="name@example.com" />
+                            <ValidationMessage For="() => Input.Email" class="text-danger" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <InputText id="password" type="password" @bind-Value="Input.Password" class="form-control" autocomplete="current-password" />
+                            <ValidationMessage For="() => Input.Password" class="text-danger" />
+                        </div>
+
+                        <div class="mb-3 form-check">
+                            <InputCheckbox id="remember-me" @bind-Value="Input.RememberMe" class="form-check-input" />
+                            <label for="remember-me" class="form-check-label">Remember me</label>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100">Log in</button>
+                    </EditForm>
+                    <div class="mt-3 text-center">
+                        <p>Don't have an account? <a href="/Account/Register">Register</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string? _errorMessage;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (HttpContextAccessor.HttpContext is { } httpContext)
+        {
+            if (httpContext.User.Identity?.IsAuthenticated == true)
+            {
+                // Defer navigation to avoid interfering with the initial HTTP response.
+                await Task.Yield();
+                RedirectManager.RedirectTo(ReturnUrl);
+            }
+        }
+    }
+
+    private async Task LoginUserAsync()
+    {
+        var user = await UserManager.FindByEmailAsync(Input.Email);
+        if (user == null)
+        {
+            _errorMessage = "Invalid login attempt.";
+            return;
+        }
+
+        // Validate credentials without writing cookies inside the component.
+        var result = await SignInManager.CheckPasswordSignInAsync(user, Input.Password, lockoutOnFailure: false);
+
+        if (result.Succeeded)
+        {
+            // Perform the actual sign-in on a server endpoint so cookies can be written safely,
+            // then redirect back to the requested return URL.
+            RedirectManager.RedirectTo("/Account/PerformSignIn", new Dictionary<string, object?>
+            {
+                ["userId"] = user.Id,
+                ["returnUrl"] = ReturnUrl ?? "/",
+                ["rememberMe"] = Input.RememberMe
+            });
+        }
+        else
+        {
+            _errorMessage = "Invalid login attempt.";
+        }
+    }
+
+    private sealed class InputModel
+    {
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; } = "";
+
+        [Required]
+        [DataType(DataType.Password)]
+        public string Password { get; set; } = "";
+
+        public bool RememberMe { get; set; }
+    }
+
+    [Inject]
+    private IHttpContextAccessor HttpContextAccessor { get; set; } = default!;
+}

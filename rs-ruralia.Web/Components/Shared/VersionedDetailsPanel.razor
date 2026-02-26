@@ -1,0 +1,423 @@
+@typeparam TEntity where TEntity : class
+@inject IDialogService DialogService
+
+<MudGrid>
+    @if (AllVersions != null && AllVersions.Any())
+    {
+        <!-- Version Navigation Header -->
+        <MudItem xs="12">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                    <!-- Previous Version Button -->
+                    <MudTooltip Text="Previous Version">
+                        <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft"
+                                       Color="Color.Primary"
+                                       Disabled="@(!CanNavigatePrevious())"
+                                       OnClick="NavigateToPrevious" />
+                    </MudTooltip>
+
+                    <!-- Version Info and Dropdown -->
+                    <MudStack Spacing="0" Style="flex: 1">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            @if (IsViewingCurrent())
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">
+                                    Current Version
+                                </MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.History">
+                                    Historical Version
+                                </MudChip>
+                            }
+
+                            <MudSelect T="TEntity" 
+                                       Value="@CurrentVersion" 
+                                       ValueChanged="OnVersionSelected"
+                                       Label="Select Version"
+                                       Variant="Variant.Outlined"
+                                       Margin="Margin.Dense"
+                                       Dense="true"
+                                       Style="min-width: 300px">
+                                @foreach (var version in AllVersions.OrderByDescending(GetValidFrom))
+                                {
+                                    var validFrom = GetValidFrom(version);
+                                    var isCurrent = IsCurrentVersion(version);
+                                    <MudSelectItem T="TEntity" Value="@version">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            @if (isCurrent)
+                                            {
+                                                <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Color="Color.Success" />
+                                            }
+                                            <MudText>@validFrom.ToString("g")</MudText>
+                                            @if (GetDisplayText != null)
+                                            {
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">- @GetDisplayText(version)</MudText>
+                                            }
+                                        </MudStack>
+                                    </MudSelectItem>
+                                }
+                            </MudSelect>
+
+                            @if (CurrentVersion != null)
+                            {
+                                var validFrom = GetValidFrom(CurrentVersion);
+                                var validTo = GetValidTo(CurrentVersion);
+                                var isCurrent = IsCurrentVersion(CurrentVersion);
+                                
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    Valid: @validFrom.ToString("g") - @(isCurrent ? "Present" : validTo.ToString("g"))
+                                </MudText>
+                            }
+                        </MudStack>
+
+                        @if (GetModifiedBy != null && CurrentVersion != null)
+                        {
+                            var modifiedBy = GetModifiedBy(CurrentVersion);
+                            @if (!string.IsNullOrEmpty(modifiedBy))
+                            {
+                                <MudText Typo="Typo.caption">Modified by: @modifiedBy</MudText>
+                            }
+                        }
+                    </MudStack>
+
+                    <!-- Next Version Button -->
+                    <MudTooltip Text="Next Version">
+                        <MudIconButton Icon="@Icons.Material.Filled.ChevronRight"
+                                       Color="Color.Primary"
+                                       Disabled="@(!CanNavigateNext())"
+                                       OnClick="NavigateToNext" />
+                    </MudTooltip>
+
+                    <!-- Edit Button (for current version in view mode) -->
+                    @if (IsViewingCurrent() && !IsEditMode && CanEdit && OnEditClicked.HasDelegate && ShouldShowViewMode())
+                    {
+                        <MudTooltip Text="Edit this record">
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.Edit"
+                                       Size="Size.Small"
+                                       OnClick="HandleEditClicked">
+                                Edit
+                            </MudButton>
+                        </MudTooltip>
+                    }
+
+                    <!-- Restore Button (for historical versions) -->
+                    @if (!IsViewingCurrent() && CanEdit && OnRestore.HasDelegate)
+                    {
+                        <MudTooltip Text="Restore this version">
+                            <MudIconButton Icon="@Icons.Material.Filled.Restore"
+                                           Color="Color.Warning"
+                                           OnClick="ConfirmRestore" />
+                        </MudTooltip>
+                    }
+
+                    <!-- Return to Current Button -->
+                    @if (!IsViewingCurrent())
+                    {
+                        <MudTooltip Text="Return to current version">
+                            <MudButton Variant="Variant.Text"
+                                       Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.Undo"
+                                       Size="Size.Small"
+                                       OnClick="NavigateToCurrent">
+                                Current
+                            </MudButton>
+                        </MudTooltip>
+                    }
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Detail Content -->
+        <MudItem xs="12">
+            @if (CurrentVersion != null)
+            {
+                @if (ShouldShowViewMode())
+                {
+                    <!-- Styled View Mode (for historical versions or non-edit current version) -->
+                    <MudPaper Class="pa-4" Elevation="2" Style="@GetViewModeStyle()">
+                        <MudStack Spacing="2">
+                            @if (!IsViewingCurrent())
+                            {
+                                <MudAlert Severity="Severity.Info" Icon="@Icons.Material.Filled.RemoveRedEye" Dense="true" Class="mb-2">
+                                    <MudText Typo="Typo.body2">Viewing historical snapshot — Read-only mode</MudText>
+                                </MudAlert>
+                            }
+                            @ViewModeContent(CurrentVersion)
+                        </MudStack>
+                    </MudPaper>
+                }
+                else
+                {
+                    <!-- Standard Edit/Form Mode -->
+                    @if (!IsViewingCurrent())
+                    {
+                        <MudAlert Severity="Severity.Info" Class="mb-3">
+                            You are viewing a historical version. Changes cannot be made to historical versions.
+                        </MudAlert>
+                    }
+                    @DetailsContent(CurrentVersion)
+                }
+            }
+        </MudItem>
+    }
+    else if (IsLoading)
+    {
+        <MudItem xs="12">
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        </MudItem>
+    }
+    else if (!string.IsNullOrEmpty(ErrorMessage))
+    {
+        <MudItem xs="12">
+            <MudAlert Severity="Severity.Error" Variant="Variant.Filled">@ErrorMessage</MudAlert>
+        </MudItem>
+    }
+</MudGrid>
+
+@code {
+    /// <summary>
+    /// All versions of the entity (current + history)
+    /// </summary>
+    [Parameter, EditorRequired]
+    public IEnumerable<TEntity>? AllVersions { get; set; }
+
+    /// <summary>
+    /// The currently viewed version (can be current or historical)
+    /// </summary>
+    [Parameter]
+    public TEntity? CurrentVersion { get; set; }
+
+    /// <summary>
+    /// Callback when the current version changes
+    /// </summary>
+    [Parameter]
+    public EventCallback<TEntity> CurrentVersionChanged { get; set; }
+
+    /// <summary>
+    /// Function to get the ValidFrom date from an entity
+    /// </summary>
+    [Parameter, EditorRequired]
+    public Func<TEntity, DateTime> GetValidFrom { get; set; } = default!;
+
+    /// <summary>
+    /// Function to get the ValidTo date from an entity
+    /// </summary>
+    [Parameter, EditorRequired]
+    public Func<TEntity, DateTime> GetValidTo { get; set; } = default!;
+
+    /// <summary>
+    /// Function to determine if a version is the current version
+    /// </summary>
+    [Parameter]
+    public Func<TEntity, bool>? IsCurrentVersion { get; set; }
+
+    /// <summary>
+    /// Function to get display text for a version (optional)
+    /// </summary>
+    [Parameter]
+    public Func<TEntity, string>? GetDisplayText { get; set; }
+
+    /// <summary>
+    /// Function to get the modified by user from an entity (optional)
+    /// </summary>
+    [Parameter]
+    public Func<TEntity, string?>? GetModifiedBy { get; set; }
+
+    /// <summary>
+    /// Render fragment for the details content (edit mode/form view)
+    /// </summary>
+    [Parameter, EditorRequired]
+    public RenderFragment<TEntity> DetailsContent { get; set; } = default!;
+
+    /// <summary>
+    /// Render fragment for the view-only mode (optional)
+    /// If not provided, falls back to DetailsContent
+    /// </summary>
+    [Parameter]
+    public RenderFragment<TEntity>? ViewModeContent { get; set; }
+
+    /// <summary>
+    /// Whether the panel is currently in edit mode
+    /// </summary>
+    [Parameter]
+    public bool IsEditMode { get; set; }
+
+    /// <summary>
+    /// Callback when the Edit button is clicked
+    /// </summary>
+    [Parameter]
+    public EventCallback OnEditClicked { get; set; }
+
+    /// <summary>
+    /// Callback when a historical version should be restored
+    /// </summary>
+    [Parameter]
+    public EventCallback<TEntity> OnRestore { get; set; }
+
+    /// <summary>
+    /// Whether the current user can edit/restore records
+    /// </summary>
+    [Parameter]
+    public bool CanEdit { get; set; }
+
+    /// <summary>
+    /// Whether data is currently loading
+    /// </summary>
+    [Parameter]
+    public bool IsLoading { get; set; }
+
+    /// <summary>
+    /// Error message to display if loading failed
+    /// </summary>
+    [Parameter]
+    public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// Title for the restore confirmation dialog
+    /// </summary>
+    [Parameter]
+    public string RestoreDialogTitle { get; set; } = "Restore Historical Version";
+
+    /// <summary>
+    /// Function to generate the restore confirmation message (optional)
+    /// </summary>
+    [Parameter]
+    public Func<TEntity, string>? GetRestoreConfirmationMessage { get; set; }
+
+
+    protected override void OnParametersSet()
+    {
+        // Set default IsCurrentVersion if not provided
+        if (IsCurrentVersion == null)
+        {
+            IsCurrentVersion = DefaultIsCurrentVersion;
+        }
+
+        // If CurrentVersion is not set, default to the current version
+        if (CurrentVersion == null && AllVersions != null && AllVersions.Any())
+        {
+            CurrentVersion = AllVersions.FirstOrDefault(IsCurrentVersion);
+        }
+    }
+
+    private bool DefaultIsCurrentVersion(TEntity version)
+    {
+        var validTo = GetValidTo(version);
+        return validTo == DateTime.MaxValue || validTo.Year == 9999;
+    }
+
+    private bool IsViewingCurrent()
+    {
+        return CurrentVersion != null && IsCurrentVersion != null && IsCurrentVersion(CurrentVersion);
+    }
+
+    private bool ShouldShowViewMode()
+    {
+        // Show view mode if:
+        // 1. ViewModeContent is provided AND
+        // 2. Either viewing a historical version OR not in edit mode
+        return ViewModeContent != null && (!IsViewingCurrent() || !IsEditMode);
+    }
+
+    private string GetViewModeStyle()
+    {
+        // Different styling for historical vs current view mode
+        if (!IsViewingCurrent())
+        {
+            return "background: linear-gradient(135deg, #fff3e0 0%, #ffffff 100%);"; // Warmer tone for historical
+        }
+        return "background: linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%);"; // Neutral for current
+    }
+
+    private async Task HandleEditClicked()
+    {
+        await OnEditClicked.InvokeAsync();
+    }
+
+    private bool CanNavigatePrevious()
+    {
+        if (AllVersions == null || !AllVersions.Any() || CurrentVersion == null)
+            return false;
+
+        var orderedVersions = AllVersions.OrderByDescending(GetValidFrom).ToList();
+        var currentIndex = orderedVersions.IndexOf(CurrentVersion);
+        return currentIndex < orderedVersions.Count - 1;
+    }
+
+    private bool CanNavigateNext()
+    {
+        if (AllVersions == null || !AllVersions.Any() || CurrentVersion == null)
+            return false;
+
+        var orderedVersions = AllVersions.OrderByDescending(GetValidFrom).ToList();
+        var currentIndex = orderedVersions.IndexOf(CurrentVersion);
+        return currentIndex > 0;
+    }
+
+    private async Task NavigateToPrevious()
+    {
+        if (!CanNavigatePrevious() || AllVersions == null || CurrentVersion == null)
+            return;
+
+        var orderedVersions = AllVersions.OrderByDescending(GetValidFrom).ToList();
+        var currentIndex = orderedVersions.IndexOf(CurrentVersion);
+        CurrentVersion = orderedVersions[currentIndex + 1];
+        await CurrentVersionChanged.InvokeAsync(CurrentVersion);
+    }
+
+    private async Task NavigateToNext()
+    {
+        if (!CanNavigateNext() || AllVersions == null || CurrentVersion == null)
+            return;
+
+        var orderedVersions = AllVersions.OrderByDescending(GetValidFrom).ToList();
+        var currentIndex = orderedVersions.IndexOf(CurrentVersion);
+        CurrentVersion = orderedVersions[currentIndex - 1];
+        await CurrentVersionChanged.InvokeAsync(CurrentVersion);
+    }
+
+    private async Task NavigateToCurrent()
+    {
+        if (AllVersions == null || IsCurrentVersion == null)
+            return;
+
+        var currentVersion = AllVersions.FirstOrDefault(IsCurrentVersion);
+        if (currentVersion != null)
+        {
+            CurrentVersion = currentVersion;
+            await CurrentVersionChanged.InvokeAsync(CurrentVersion);
+        }
+    }
+
+    private async Task OnVersionSelected(TEntity selectedVersion)
+    {
+        CurrentVersion = selectedVersion;
+        await CurrentVersionChanged.InvokeAsync(CurrentVersion);
+    }
+
+    private async Task ConfirmRestore()
+    {
+        if (CurrentVersion == null)
+            return;
+
+        var validFrom = GetValidFrom(CurrentVersion);
+        var message = GetRestoreConfirmationMessage?.Invoke(CurrentVersion)
+            ?? $"Are you sure you want to restore the version from {validFrom:g}? This will update the current record with the historical data.";
+
+        var result = await DialogService.ShowMessageBox(
+            RestoreDialogTitle,
+            message,
+            yesText: "Restore",
+            cancelText: "Cancel",
+            options: new DialogOptions { MaxWidth = MaxWidth.Small });
+
+        if (result == true && OnRestore.HasDelegate)
+        {
+            await OnRestore.InvokeAsync(CurrentVersion);
+        }
+    }
+}

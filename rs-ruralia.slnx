@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="rs-ruralia.ApiService/rs-ruralia.ApiService.csproj" />
+  <Project Path="rs-ruralia.AppHost/rs-ruralia.AppHost.csproj" />
+  <Project Path="rs-ruralia.ServiceDefaults/rs-ruralia.ServiceDefaults.csproj" />
+  <Project Path="rs-ruralia.Shared/rs-ruralia.Shared.csproj" />
+  <Project Path="rs-ruralia.Tests/rs-ruralia.Tests.csproj" />
+  <Project Path="rs-ruralia.Web/rs-ruralia.Web.csproj" />
+</Solution>

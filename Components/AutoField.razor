@@ -1,0 +1,40 @@
+@typeparam TModel
+@typeparam TValue
+
+@if (IsNumeric)
+{
+    <MudNumericField @bind-Value="@Value" T="TValue"
+                     Label="@DisplayName"
+                     HelperText="@Description"
+                     Required="@IsRequired"
+                     ReadOnly="@ReadOnly"
+                     Variant="Variant.Outlined"
+                     Immediate="true"
+                     For="@For" />
+}
+else
+{
+    <MudTextField @bind-Value="@Value" 
+                  Label="@DisplayName"
+                  HelperText="@Description"
+                  Required="@IsRequired"
+                  MaxLength="@MaxLength"
+                  Counter="@MaxLength"
+                  ReadOnly="@ReadOnly"
+                  Variant="Variant.Outlined"
+                  For="@For" />
+}
+
+@code {
+    [Parameter] public TValue? Value { get; set; }
+    [Parameter] public EventCallback<TValue> ValueChanged { get; set; }
+    [Parameter, EditorRequired] public Expression<Func<TModel, object>> Property { get; set; } = null!;
+    [Parameter] public bool ReadOnly { get; set; }
+    [Parameter] public Expression<Func<TValue>>? For { get; set; }
+
+    private string DisplayName => FormAttributeHelper.GetDisplayName(Property);
+    private string Description => FormAttributeHelper.GetDescription(Property);
+    private bool IsRequired => FormAttributeHelper.GetRequired(Property);
+    private int MaxLength => FormAttributeHelper.GetMaxLength(Property);
+    private bool IsNumeric => typeof(TValue).IsNumericType();
+}

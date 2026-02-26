@@ -1,0 +1,288 @@
+@typeparam TModel
+@typeparam TValue
+@typeparam TLookup where TLookup : class, new()
+@inject IDialogService DialogService
+
+@if (IsForeignKeyField())
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center">
+        <MudSelect @bind-Value="@IntValue" T="int?"
+                   Label="@GetDisplayName()"
+                   HelperText="@GetDescription()"
+                   ReadOnly="@ReadOnly"
+                   Variant="Variant.Outlined"
+                   Clearable="true"
+                   Required="@GetRequired()"
+                   For="@(For as Expression<Func<int?>>)"
+                   Style="flex: 1">
+            @if (LookupItems != null)
+            {
+                @foreach (var item in LookupItems)
+                {
+                    <MudSelectItem Value="@GetLookupValue(item)">@GetLookupText(item)</MudSelectItem>
+                }
+            }
+        </MudSelect>
+        @if (!ReadOnly && HasForeignKeyManagement)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Settings" 
+                           Color="Color.Primary" 
+                           OnClick="OpenForeignKeyDialog" />
+        }
+    </MudStack>
+}
+else if (IsDateTimeType())
+{
+    <MudDatePicker @bind-Date="@DateTimeValue" 
+                   Label="@GetDisplayName()"
+                   HelperText="@GetDescription()"
+                   ReadOnly="@ReadOnly"
+                   Editable="true"
+                   Variant="Variant.Outlined"
+                   Required="@GetRequired()"
+                   For="@(For as Expression<Func<DateTime?>>)" />
+}
+else if (IsNumericType())
+{
+    @if (typeof(TValue) == typeof(int) || typeof(TValue) == typeof(int?))
+    {
+        <MudNumericField @bind-Value="@IntValue" T="int?"
+                         Label="@GetDisplayName()"
+                         HelperText="@GetDescription()"
+                         ReadOnly="@ReadOnly"
+                         Variant="Variant.Outlined"
+                         Immediate="true"
+                         Required="@GetRequired()"
+                         For="@(For as Expression<Func<int?>>)" />
+    }
+    else if (typeof(TValue) == typeof(decimal) || typeof(TValue) == typeof(decimal?))
+    {
+        <MudNumericField @bind-Value="@DecimalValue" T="decimal?"
+                         Label="@GetDisplayName()"
+                         HelperText="@GetDescription()"
+                         Format="@Format"
+                         ReadOnly="@ReadOnly"
+                         Variant="Variant.Outlined"
+                         Immediate="true"
+                         Required="@GetRequired()"
+                         For="@(For as Expression<Func<decimal?>>)" />
+    }
+}
+else if (typeof(TValue) == typeof(bool) || typeof(TValue) == typeof(bool?))
+{
+    <MudSwitch @bind-Value="@BoolValue" T="bool?"
+               Label="@GetDisplayName()"
+               ReadOnly="@ReadOnly"
+               Color="Color.Primary"
+               Required="@GetRequired()"
+               For="@(For as Expression<Func<bool?>>)" />
+}
+else
+{
+    @if (IsEmail())
+    {
+        <MudTextField @bind-Value="@StringValue"
+                      Label="@GetDisplayName()"
+                      HelperText="@GetDescription()"
+                      MaxLength="@GetMaxLength()"
+                      Counter="@(GetMaxLength() > 0 ? GetMaxLength() : null)"
+                      ReadOnly="@ReadOnly"
+                      Variant="Variant.Outlined"
+                      InputType="InputType.Email"
+                      Required="@GetRequired()"
+                      For="@(For as Expression<Func<string>>)" />
+    }
+    else if (IsPhone())
+    {
+        <MudTextField @bind-Value="@StringValue"
+                      Label="@GetDisplayName()"
+                      HelperText="@GetDescription()"
+                      MaxLength="@GetMaxLength()"
+                      Counter="@(GetMaxLength() > 0 ? GetMaxLength() : null)"
+                      ReadOnly="@ReadOnly"
+                      Variant="Variant.Outlined"
+                      InputType="InputType.Telephone"
+                      Required="@GetRequired()"
+                      For="@(For as Expression<Func<string>>)" />
+    }
+    else if (IsUrl())
+    {
+        <MudTextField @bind-Value="@StringValue"
+                      Label="@GetDisplayName()"
+                      HelperText="@GetDescription()"
+                      MaxLength="@GetMaxLength()"
+                      Counter="@(GetMaxLength() > 0 ? GetMaxLength() : null)"
+                      ReadOnly="@ReadOnly"
+                      Variant="Variant.Outlined"
+                      InputType="InputType.Url"
+                      Required="@GetRequired()"
+                      For="@(For as Expression<Func<string>>)" />
+    }
+    else if (GetPattern() != null)
+    {
+        <MudTextField @bind-Value="@StringValue"
+                      Label="@GetDisplayName()"
+                      HelperText="@GetDescription()"
+                      MaxLength="@GetMaxLength()"
+                      Counter="@(GetMaxLength() > 0 ? GetMaxLength() : null)"
+                      ReadOnly="@ReadOnly"
+                      Variant="Variant.Outlined"
+                      Pattern="@GetPattern()"
+                      Required="@GetRequired()"
+                      For="@(For as Expression<Func<string>>)" />
+    }
+    else
+    {
+        <MudTextField @bind-Value="@StringValue"
+                      Label="@GetDisplayName()"
+                      HelperText="@GetDescription()"
+                      MaxLength="@GetMaxLength()"
+                      Counter="@(GetMaxLength() > 0 ? GetMaxLength() : null)"
+                      ReadOnly="@ReadOnly"
+                      Variant="Variant.Outlined"
+                      Required="@GetRequired()"
+                      For="@(For as Expression<Func<string>>)" />
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public TValue? Value { get; set; }
+    [Parameter] public EventCallback<TValue> ValueChanged { get; set; }
+    [Parameter, EditorRequired] public Expression<Func<TModel, object>> Property { get; set; } = null!;
+    [Parameter] public bool ReadOnly { get; set; }
+    [Parameter] public Expression<Func<TValue>>? For { get; set; }
+    [Parameter] public string? Format { get; set; }
+
+    // Foreign key support - Data
+    [Parameter] public IEnumerable<object>? LookupItems { get; set; }
+    [Parameter] public Func<object, int?>? LookupValueSelector { get; set; }
+    [Parameter] public Func<object, string>? LookupTextSelector { get; set; }
+
+    // Foreign key support - Dialog management
+    [Parameter] public Func<TLookup, int>? ForeignKeyIdSelector { get; set; }
+    [Parameter] public Func<TLookup, string>? ForeignKeyNameSelector { get; set; }
+    [Parameter] public Func<TLookup, string>? ForeignKeyDescriptionSelector { get; set; }
+    [Parameter] public Func<TLookup, Task<bool>>? OnForeignKeyCreate { get; set; }
+    [Parameter] public Func<TLookup, Task<bool>>? OnForeignKeyUpdate { get; set; }
+    [Parameter] public Func<TLookup, Task<bool>>? OnForeignKeyDelete { get; set; }
+    [Parameter] public RenderFragment<TLookup>? ForeignKeyFormContent { get; set; }
+    [Parameter] public EventCallback OnForeignKeyDataChanged { get; set; }
+    [Parameter] public string? ForeignKeyDialogTitle { get; set; }
+
+    private bool HasForeignKeyManagement => 
+        ForeignKeyIdSelector != null && 
+        ForeignKeyNameSelector != null && 
+        OnForeignKeyCreate != null && 
+        OnForeignKeyUpdate != null && 
+        OnForeignKeyDelete != null && 
+        ForeignKeyFormContent != null;
+
+    private int? IntValue
+    {
+        get => Value as int?;
+        set => ValueChanged.InvokeAsync((TValue)(object)value!);
+    }
+
+    private decimal? DecimalValue
+    {
+        get => Value as decimal?;
+        set => ValueChanged.InvokeAsync((TValue)(object)value!);
+    }
+
+    private bool? BoolValue
+    {
+        get => Value as bool?;
+        set => ValueChanged.InvokeAsync((TValue)(object)value!);
+    }
+
+    private string? StringValue
+    {
+        get => Value as string;
+        set => ValueChanged.InvokeAsync((TValue)(object)value!);
+    }
+
+    private DateTime? DateTimeValue
+    {
+        get => Value as DateTime?;
+        set => ValueChanged.InvokeAsync((TValue)(object)value!);
+    }
+
+    private bool IsNumericType()
+    {
+        var type = typeof(TValue);
+        var underlyingType = Nullable.GetUnderlyingType(type) ?? type;
+        return underlyingType == typeof(int) ||
+               underlyingType == typeof(decimal) ||
+               underlyingType == typeof(double) ||
+               underlyingType == typeof(float) ||
+               underlyingType == typeof(long);
+    }
+
+    private bool IsDateTimeType()
+    {
+        var type = typeof(TValue);
+        var underlyingType = Nullable.GetUnderlyingType(type) ?? type;
+        return underlyingType == typeof(DateTime);
+    }
+
+    private bool IsForeignKeyField()
+    {
+        return FormAttributeHelper.IsForeignKey(Property) && LookupItems != null;
+    }
+
+    private int? GetLookupValue(object item)
+    {
+        if (LookupValueSelector != null)
+            return LookupValueSelector(item);
+
+        var idProp = item.GetType().GetProperty("Id");
+        return idProp?.GetValue(item) as int?;
+    }
+
+    private string GetLookupText(object item)
+    {
+        if (LookupTextSelector != null)
+            return LookupTextSelector(item);
+        return string.Empty;
+    }
+
+    private async Task OpenForeignKeyDialog()
+    {
+        if (!HasForeignKeyManagement || LookupItems == null)
+            return;
+
+        var lookupItemsList = LookupItems.Cast<TLookup>();
+
+        var parameters = new DialogParameters<ForeignKeyDialog<TLookup>>
+        {
+            { x => x.Items, lookupItemsList },
+            { x => x.IdSelector, (TLookup item) => (object)ForeignKeyIdSelector!(item) },
+            { x => x.NameSelector, ForeignKeyNameSelector! },
+            { x => x.DescriptionSelector, ForeignKeyDescriptionSelector ?? (item => string.Empty) },
+            { x => x.OnCreate, OnForeignKeyCreate! },
+            { x => x.OnUpdate, OnForeignKeyUpdate! },
+            { x => x.OnDelete, OnForeignKeyDelete! },
+            { x => x.FormContent, ForeignKeyFormContent! },
+            { x => x.OnDataChanged, OnForeignKeyDataChanged }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        await DialogService.ShowAsync<ForeignKeyDialog<TLookup>>(
+            ForeignKeyDialogTitle ?? "Manage Items", 
+            parameters, 
+            options);
+    }
+
+    // FormAttributeHelper methods
+    private string GetDisplayName() => FormAttributeHelper.GetDisplayName(Property);
+    private string GetDescription() => FormAttributeHelper.GetDescription(Property);
+    private int GetMaxLength() => FormAttributeHelper.GetMaxLength(Property);
+    private int? GetMinLength() => FormAttributeHelper.GetMinLength(Property);
+    private bool GetRequired() => FormAttributeHelper.GetRequired(Property);
+    private bool IsEmail() => FormAttributeHelper.GetEmail(Property);
+    private bool IsPhone() => FormAttributeHelper.GetPhone(Property);
+    private bool IsUrl() => FormAttributeHelper.GetUrl(Property);
+    private (decimal? min, decimal? max) GetRange() => FormAttributeHelper.GetRange(Property);
+    private string? GetPattern() => FormAttributeHelper.GetPattern(Property);
+    private DataType? GetDataType() => FormAttributeHelper.GetDataType(Property);
+}

@@ -1,0 +1,41 @@
+@page "/admin"
+@attribute [Authorize(Policy = Policies.AdminOnly)]
+
+<PageTitle>Admin</PageTitle>
+
+<div class="container mt-5">
+    <div class="alert alert-danger">
+        <h3><span class="bi bi-shield-lock-fill"></span> Admin Area</h3>
+        <p><strong>Access Level:</strong> Admin Only (Highest Privilege)</p>
+    </div>
+
+    <h4>Welcome, Administrator!</h4>
+    <p>This page is only accessible to users with the <strong>admin</strong> role.</p>
+
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5>Admin Capabilities</h5>
+        </div>
+        <div class="card-body">
+            <ul>
+                <li>Full system access</li>
+                <li>User management</li>
+                <li>System configuration</li>
+                <li>All lower-level permissions</li>
+            </ul>
+        </div>
+    </div>
+
+    <AuthorizeView>
+        <Authorized>
+            <div class="mt-4">
+                <p><strong>Your Email:</strong> @context.User.Identity?.Name</p>
+                <p><strong>Your Roles:</strong> @string.Join(", ", context.User.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value))</p>
+            </div>
+        </Authorized>
+    </AuthorizeView>
+</div>
+
+@code {
+
+}

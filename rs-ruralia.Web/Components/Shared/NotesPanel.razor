@@ -1,0 +1,538 @@
+@using rs_ruralia.Shared.Models
+@using rs_ruralia.Web.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@inject NotesApiClient NotesApi
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<MudStack Spacing="3">
+    @if (isLoading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Filled">@errorMessage</MudAlert>
+    }
+    
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <MudAlert Severity="Severity.Success" Variant="Variant.Filled">@successMessage</MudAlert>
+    }
+
+    @if (canEdit && !isAddingNote)
+    {
+        <MudButton Variant="Variant.Filled" 
+                   Color="Color.Primary" 
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="StartAddNote">
+            Add Note
+        </MudButton>
+    }
+
+    @if (isAddingNote)
+    {
+        <MudCard>
+            <MudCardContent>
+                <MudTextField @bind-Value="newNoteText" 
+                             Label="New Note" 
+                             Variant="Variant.Outlined"
+                             Lines="4"
+                             Immediate="true"
+                             FullWidth="true" />
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Variant="Variant.Filled" 
+                          Color="Color.Primary" 
+                          OnClick="SaveNewNote"
+                          Disabled="@(isSaving || string.IsNullOrWhiteSpace(newNoteText))">
+                    @if (isSaving)
+                    {
+                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                        <MudText Class="ms-2">Saving...</MudText>
+                    }
+                    else
+                    {
+                        <MudText>Save</MudText>
+                    }
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" 
+                          Color="Color.Secondary" 
+                          OnClick="CancelAddNote"
+                          Disabled="@isSaving">
+                    Cancel
+                </MudButton>
+            </MudCardActions>
+        </MudCard>
+    }
+
+    @if (notes != null && notes.Any())
+    {
+        <MudStack Spacing="2">
+            @foreach (var note in notes.OrderByDescending(n => n.ValidFrom))
+            {
+                var isHighlighted = HighlightedNoteDate.HasValue && 
+                    note.ValidFrom <= HighlightedNoteDate.Value && 
+                    note.ValidTo > HighlightedNoteDate.Value;
+                
+                <MudCard Outlined="true" Class="@(isHighlighted ? "highlighted-note" : "")">
+                    <MudCardContent>
+                        @if (editingNoteId == note.Id)
+                        {
+                            <MudTextField @bind-Value="editNoteText" 
+                                         Label="Edit Note" 
+                                         Variant="Variant.Outlined"
+                                         Lines="4"
+                                         Immediate="true"
+                                         FullWidth="true" />
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body1" Style="white-space: pre-wrap;">@note.NoteText</MudText>
+                        }
+                        
+                        <MudDivider Class="my-2" />
+                        
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                @if (isHighlighted)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Icon="@Icons.Material.Filled.Bookmark">
+                                        Active at Selected Date
+                                    </MudChip>
+                                }
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" /> @note.ModifiedBy
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    <MudIcon Icon="@Icons.Material.Filled.CalendarToday" Size="Size.Small" /> @note.ValidFrom.ToString("g")
+                                </MudText>
+                                
+                                @if (ShowHistory)
+                                {
+                                    <MudButton Size="Size.Small" 
+                                              Variant="Variant.Text" 
+                                              Color="Color.Info"
+                                              OnClick="@(() => ToggleNoteHistory(note.Id))">
+                                        @if (expandedNoteHistories.Contains(note.Id))
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.ExpandLess" Size="Size.Small" />
+                                            <MudText Class="ms-1">Hide History</MudText>
+                                        }
+                                        else
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.ExpandMore" Size="Size.Small" />
+                                            <MudText Class="ms-1">Show History</MudText>
+                                        }
+                                    </MudButton>
+                                }
+                            </MudStack>
+                            
+                            @if (canEdit)
+                            {
+                                <MudStack Row="true" Spacing="1">
+                                    @if (editingNoteId == note.Id)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.Save" 
+                                                      Color="Color.Success" 
+                                                      Size="Size.Small"
+                                                      OnClick="SaveEditNote"
+                                                      Disabled="@(isSaving || string.IsNullOrWhiteSpace(editNoteText))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Close" 
+                                                      Color="Color.Default" 
+                                                      Size="Size.Small"
+                                                      OnClick="CancelEditNote"
+                                                      Disabled="@isSaving" />
+                                    }
+                                    else
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" 
+                                                      Color="Color.Primary" 
+                                                      Size="Size.Small"
+                                                      OnClick="@(() => StartEditNote(note))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                                      Color="Color.Error" 
+                                                      Size="Size.Small"
+                                                      OnClick="@(() => DeleteNote(note.Id))" />
+                                    }
+                                </MudStack>
+                            }
+                        </MudStack>
+                        
+                        @if (ShowHistory && expandedNoteHistories.Contains(note.Id) && noteHistories.ContainsKey(note.Id))
+                        {
+                            <MudDivider Class="my-2" />
+                            <MudText Typo="Typo.subtitle2" Class="mb-2">History</MudText>
+                            <MudTimeline TimelineOrientation="TimelineOrientation.Vertical" TimelinePosition="TimelinePosition.Start">
+                                @foreach (var historyItem in noteHistories[note.Id].OrderByDescending(h => h.ValidFrom))
+                                {
+                                    <MudTimelineItem Color="Color.Info" Size="Size.Small">
+                                        <MudCard Outlined="true" Elevation="0">
+                                            <MudCardContent Class="py-2">
+                                                <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@historyItem.NoteText</MudText>
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                                                    @historyItem.ModifiedBy • @historyItem.ValidFrom.ToString("g")
+                                                    @if (historyItem.ValidTo < DateTime.MaxValue)
+                                                    {
+                                                        <span> to @historyItem.ValidTo.ToString("g")</span>
+                                                    }
+                                                </MudText>
+                                            </MudCardContent>
+                                        </MudCard>
+                                    </MudTimelineItem>
+                                }
+                            </MudTimeline>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            }
+        </MudStack>
+    }
+    else if (!isLoading)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Text">
+            No notes found. @(canEdit ? "Click 'Add Note' to create one." : "")
+        </MudAlert>
+    }
+</MudStack>
+
+<style>
+    .highlighted-note {
+        border: 2px solid var(--mud-palette-primary);
+    }
+</style>
+
+@code {
+    [Parameter, EditorRequired]
+    public string EntityType { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public int EntityId { get; set; }
+
+    [Parameter]
+    public DateTime? HighlightedNoteDate { get; set; }
+
+    [Parameter]
+    public bool ShowHistory { get; set; } = true;
+
+    private IEnumerable<Note>? notes;
+    private Dictionary<int, IEnumerable<Note>> noteHistories = new();
+    private HashSet<int> expandedNoteHistories = new();
+    private bool isLoading = false;
+    private bool isSaving = false;
+    private bool isAddingNote = false;
+    private bool canEdit = false;
+    private string? errorMessage;
+    private string? successMessage;
+    private string newNoteText = string.Empty;
+    private int? editingNoteId;
+    private string editNoteText = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckEditPermission();
+        await LoadNotes();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Reload notes if EntityId or EntityType changes
+        await LoadNotes();
+    }
+
+    private async Task CheckEditPermission()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            canEdit = user.Identity?.IsAuthenticated == true &&
+                      (user.IsInRole("fnsbuser") || user.IsInRole("admin"));
+        }
+        catch
+        {
+            canEdit = false;
+        }
+    }
+
+    private async Task LoadNotes()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            var result = await NotesApi.GetNotesByEntityAsync(EntityType, EntityId);
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                notes = result.Data;
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to load notes";
+                notes = Array.Empty<Note>();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading notes: {ex.Message}";
+            notes = Array.Empty<Note>();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ToggleNoteHistory(int noteId)
+    {
+        if (expandedNoteHistories.Contains(noteId))
+        {
+            expandedNoteHistories.Remove(noteId);
+        }
+        else
+        {
+            expandedNoteHistories.Add(noteId);
+            
+            // Load history if not already loaded
+            if (!noteHistories.ContainsKey(noteId))
+            {
+                try
+                {
+                    var result = await NotesApi.GetNoteHistoryAsync(noteId);
+                    
+                    if (result?.IsSuccess == true && result.Data != null)
+                    {
+                        noteHistories[noteId] = result.Data;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    errorMessage = $"Error loading note history: {ex.Message}";
+                }
+            }
+        }
+    }
+
+    private void StartAddNote()
+    {
+        isAddingNote = true;
+        newNoteText = string.Empty;
+        ClearMessages();
+    }
+
+    private void CancelAddNote()
+    {
+        isAddingNote = false;
+        newNoteText = string.Empty;
+        ClearMessages();
+    }
+
+    private async Task SaveNewNote()
+    {
+        if (string.IsNullOrWhiteSpace(newNoteText))
+            return;
+
+        isSaving = true;
+        ClearMessages();
+
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var userEmail = authState.User.Identity?.Name ?? "unknown";
+
+            var note = new Note
+            {
+                NoteText = newNoteText,
+                ModifiedBy = userEmail
+            };
+
+            // Set the appropriate foreign key based on EntityType
+            switch (EntityType.ToLowerInvariant())
+            {
+                case "service_area":
+                case "servicearea":
+                    note.ServiceAreaId = EntityId;
+                    break;
+                case "road":
+                    note.RoadId = EntityId;
+                    break;
+                case "commissioner_profile":
+                case "commissionerprofile":
+                    note.CommissionerProfileId = EntityId;
+                    break;
+                case "commission_seat":
+                case "commissionseat":
+                    note.CommissionSeatId = EntityId;
+                    break;
+                case "vendor_profile":
+                case "vendorprofile":
+                    note.VendorProfileId = EntityId;
+                    break;
+                case "rfq":
+                    note.RfqId = EntityId;
+                    break;
+                default:
+                    errorMessage = $"Unknown entity type: {EntityType}";
+                    isSaving = false;
+                    return;
+            }
+
+            var result = await NotesApi.CreateNoteAsync(note);
+
+            if (result?.IsSuccess == true)
+            {
+                successMessage = "Note added successfully!";
+                isAddingNote = false;
+                newNoteText = string.Empty;
+                await LoadNotes();
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to add note";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error adding note: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void StartEditNote(Note note)
+    {
+        editingNoteId = note.Id;
+        editNoteText = note.NoteText ?? string.Empty;
+        ClearMessages();
+    }
+
+    private void CancelEditNote()
+    {
+        editingNoteId = null;
+        editNoteText = string.Empty;
+        ClearMessages();
+    }
+
+    private async Task SaveEditNote()
+    {
+        if (!editingNoteId.HasValue || string.IsNullOrWhiteSpace(editNoteText))
+            return;
+
+        isSaving = true;
+        ClearMessages();
+
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var userEmail = authState.User.Identity?.Name ?? "unknown";
+
+            var noteToEdit = notes?.FirstOrDefault(n => n.Id == editingNoteId.Value);
+            if (noteToEdit == null)
+            {
+                errorMessage = "Note not found";
+                isSaving = false;
+                return;
+            }
+
+            var updatedNote = new Note
+            {
+                Id = noteToEdit.Id,
+                NoteText = editNoteText,
+                RoadId = noteToEdit.RoadId,
+                ServiceAreaId = noteToEdit.ServiceAreaId,
+                CommissionerProfileId = noteToEdit.CommissionerProfileId,
+                CommissionSeatId = noteToEdit.CommissionSeatId,
+                CorrespondenceProfileId = noteToEdit.CorrespondenceProfileId,
+                PersonProfileId = noteToEdit.PersonProfileId,
+                VendorProfileId = noteToEdit.VendorProfileId,
+                RfqId = noteToEdit.RfqId,
+                ModifiedBy = userEmail
+            };
+
+            var result = await NotesApi.UpdateNoteAsync(editingNoteId.Value, updatedNote);
+
+            if (result?.IsSuccess == true)
+            {
+                successMessage = "Note updated successfully!";
+                editingNoteId = null;
+                editNoteText = string.Empty;
+                await LoadNotes();
+                
+                // Clear history cache for this note
+                if (noteHistories.ContainsKey(updatedNote.Id))
+                {
+                    noteHistories.Remove(updatedNote.Id);
+                }
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to update note";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error updating note: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task DeleteNote(int noteId)
+    {
+        if (!await ConfirmDelete())
+            return;
+
+        isSaving = true;
+        ClearMessages();
+
+        try
+        {
+            var result = await NotesApi.DeleteNoteAsync(noteId);
+
+            if (result?.IsSuccess == true)
+            {
+                successMessage = "Note deleted successfully!";
+                await LoadNotes();
+                
+                // Clean up history cache
+                if (noteHistories.ContainsKey(noteId))
+                {
+                    noteHistories.Remove(noteId);
+                }
+                expandedNoteHistories.Remove(noteId);
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to delete note";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error deleting note: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private Task<bool> ConfirmDelete()
+    {
+        // In a real implementation, you'd show a dialog
+        // For now, just return true
+        return Task.FromResult(true);
+    }
+
+    private void ClearMessages()
+    {
+        errorMessage = null;
+        successMessage = null;
+    }
+}

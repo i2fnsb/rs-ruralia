@@ -1,0 +1,128 @@
+@typeparam TEntity where TEntity : class, new()
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudButton Variant="Variant.Filled" 
+                           Color="Color.Primary" 
+                           StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="OpenCreateDialog">
+                    Add New
+                </MudButton>
+            </MudItem>
+            <MudItem xs="12">
+                <MudDataGrid T="TEntity" 
+                             Items="@Items" 
+                             Dense="true" 
+                             Hover="true"
+                             Loading="@isLoading">
+                    <Columns>
+                        <PropertyColumn T="TEntity" TProperty="object" Property="@(x => IdSelector(x))" Title="ID"/>
+                        <PropertyColumn T="TEntity" TProperty="object" Property="@(x => NameSelector(x))" Title="Name" />
+                        @if (DescriptionSelector != null)
+                        {
+                            <PropertyColumn T="TEntity" TProperty="object" Property="@(x => DescriptionSelector!(x))" Title="Description" />
+                        }
+                        <TemplateColumn Title="Actions" CellStyle="width: 120px;">
+                            <CellTemplate>
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" 
+                                               Size="Size.Small" 
+                                               OnClick="@(() => OpenEditDialog(context.Item))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                               Size="Size.Small" 
+                                               Color="Color.Error" 
+                                               OnClick="@(() => OpenDeleteDialog(context.Item))" />
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                </MudDataGrid>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    
+    [Parameter, EditorRequired] public IEnumerable<TEntity> Items { get; set; } = null!;
+    [Parameter, EditorRequired] public Func<TEntity, object> IdSelector { get; set; } = null!;
+    [Parameter, EditorRequired] public Func<TEntity, object> NameSelector { get; set; } = null!;
+    [Parameter] public Func<TEntity, object>? DescriptionSelector { get; set; }
+    [Parameter, EditorRequired] public Func<TEntity, Task<bool>> OnCreate { get; set; } = null!;
+    [Parameter, EditorRequired] public Func<TEntity, Task<bool>> OnUpdate { get; set; } = null!;
+    [Parameter, EditorRequired] public Func<TEntity, Task<bool>> OnDelete { get; set; } = null!;
+    [Parameter, EditorRequired] public RenderFragment<TEntity> FormContent { get; set; } = null!;
+    [Parameter] public EventCallback OnDataChanged { get; set; }
+
+    private bool isLoading = false;
+
+    private async Task OpenCreateDialog()
+    {
+        var entity = new TEntity();
+        var parameters = new DialogParameters
+        {
+            { "Entity", entity },
+            { "FormContent", FormContent },
+            { "IsEdit", false }
+        };
+
+        var dialog = await DialogService.ShowAsync<ForeignKeyEditDialog<TEntity>>("Add New", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is TEntity savedEntity)
+        {
+            if (await OnCreate(savedEntity))
+            {
+                await OnDataChanged.InvokeAsync();
+            }
+        }
+    }
+
+    private async Task OpenEditDialog(TEntity entity)
+    {
+        var parameters = new DialogParameters
+        {
+            { "Entity", entity },
+            { "FormContent", FormContent },
+            { "IsEdit", true }
+        };
+
+        var dialog = await DialogService.ShowAsync<ForeignKeyEditDialog<TEntity>>("Edit", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is TEntity savedEntity)
+        {
+            if (await OnUpdate(savedEntity))
+            {
+                await OnDataChanged.InvokeAsync();
+            }
+        }
+    }
+
+    private async Task OpenDeleteDialog(TEntity entity)
+    {
+        var parameters = new DialogParameters
+        {
+            { "ContentText", $"Are you sure you want to delete this item?" },
+            { "ButtonText", "Delete" },
+            { "Color", Color.Error }
+        };
+
+        var dialog = await DialogService.ShowAsync<MudMessageBox>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            if (await OnDelete(entity))
+            {
+                await OnDataChanged.InvokeAsync();
+            }
+        }
+    }
+
+    private void Close() => MudDialog.Close();
+}

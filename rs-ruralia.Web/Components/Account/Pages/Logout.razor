@@ -1,0 +1,31 @@
+@page "/Account/Logout"
+@using Microsoft.AspNetCore.Identity
+@using rs_ruralia.Web.Data
+
+@inject SignInManager<ApplicationUser> SignInManager
+@inject NavigationManager NavigationManager
+
+@code {
+    private bool _navigated;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await SignInManager.SignOutAsync();
+        }
+        catch
+        {
+            // Swallow sign-out exceptions to avoid blocking navigation; optionally log via ILogger.
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_navigated)
+        {
+            _navigated = true;
+            NavigationManager.NavigateTo("/", replace: true);
+        }
+    }
+}

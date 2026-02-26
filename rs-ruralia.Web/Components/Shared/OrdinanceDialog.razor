@@ -1,0 +1,172 @@
+@inject OrdinancesApiClient OrdinancesApi
+
+<MudDialog>
+    <DialogContent>
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-3">
+                @errorMessage
+                @if (errorDetails != null && errorDetails.Length > 0)
+                {
+                    <MudList T="string" Dense="true">
+                        @foreach (var detail in errorDetails)
+                        {
+                            <MudListItem>@detail</MudListItem>
+                        }
+                    </MudList>
+                }
+            </MudAlert>
+        }
+
+        <EditForm Model="@editModel" OnValidSubmit="OnValidSubmit">
+            <DataAnnotationsValidator />
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="editModel.OrdinanceName"
+                                  Label="Ordinance"
+                                  Required="true"
+                                  MaxLength="10"
+                                  For="@(() => editModel.OrdinanceName)" />
+                </MudItem>
+
+                <MudItem xs="12" md="6">
+                    <MudNumericField @bind-Value="editModel.OrdinanceYear"
+                                     Label="Year"
+                                     Required="true"
+                                     Min="1900"
+                                     Max="2100"
+                                     For="@(() => editModel.OrdinanceYear)" />
+                </MudItem>
+
+                <MudItem xs="12" md="6">
+                    <MudSwitch @bind-Value="editModel.OrdinancePassed"
+                               Label="Ordinance Passed"
+                               Color="Color.Success"
+                               For="@(() => editModel.OrdinancePassed)" />
+                </MudItem>
+
+                <MudItem xs="12" md="6">
+                    <MudSelect @bind-Value="editModel.OrdinanceTypeId"
+                               Label="Ordinance Type"
+                               T="int?"
+                               For="@(() => editModel.OrdinanceTypeId)">
+                        <MudSelectItem Value="@((int?)null)">— Select Type —</MudSelectItem>
+                        @if (OrdinanceTypes != null)
+                        {
+                            @foreach (var type in OrdinanceTypes)
+                            {
+                                <MudSelectItem Value="@((int?)type.Id)">@type.Type - @type.Description</MudSelectItem>
+                            }
+                        }
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+        </EditForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="OnValidSubmit" Disabled="@isSaving">
+            @if (isSaving)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <MudText Class="ms-2">Saving...</MudText>
+            }
+            else
+            {
+                <MudText>Save</MudText>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public Ordinance? Ordinance { get; set; }
+    [Parameter] public int ServiceAreaId { get; set; }
+    [Parameter] public IEnumerable<OrdinanceType>? OrdinanceTypes { get; set; }
+
+    private Ordinance editModel = new();
+    private bool isSaving = false;
+    private string? errorMessage;
+    private string[]? errorDetails;
+
+    protected override void OnInitialized()
+    {
+        if (Ordinance != null)
+        {
+            // Editing existing ordinance
+            editModel = new Ordinance
+            {
+                Id = Ordinance.Id,
+                OrdinanceName = Ordinance.OrdinanceName,
+                OrdinanceYear = Ordinance.OrdinanceYear,
+                OrdinancePassed = Ordinance.OrdinancePassed,
+                OrdinanceTypeId = Ordinance.OrdinanceTypeId,
+                ServiceAreaId = Ordinance.ServiceAreaId
+            };
+        }
+        else
+        {
+            // Creating new ordinance
+            editModel = new Ordinance
+            {
+                ServiceAreaId = ServiceAreaId,
+                OrdinancePassed = false
+            };
+        }
+    }
+
+    private async Task OnValidSubmit()
+    {
+        isSaving = true;
+        errorMessage = null;
+        errorDetails = null;
+
+        try
+        {
+            editModel.ServiceAreaId = ServiceAreaId;
+
+            if (Ordinance == null)
+            {
+                // Create new ordinance
+                var result = await OrdinancesApi.CreateOrdinanceAsync(editModel);
+
+                if (result?.IsSuccess == true)
+                {
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    errorMessage = result?.ErrorMessage ?? "Failed to create ordinance";
+                    errorDetails = result?.Errors;
+                }
+            }
+            else
+            {
+                // Update existing ordinance
+                var result = await OrdinancesApi.UpdateOrdinanceAsync(editModel.Id, editModel);
+
+                if (result?.IsSuccess == true)
+                {
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    errorMessage = result?.ErrorMessage ?? "Failed to update ordinance";
+                    errorDetails = result?.Errors;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

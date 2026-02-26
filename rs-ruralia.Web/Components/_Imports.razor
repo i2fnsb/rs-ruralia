@@ -1,0 +1,43 @@
+@using System.Net.Http
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
+@using Microsoft.AspNetCore.Components.Web.Virtualization
+@using Microsoft.AspNetCore.OutputCaching
+@using Microsoft.JSInterop
+@using rs_ruralia.Web
+@using rs_ruralia.Web.Components
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Authorization
+@using rs_ruralia.Web.Authorization
+@using rs_ruralia.Web.Components.Account.Shared
+@using rs_ruralia.Web.Components.Layout
+
+
+@using rs_ruralia.Shared.Models
+@using rs_ruralia.Web.Services
+@inject ServiceAreasApiClient ServiceAreasApi
+@inject ServiceAreaCodesApiClient ServiceAreaCodesApi
+@inject OrdinancesApiClient OrdinancesApi
+@inject OrdinanceTypesApiClient OrdinanceTypesApi
+@inject IJSRuntime JSRuntime
+
+@using MudBlazor
+
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Linq.Expressions
+@using System.ComponentModel.DataAnnotations
+@using rs_ruralia.Web.Helpers
+
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+@using rs_ruralia.Web.Components.Shared
+@using Microsoft.AspNetCore.Components.Forms
+
+@using System.Linq.Expressions
+
+@inject IDialogService DialogService
+@inject NavigationManager NavigationManager

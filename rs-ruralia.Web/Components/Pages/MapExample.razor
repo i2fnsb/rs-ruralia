@@ -1,0 +1,328 @@
+@page "/map-example"
+@rendermode InteractiveServer
+
+<PageTitle>Map Example</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Feature Layer Map Examples</MudText>
+
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
+        <!-- Example 1: Simple Feature Layer -->
+        <MudTabPanel Text="Basic Map">
+            <MudText Typo="Typo.h6" Class="mb-3">Basic Feature Layer Map</MudText>
+            <MudText Typo="Typo.body2" Class="mb-4">
+                This example shows a basic map with a feature layer URL and simple query parameters.
+            </MudText>
+
+            <MudCard>
+                <MudCardContent>
+                    <MudTextField @bind-Value="featureLayerUrl" 
+                                 Label="Feature Layer URL" 
+                                 Variant="Variant.Outlined"
+                                 FullWidth="true"
+                                 HelperText="Enter your ArcGIS Feature Service URL" />
+                    
+                    <MudButton Variant="Variant.Filled" 
+                              Color="Color.Primary" 
+                              OnClick="LoadBasicMap"
+                              Class="mt-3">
+                        Load Map
+                    </MudButton>
+                </MudCardContent>
+            </MudCard>
+
+            @if (showBasicMap)
+            {
+                <MudPaper Class="mt-4" Elevation="2">
+                    <FeatureLayerMap FeatureLayerUrl="@featureLayerUrl"
+                                    QueryParameters="@basicQueryParams"
+                                    Height="500px"
+                                    Title="Basic Feature Layer" />
+                </MudPaper>
+            }
+        </MudTabPanel>
+
+        <!-- Example 2: Filtered Feature Layer -->
+        <MudTabPanel Text="Filtered Map">
+            <MudText Typo="Typo.h6" Class="mb-3">Filtered Feature Layer Map</MudText>
+            <MudText Typo="Typo.body2" Class="mb-4">
+                This example shows how to filter features using query parameters.
+            </MudText>
+
+            <MudCard>
+                <MudCardContent>
+                    <MudGrid>
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="filteredFeatureLayerUrl" 
+                                         Label="Feature Layer URL" 
+                                         Variant="Variant.Outlined"
+                                         FullWidth="true" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField @bind-Value="whereClause" 
+                                         Label="WHERE Clause" 
+                                         Variant="Variant.Outlined"
+                                         FullWidth="true"
+                                         HelperText="e.g., OBJECTID = 123 or Name LIKE '%Road%'" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField @bind-Value="outFields" 
+                                         Label="Output Fields" 
+                                         Variant="Variant.Outlined"
+                                         FullWidth="true"
+                                         HelperText="e.g., * or Name,Type,Length" />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudButton Variant="Variant.Filled" 
+                                      Color="Color.Primary" 
+                                      OnClick="LoadFilteredMap">
+                                Apply Filter
+                            </MudButton>
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+
+            @if (showFilteredMap)
+            {
+                <MudPaper Class="mt-4" Elevation="2">
+                    <FeatureLayerMap FeatureLayerUrl="@filteredFeatureLayerUrl"
+                                    QueryParameters="@filteredQueryParams"
+                                    Height="500px"
+                                    Title="Filtered Features" />
+                </MudPaper>
+            }
+        </MudTabPanel>
+
+        <!-- Example 3: Custom Center and Zoom -->
+        <MudTabPanel Text="Custom View">
+            <MudText Typo="Typo.h6" Class="mb-3">Map with Custom Center and Zoom</MudText>
+            <MudText Typo="Typo.body2" Class="mb-4">
+                This example shows how to set custom initial center coordinates and zoom level.
+            </MudText>
+
+            <MudCard>
+                <MudCardContent>
+                    <MudGrid>
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="customFeatureLayerUrl" 
+                                         Label="Feature Layer URL" 
+                                         Variant="Variant.Outlined"
+                                         FullWidth="true" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudNumericField @bind-Value="customLatitude" 
+                                           Label="Latitude" 
+                                           Variant="Variant.Outlined"
+                                           Format="N6" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudNumericField @bind-Value="customLongitude" 
+                                           Label="Longitude" 
+                                           Variant="Variant.Outlined"
+                                           Format="N6" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudNumericField @bind-Value="customZoom" 
+                                           Label="Zoom Level" 
+                                           Variant="Variant.Outlined"
+                                           Min="1" Max="18" />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudButton Variant="Variant.Filled" 
+                                      Color="Color.Primary" 
+                                      OnClick="LoadCustomMap">
+                                Load Map
+                            </MudButton>
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+
+            @if (showCustomMap)
+            {
+                <MudPaper Class="mt-4" Elevation="2">
+                    <FeatureLayerMap FeatureLayerUrl="@customFeatureLayerUrl"
+                                    QueryParameters="@customQueryParams"
+                                    Height="500px"
+                                    InitialLatitude="@customLatitude"
+                                    InitialLongitude="@customLongitude"
+                                    InitialZoom="@customZoom"
+                                    Title="Custom View Map" />
+                </MudPaper>
+            }
+        </MudTabPanel>
+
+        <!-- Usage Documentation -->
+        <MudTabPanel Text="Usage Guide">
+            <MudText Typo="Typo.h6" Class="mb-3">How to Use FeatureLayerMap Component</MudText>
+            
+            <MudAlert Severity="Severity.Info" Class="mb-4">
+                The FeatureLayerMap component is designed to work with ArcGIS Feature Services that support GeoJSON output.
+            </MudAlert>
+
+            <MudExpansionPanels MultiExpansion="true">
+                <MudExpansionPanel Text="Basic Usage" IsInitiallyExpanded="true">
+                    <MudText Typo="Typo.body2" Class="mb-2"><strong>Minimal Setup:</strong></MudText>
+                    <MudPaper Class="pa-3" Elevation="0" Style="background-color: #f5f5f5;">
+                        <code>
+                            &lt;FeatureLayerMap FeatureLayerUrl="https://your-server.com/arcgis/rest/services/YourService/FeatureServer/0" /&gt;
+                        </code>
+                    </MudPaper>
+                </MudExpansionPanel>
+
+                <MudExpansionPanel Text="Parameters">
+                    <MudSimpleTable Dense="true">
+                        <thead>
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Type</th>
+                                <th>Default</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>FeatureLayerUrl</code></td>
+                                <td>string?</td>
+                                <td>null</td>
+                                <td>URL to the ArcGIS Feature Service layer</td>
+                            </tr>
+                            <tr>
+                                <td><code>QueryParameters</code></td>
+                                <td>Dictionary&lt;string, string&gt;?</td>
+                                <td>null</td>
+                                <td>Query parameters (where, outFields, etc.)</td>
+                            </tr>
+                            <tr>
+                                <td><code>Height</code></td>
+                                <td>string</td>
+                                <td>"500px"</td>
+                                <td>Height of the map container</td>
+                            </tr>
+                            <tr>
+                                <td><code>InitialLatitude</code></td>
+                                <td>double</td>
+                                <td>64.8378</td>
+                                <td>Initial map center latitude</td>
+                            </tr>
+                            <tr>
+                                <td><code>InitialLongitude</code></td>
+                                <td>double</td>
+                                <td>-147.7164</td>
+                                <td>Initial map center longitude</td>
+                            </tr>
+                            <tr>
+                                <td><code>InitialZoom</code></td>
+                                <td>float</td>
+                                <td>10</td>
+                                <td>Initial zoom level (1-18)</td>
+                            </tr>
+                            <tr>
+                                <td><code>Title</code></td>
+                                <td>string?</td>
+                                <td>null</td>
+                                <td>Title displayed in feature popups</td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
+                </MudExpansionPanel>
+
+                <MudExpansionPanel Text="Query Parameters Examples">
+                    <MudText Typo="Typo.body2" Class="mb-2">
+                        Common ArcGIS REST API query parameters:
+                    </MudText>
+                    <ul style="list-style-type: disc; padding-left: 20px;">
+                        <li>
+                            <strong>where:</strong> SQL WHERE clause (e.g., "OBJECTID = 123" or "1=1" for all features)
+                        </li>
+                        <li>
+                            <strong>outFields:</strong> Fields to return (e.g., "*" for all or "Name,Type,Length")
+                        </li>
+                        <li>
+                            <strong>returnGeometry:</strong> "true" or "false"
+                        </li>
+                        <li>
+                            <strong>orderByFields:</strong> Sort order (e.g., "Name ASC")
+                        </li>
+                    </ul>
+                </MudExpansionPanel>
+
+                <MudExpansionPanel Text="Code Example">
+                    <MudPaper Class="pa-3" Elevation="0" Style="background-color: #f5f5f5;">
+                        <pre style="margin: 0; overflow-x: auto;">@@code {
+    private Dictionary&lt;string, string&gt; queryParams = new()
+    {
+        { "where", "Type = 'Primary Road'" },
+        { "outFields", "Name,Type,Length" },
+        { "returnGeometry", "true" }
+    };
+
+    &lt;FeatureLayerMap 
+        FeatureLayerUrl="https://your-server/FeatureServer/0"
+        QueryParameters="@@queryParams"
+        Height="600px"
+        InitialLatitude="64.8378"
+        InitialLongitude="-147.7164"
+        InitialZoom="12"
+        Title="Road Network" /&gt;
+}</pre>
+                    </MudPaper>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+
+@code {
+    // Basic Map
+    private string featureLayerUrl = "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Counties/FeatureServer/0";
+    private Dictionary<string, string>? basicQueryParams;
+    private bool showBasicMap = false;
+
+    // Filtered Map
+    private string filteredFeatureLayerUrl = "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Counties/FeatureServer/0";
+    private string whereClause = "STATE_NAME = 'Alaska'";
+    private string outFields = "*";
+    private Dictionary<string, string>? filteredQueryParams;
+    private bool showFilteredMap = false;
+
+    // Custom Map
+    private string customFeatureLayerUrl = "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Counties/FeatureServer/0";
+    private double customLatitude = 64.8378; // Fairbanks, AK
+    private double customLongitude = -147.7164;
+    private float customZoom = 8;
+    private Dictionary<string, string>? customQueryParams;
+    private bool showCustomMap = false;
+
+    private void LoadBasicMap()
+    {
+        basicQueryParams = new Dictionary<string, string>
+        {
+            { "where", "1=1" },
+            { "outFields", "*" }
+        };
+        showBasicMap = true;
+    }
+
+    private void LoadFilteredMap()
+    {
+        filteredQueryParams = new Dictionary<string, string>
+        {
+            { "where", whereClause },
+            { "outFields", outFields },
+            { "returnGeometry", "true" }
+        };
+        showFilteredMap = true;
+    }
+
+    private void LoadCustomMap()
+    {
+        customQueryParams = new Dictionary<string, string>
+        {
+            { "where", "STATE_NAME = 'Alaska'" },
+            { "outFields", "*" }
+        };
+        showCustomMap = true;
+    }
+}

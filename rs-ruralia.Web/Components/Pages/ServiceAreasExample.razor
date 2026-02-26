@@ -1,0 +1,1029 @@
+@page "/service-areas-example"
+@rendermode InteractiveServer 
+@* @(new InteractiveServerRenderMode(prerender: false)) *@
+@inject ServiceAreasApiClient ServiceAreasApi
+@inject ServiceAreaCodesApiClient ServiceAreaCodesApi
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IConfiguration Configuration
+
+<MudGrid>
+    <MudItem xs="2">
+        <MudDataGrid T="ServiceArea" 
+                     Items="@serviceAreas" 
+                     QuickFilter="@_quickFilter"
+                     Height="calc(100vh - 200px)"
+                     FixedHeader="true"
+                     Virtualize="true"
+                     RowClick="RowClicked"
+                     SelectedItem="selectedServiceArea">
+            <ToolBarContent>
+                <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" Immediate="true"
+                              AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
+            </ToolBarContent>
+            <Columns>
+                <PropertyColumn Property="x => x.Name" Title="Service Area" />
+            </Columns>
+        </MudDataGrid>
+    </MudItem>
+    <MudItem xs="10">
+        @if (selectedServiceArea != null)
+        {
+            <MudExpansionPanels MultiExpansion>
+                <MudExpansionPanel Text="Details" Expanded="true">
+                    <VersionedDetailsPanel TEntity="ServiceArea"
+                       AllVersions="@allVersions"
+                       CurrentVersion="@currentViewVersion"
+                       CurrentVersionChanged="@OnCurrentVersionChanged"
+                       GetValidFrom="@(x => x.ValidFrom)"
+                       GetValidTo="@(x => x.ValidTo)"
+                       GetModifiedBy="@(x => x.ModifiedBy)"
+                       GetDisplayText="@(x => x.Name ?? "")"
+                       CanEdit="@canEdit"
+                       IsEditMode="@isEditMode"
+                       OnEditClicked="@EnableEdit"
+                       IsLoading="@(isLoading || isLoadingHistory)"
+                       ErrorMessage="@(errorMessage ?? historyErrorMessage)"
+                       OnRestore="@HandleRestore">
+                            <!-- This contains the view for edit mode. -->
+                            <DetailsContent Context="version">
+                            @if (editContext != null && editModel != null)
+                            {
+                                <EditForm EditContext="@editContext" OnValidSubmit="SaveEdit">
+                                    <DataAnnotationsValidator />
+                                    <MudGrid>
+                                        <MudItem xs="12">
+                                            @if (canEdit && IsViewingCurrentVersion())
+                                            {
+                                                @if (isEditMode)
+                                                {
+                                                    <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
+                                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@isSaving">
+                                                            @if (isSaving)
+                                                            {
+                                                                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                                                                <MudText Class="ms-2">Saving...</MudText>
+                                                            }
+                                                            else
+                                                            {
+                                                                <MudIcon Icon="@Icons.Material.Filled.Save" Class="me-1" /> <MudText>Save</MudText>
+                                                            }
+                                                        </MudButton>
+                                                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="CancelEdit" Disabled="@isSaving">
+                                                            Cancel
+                                                        </MudButton>
+                                                    </MudStack>
+                                                }
+                                                else
+                                                {
+                                                    <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
+                                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="EnableEdit">
+                                                            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="me-1" /> Edit
+                                                        </MudButton>
+                                                    </MudStack>
+                                                }
+                                            }
+                                        </MudItem>
+
+                                        @if (!string.IsNullOrEmpty(successMessage))
+                                        {
+                                            <MudItem xs="12">
+                                                <MudAlert Severity="Severity.Success" Variant="Variant.Filled">@successMessage</MudAlert>
+                                            </MudItem>
+                                        }
+
+                                        @if (!string.IsNullOrEmpty(errorMessage))
+                                        {
+                                            <MudItem xs="12">
+                                                <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
+                                                    <MudText>@errorMessage</MudText>
+                                                    @if (errorDetails != null && errorDetails.Length > 0)
+                                                    {
+                                                        <MudList T="string" Dense="true">
+                                                            @foreach (var detail in errorDetails)
+                                                            {
+                                                                <MudListItem>@detail</MudListItem>
+                                                            }
+                                                        </MudList>
+                                                    }
+                                                </MudAlert>
+                                            </MudItem>
+                                        }
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField @bind-Value="editModel.Name" TModel="ServiceArea" TValue="string" TLookup="object"
+                                                       Property="@(x => x.Name)"
+                                                       ReadOnly="@(!CanEditFields())"
+                                                       For="@(() => editModel.Name)" />
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField @bind-Value="editModel.FeatureObjectId" TModel="ServiceArea" TValue="string" TLookup="object"
+                                                       Property="@(x => x.FeatureObjectId)"
+                                                       ReadOnly="@(!CanEditFields())"
+                                                       For="@(() => editModel.FeatureObjectId)" />
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField @bind-Value="editModel.OrgKey" TModel="ServiceArea" TValue="int?" TLookup="object"
+                                                       Property="@(x => x.OrgKey)"
+                                                       ReadOnly="@(!CanEditFields())"
+                                                       For="@(() => editModel.OrgKey)" />
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField @bind-Value="editModel.CurrentMileage" TModel="ServiceArea" TValue="decimal?" TLookup="object"
+                                                       Property="@(x => x.CurrentMileage)"
+                                                       Format="N3"
+                                                       ReadOnly="@(!CanEditFields())"
+                                                       For="@(() => editModel.CurrentMileage)" />
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField @bind-Value="editModel.AbolishMergeYear" TModel="ServiceArea" TValue="int?" TLookup="object"
+                                                       Property="@(x => x.AbolishMergeYear)"
+                                                       ReadOnly="@(!CanEditFields())"
+                                                       For="@(() => editModel.AbolishMergeYear)" />
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField @bind-Value="editModel.MaximumMillRate" TModel="ServiceArea" TValue="decimal?" TLookup="object"
+                                                       Property="@(x => x.MaximumMillRate)"
+                                                       Format="N3"
+                                                       ReadOnly="@(!CanEditFields())"
+                                                       For="@(() => editModel.MaximumMillRate)" />
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField @bind-Value="editModel.CurrentMillRate" TModel="ServiceArea" TValue="decimal?" TLookup="object"
+                                                       Property="@(x => x.CurrentMillRate)"
+                                                       Format="N3"
+                                                       ReadOnly="@(!CanEditFields())"
+                                                       For="@(() => editModel.CurrentMillRate)" />
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField @bind-Value="editModel.FireMillRate" TModel="ServiceArea" TValue="decimal?" TLookup="object"
+                                                       Property="@(x => x.FireMillRate)"
+                                                       Format="N3"
+                                                       ReadOnly="@(!CanEditFields())"
+                                                       For="@(() => editModel.FireMillRate)" />
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField @bind-Value="editModel.MillLevy" TModel="ServiceArea" TValue="decimal?" TLookup="object"
+                                                       Property="@(x => x.MillLevy)"
+                                                       Format="N13"
+                                                       ReadOnly="@(!CanEditFields())"
+                                                       For="@(() => editModel.MillLevy)" />
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField @bind-Value="editModel.TaxAuthorityCode" TModel="ServiceArea" TValue="string" TLookup="object"
+                                                       Property="@(x => x.TaxAuthorityCode)"
+                                                       ReadOnly="@(!CanEditFields())"
+                                                       For="@(() => editModel.TaxAuthorityCode)" />
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField @bind-Value="editModel.InitialTaxYear" TModel="ServiceArea" TValue="int?" TLookup="object"
+                                                       Property="@(x => x.InitialTaxYear)"
+                                                       ReadOnly="@(!CanEditFields())"
+                                                       For="@(() => editModel.InitialTaxYear)" />
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField @bind-Value="editModel.MatchFeatureLayer" TModel="ServiceArea" TValue="bool?" TLookup="object"
+                                                       Property="@(x => x.MatchFeatureLayer)"
+                                                       ReadOnly="@(!CanEditFields())"
+                                                       For="@(() => editModel.MatchFeatureLayer)" />
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField @bind-Value="editModel.ServiceAreaCodeId" 
+                                                       TModel="ServiceArea" 
+                                                       TValue="int?"
+                                                       TLookup="ServiceAreaCode"
+                                                       Property="@(x => x.ServiceAreaCodeId)"
+                                                       ReadOnly="@(!CanEditFields())"
+                                                       LookupItems="@serviceAreaCodes"
+                                                       LookupTextSelector="@(item => $"{((ServiceAreaCode)item).Code} - {((ServiceAreaCode)item).Description}")"
+                                                       ForeignKeyIdSelector="@(x => x.Id)"
+                                                       ForeignKeyNameSelector="@(x => x.Code ?? "")"
+                                                       ForeignKeyDescriptionSelector="@(x => x.Description ?? "")"
+                                                       OnForeignKeyCreate="@CreateServiceAreaCode"
+                                                       OnForeignKeyUpdate="@UpdateServiceAreaCode"
+                                                       OnForeignKeyDelete="@DeleteServiceAreaCode"
+                                                       OnForeignKeyDataChanged="@(EventCallback.Factory.Create(this, LoadServiceAreaCodes))"
+                                                       ForeignKeyDialogTitle="Manage Service Area Codes"
+                                                       For="@(() => editModel.ServiceAreaCodeId)">
+                                                <ForeignKeyFormContent Context="entity">
+                                                    <MudItem xs="12">
+                                                        <AutoField @bind-Value="entity.Code" 
+                                                                   TModel="ServiceAreaCode" 
+                                                                   TValue="string"
+                                                                   TLookup="object"
+                                                                   Property="@(x => x.Code)"
+                                                                   For="@(() => entity.Code)" />
+                                                    </MudItem>
+                                                    <MudItem xs="12">
+                                                        <AutoField @bind-Value="entity.Description" 
+                                                                   TModel="ServiceAreaCode" 
+                                                                   TValue="string"
+                                                                   TLookup="object"
+                                                                   Property="@(x => x.Description)"
+                                                                   For="@(() => entity.Description)" />
+                                                    </MudItem>
+                                                </ForeignKeyFormContent>
+                                            </AutoField>
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField Value="editModel.ValidFrom" TModel="ServiceArea" TValue="DateTime?" TLookup="object"
+                                                       Property="@(x => x.ValidFrom)"
+                                                       ReadOnly="true" />
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField @bind-Value="editModel.ModifiedBy" TModel="ServiceArea" TValue="string" TLookup="object"
+                                                       Property="@(x => x.ModifiedBy)"
+                                                       ReadOnly="true" />
+                                        </MudItem>
+                                    </MudGrid>
+                                </EditForm>
+                            }
+                        </DetailsContent>
+                        <!-- This contains the default view for all versions. -->
+                        <ViewModeContent Context="version">
+                            <MudGrid Spacing="3">
+                                <MudItem xs="12" md="6">
+                                    <MudCard Outlined="true" Class="pa-2">
+                                        <MudCardContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Name</MudText>
+                                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@version.Name</MudText>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudCard Outlined="true" Class="pa-2">
+                                        <MudCardContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Feature Object ID</MudText>
+                                            <MudText Typo="Typo.body1">@version.FeatureObjectId</MudText>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudCard Outlined="true" Class="pa-2">
+                                        <MudCardContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Org Key</MudText>
+                                            <MudText Typo="Typo.body1">@(version.OrgKey?.ToString() ?? "—")</MudText>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudCard Outlined="true" Class="pa-2">
+                                        <MudCardContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Current Mileage</MudText>
+                                            <MudText Typo="Typo.body1">@(version.CurrentMileage?.ToString("N3") ?? "—")</MudText>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudCard Outlined="true" Class="pa-2">
+                                        <MudCardContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Abolish/Merge Year</MudText>
+                                            <MudText Typo="Typo.body1">@(version.AbolishMergeYear?.ToString() ?? "—")</MudText>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudCard Outlined="true" Class="pa-2">
+                                        <MudCardContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Maximum Mill Rate</MudText>
+                                            <MudText Typo="Typo.body1">@(version.MaximumMillRate?.ToString("N3") ?? "—")</MudText>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudCard Outlined="true" Class="pa-2">
+                                        <MudCardContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Current Mill Rate</MudText>
+                                            <MudText Typo="Typo.body1">@(version.CurrentMillRate?.ToString("N3") ?? "—")</MudText>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudCard Outlined="true" Class="pa-2">
+                                        <MudCardContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Fire Mill Rate</MudText>
+                                            <MudText Typo="Typo.body1">@(version.FireMillRate?.ToString("N3") ?? "—")</MudText>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudCard Outlined="true" Class="pa-2">
+                                        <MudCardContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Mill Levy</MudText>
+                                            <MudText Typo="Typo.body1">@(version.MillLevy?.ToString("N13") ?? "—")</MudText>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudCard Outlined="true" Class="pa-2">
+                                        <MudCardContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Tax Authority Code</MudText>
+                                            <MudText Typo="Typo.body1">@(version.TaxAuthorityCode ?? "—")</MudText>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudCard Outlined="true" Class="pa-2">
+                                        <MudCardContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Initial Tax Year</MudText>
+                                            <MudText Typo="Typo.body1">@(version.InitialTaxYear?.ToString() ?? "—")</MudText>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudCard Outlined="true" Class="pa-2">
+                                        <MudCardContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Match Feature Layer</MudText>
+                                            @if (version.MatchFeatureLayer == true)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
+                                            }
+                                            else if (version.MatchFeatureLayer == false)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
+                                            }
+                                            else
+                                            {
+                                                <MudText Typo="Typo.body1">—</MudText>
+                                            }
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudCard Outlined="true" Class="pa-2">
+                                        <MudCardContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Service Area Code</MudText>
+                                            <MudText Typo="Typo.body1">
+                                                @{
+                                                    var code = serviceAreaCodes?.FirstOrDefault(c => c.Id == version.ServiceAreaCodeId);
+                                                    @(code != null ? $"{code.Code} - {code.Description}" : "—")
+                                                }
+                                            </MudText>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                            </MudGrid>
+                        </ViewModeContent>
+                    </VersionedDetailsPanel>
+                </MudExpansionPanel>
+
+                @if (canEdit)
+                {
+                    <MudExpansionPanel Text="Notes">
+                        <NotesPanel EntityType="service_area" 
+                                   EntityId="@selectedServiceArea.Id"
+                                   HighlightedNoteDate="@(currentViewVersion?.ValidFrom)"
+                                   ShowHistory="true" />
+                    </MudExpansionPanel>
+                }
+
+                <MudExpansionPanel Text="Map">
+                    @if (!string.IsNullOrEmpty(selectedServiceArea?.FeatureObjectId))
+                    {
+                        <MudStack Spacing="2">
+                            <MudSwitch @bind-Value="showRoadsOnMap" Color="Color.Primary" Label="Show Roads" />
+
+                            <FeatureLayerMap @ref="_mapRef"
+                                            FeatureLayerUrl="@GetFeatureLayerUrl()"
+                                            QueryParameters="@GetMapQueryParameters()"
+                                            RoadsLayerUrl="@GetRoadsLayerUrl()"
+                                            ShowRoads="@showRoadsOnMap"
+                                            Height="600px"
+                                            Title="@selectedServiceArea.Name" />
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Text">
+                            No feature layer URL configured for this service area.
+                        </MudAlert>
+                    }
+                </MudExpansionPanel>
+                <MudExpansionPanel Text="Ordinances">
+                    @if (selectedServiceArea != null)
+                    {
+                        <MudStack Spacing="2">
+                            @if (canEdit)
+                            {
+                                <MudStack Row="true" Justify="Justify.FlexEnd">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => OpenOrdinanceDialog(null))">
+                                        Add Ordinance
+                                    </MudButton>
+                                </MudStack>
+                            }
+
+                            @if (isLoadingOrdinances)
+                            {
+                                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                            }
+                            else if (serviceAreaOrdinances != null && serviceAreaOrdinances.Any())
+                            {
+                                <MudTable T="Ordinance" Items="@serviceAreaOrdinances" Hover="true" Striped="true" Dense="true">
+                                    <HeaderContent>
+                                        <MudTh>Ordinance</MudTh>
+                                        <MudTh>Year</MudTh>
+                                        <MudTh>Type</MudTh>
+                                        <MudTh>Passed</MudTh>
+                                        @if (canEdit)
+                                        {
+                                            <MudTh Style="width: 100px;">Actions</MudTh>
+                                        }
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd DataLabel="Ordinance">@context.OrdinanceName</MudTd>
+                                        <MudTd DataLabel="Year">@context.OrdinanceYear</MudTd>
+                                        <MudTd DataLabel="Type">
+                                            @{
+                                                var type = ordinanceTypes?.FirstOrDefault(t => t.Id == context.OrdinanceTypeId);
+                                                @(type != null ? $"{type.Type} - {type.Description}" : "—")
+                                            }
+                                        </MudTd>
+                                        <MudTd DataLabel="Passed">
+                                            @if (context.OrdinancePassed == true)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
+                                            }
+                                            else if (context.OrdinancePassed == false)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Close">No</MudChip>
+                                            }
+                                            else
+                                            {
+                                                <MudText>—</MudText>
+                                            }
+                                        </MudTd>
+                                        @if (canEdit)
+                                        {
+                                            <MudTd DataLabel="Actions">
+                                                <MudStack Row="true" Spacing="1">
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => OpenOrdinanceDialog(context))" />
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteOrdinance(context))" />
+                                                </MudStack>
+                                            </MudTd>
+                                        }
+                                    </RowTemplate>
+                                </MudTable>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Align="Align.Center" Class="my-4">No ordinances assigned to this service area.</MudText>
+                            }
+                        </MudStack>
+                    }
+                </MudExpansionPanel>
+                <MudExpansionPanel Text="Commission Seats"></MudExpansionPanel>
+                <MudExpansionPanel Text="Commissioners"></MudExpansionPanel>
+                <MudExpansionPanel Text="Request For Quotes"></MudExpansionPanel>
+                <MudExpansionPanel Text="Roads"></MudExpansionPanel>
+            </MudExpansionPanels>
+        }
+        else
+        {
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Align="Align.Center">Select a service area from the list to view details</MudText>
+            </MudPaper>
+        }
+    </MudItem>
+</MudGrid>
+
+@code {
+    [SupplyParameterFromQuery(Name = "id")]
+    public int? ServiceAreaId { get; set; }
+
+    private IEnumerable<ServiceArea>? serviceAreas;
+    private IEnumerable<ServiceAreaCode>? serviceAreaCodes;
+    private ServiceArea? selectedServiceArea;
+    private bool isLoading = false;
+    private bool isSaving = false;
+    private bool isEditMode = false;
+    private bool canEdit = false;
+    private string? errorMessage;
+    private string[]? errorDetails;
+    private string? successMessage;
+    private ServiceArea? editModel;
+    private string _searchString = string.Empty;
+    private EditContext? editContext;
+
+    // Version navigation fields
+    private IEnumerable<ServiceArea>? allVersions;
+    private ServiceArea? currentViewVersion;
+    private bool isLoadingHistory = false;
+    private string? historyErrorMessage;
+
+    // Map fields
+    private bool showRoadsOnMap = false;
+    private FeatureLayerMap? _mapRef;
+    // Ordinances management fields
+    private IEnumerable<Ordinance>? serviceAreaOrdinances;
+    private IEnumerable<OrdinanceType>? ordinanceTypes;
+    private bool isLoadingOrdinances = false;
+    private Ordinance? selectedOrdinanceForEdit;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadServiceAreas();
+        await LoadServiceAreaCodes();
+        await LoadOrdinanceTypes();
+        await CheckEditPermission();
+        SelectServiceAreaFromParameters();
+    }
+
+    protected override void OnParametersSet()
+    {
+        SelectServiceAreaFromParameters();
+    }
+
+    private async Task CheckEditPermission()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            canEdit = user.Identity?.IsAuthenticated == true && 
+                      (user.IsInRole("fnsbuser") || user.IsInRole("admin"));
+        }
+        catch
+        {
+            canEdit = false;
+        }
+    }
+
+    private void SelectServiceAreaFromParameters()
+    {
+        if (serviceAreas == null || !serviceAreas.Any() || !ServiceAreaId.HasValue)
+            return;
+
+        var targetServiceArea = serviceAreas.FirstOrDefault(sa => sa.Id == ServiceAreaId.Value);
+
+        if (targetServiceArea != null && selectedServiceArea?.Id != targetServiceArea.Id)
+        {
+            selectedServiceArea = targetServiceArea;
+            isEditMode = false;
+            ClearMessages();
+            _ = LoadAllVersions();
+        }
+    }
+
+    private async Task LoadServiceAreas()
+    {
+        isLoading = true;
+        errorMessage = null;
+        errorDetails = null;
+        successMessage = null;
+
+        try
+        {
+            var result = await ServiceAreasApi.GetAllServiceAreasAsync();
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                serviceAreas = result.Data;
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to load service areas";
+                errorDetails = result?.Errors;
+                serviceAreas = Array.Empty<ServiceArea>();
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = "Network error. Please check your connection and try again.";
+            serviceAreas = Array.Empty<ServiceArea>();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unexpected error: {ex.Message}";
+            serviceAreas = Array.Empty<ServiceArea>();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadServiceAreaCodes()
+    {
+        try
+        {
+            var result = await ServiceAreaCodesApi.GetAllServiceAreaCodesAsync();
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                serviceAreaCodes = result.Data;
+            }
+            else
+            {
+                serviceAreaCodes = Array.Empty<ServiceAreaCode>();
+            }
+        }
+        catch (Exception)
+        {
+            serviceAreaCodes = Array.Empty<ServiceAreaCode>();
+        }
+    }
+
+    private async Task LoadServiceAreaOrdinances()
+    {
+        if (selectedServiceArea == null) return;
+
+        isLoadingOrdinances = true;
+
+        try
+        {
+            var result = await OrdinancesApi.GetOrdinancesByServiceAreaAsync(selectedServiceArea.Id);
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                serviceAreaOrdinances = result.Data;
+            }
+            else
+            {
+                serviceAreaOrdinances = Array.Empty<Ordinance>();
+            }
+        }
+        catch (Exception)
+        {
+            serviceAreaOrdinances = Array.Empty<Ordinance>();
+        }
+        finally
+        {
+            isLoadingOrdinances = false;
+        }
+    }
+
+    private async Task LoadOrdinanceTypes()
+    {
+        try
+        {
+            var result = await OrdinanceTypesApi.GetAllOrdinanceTypesAsync();
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                ordinanceTypes = result.Data;
+            }
+            else
+            {
+                ordinanceTypes = Array.Empty<OrdinanceType>();
+            }
+        }
+        catch (Exception)
+        {
+            ordinanceTypes = Array.Empty<OrdinanceType>();
+        }
+    }
+
+    private async Task LoadAllVersions()
+    {
+        if (selectedServiceArea == null) return;
+
+        isLoadingHistory = true;
+        historyErrorMessage = null;
+
+        try
+        {
+            // Load history
+            var historyResult = await ServiceAreasApi.GetServiceAreaHistoryAsync(selectedServiceArea.Id);
+            var historyRecords = new List<ServiceArea>();
+
+            if (historyResult?.IsSuccess == true && historyResult.Data != null)
+            {
+                historyRecords.AddRange(historyResult.Data);
+            }
+
+            // Combine current with history
+            var versions = new List<ServiceArea> { selectedServiceArea };
+            versions.AddRange(historyRecords.Where(h => h.ValidFrom != selectedServiceArea.ValidFrom));
+            
+            allVersions = versions;
+            
+            // Set the current version as the view version
+            currentViewVersion = selectedServiceArea;
+            UpdateEditModel(currentViewVersion);
+            
+            // Load ordinances for this service area
+            await LoadServiceAreaOrdinances();
+            await LoadOrdinanceTypes();
+        }
+        catch (Exception ex)
+        {
+            historyErrorMessage = $"Error loading versions: {ex.Message}";
+            allVersions = new List<ServiceArea> { selectedServiceArea };
+            currentViewVersion = selectedServiceArea;
+            UpdateEditModel(currentViewVersion);
+        }
+        finally
+        {
+            isLoadingHistory = false;
+        }
+    }
+
+    private async Task OnCurrentVersionChanged(ServiceArea newVersion)
+    {
+        currentViewVersion = newVersion;
+        UpdateEditModel(newVersion);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateEditModel(ServiceArea version)
+    {
+        editModel = CloneServiceArea(version);
+        editContext = new EditContext(editModel);
+        
+        // Cancel edit mode when viewing historical versions
+        if (!IsViewingCurrentVersion())
+        {
+            isEditMode = false;
+        }
+    }
+
+    private bool IsViewingCurrentVersion()
+    {
+        if (currentViewVersion == null || selectedServiceArea == null)
+            return true;
+
+        return currentViewVersion.ValidFrom == selectedServiceArea.ValidFrom;
+    }
+
+    private bool CanEditFields()
+    {
+        return isEditMode && IsViewingCurrentVersion();
+    }
+
+    private async Task RowClicked(DataGridRowClickEventArgs<ServiceArea> args)
+    {
+        selectedServiceArea = args.Item;
+        isEditMode = false;
+        ClearMessages();
+        await LoadAllVersions();
+        await InvokeAsync(StateHasChanged);
+
+        // Update URL with the selected service area ID
+        var uri = NavigationManager.GetUriWithQueryParameter("id", selectedServiceArea.Id);
+        NavigationManager.NavigateTo(uri, replace: true);
+    }
+
+    private async Task HandleRestore(ServiceArea historicalRecord)
+    {
+        if (selectedServiceArea == null) return;
+
+        isSaving = true;
+        ClearMessages();
+
+        try
+        {
+            // Clone the historical record but keep the current ID
+            var restoredData = CloneServiceArea(historicalRecord);
+            restoredData.Id = selectedServiceArea.Id;
+
+            var result = await ServiceAreasApi.UpdateServiceAreaAsync(restoredData.Id, restoredData);
+
+            if (result?.IsSuccess == true)
+            {
+                successMessage = $"Successfully restored version from {historicalRecord.ValidFrom:g}";
+                
+                // Reload all data
+                await LoadServiceAreas();
+                
+                // Update the current selection
+                selectedServiceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == selectedServiceArea.Id);
+                if (selectedServiceArea != null)
+                {
+                    await LoadAllVersions();
+                }
+                
+                isEditMode = false;
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to restore historical version";
+                errorDetails = result?.Errors;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error restoring historical version: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void EnableEdit()
+    {
+        if (!IsViewingCurrentVersion())
+        {
+            // Navigate to current version before editing
+            if (selectedServiceArea != null)
+            {
+                currentViewVersion = selectedServiceArea;
+                UpdateEditModel(currentViewVersion);
+            }
+        }
+        
+        isEditMode = true;
+        ClearMessages();
+    }
+
+    private async Task SaveEdit()
+    {
+        if (editModel == null) return;
+
+        isSaving = true;
+        ClearMessages();
+
+        try
+        {
+            var result = await ServiceAreasApi.UpdateServiceAreaAsync(editModel.Id, editModel);
+
+            if (result?.IsSuccess == true)
+            {
+                successMessage = "Service area updated successfully!";
+                isEditMode = false;
+                
+                // Reload data
+                await LoadServiceAreas();
+                selectedServiceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == editModel.Id);
+                
+                if (selectedServiceArea != null)
+                {
+                    await LoadAllVersions();
+                }
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to update service area";
+                errorDetails = result?.Errors;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error updating service area: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void CancelEdit()
+    {
+        if (currentViewVersion != null)
+        {
+            editModel = CloneServiceArea(currentViewVersion);
+            editContext = new EditContext(editModel);
+        }
+        isEditMode = false;
+        ClearMessages();
+    }
+
+    private void ClearMessages()
+    {
+        errorMessage = null;
+        errorDetails = null;
+        successMessage = null;
+    }
+
+    private ServiceArea CloneServiceArea(ServiceArea source) => new()
+    {
+        Id = source.Id,
+        Name = source.Name,
+        FeatureObjectId = source.FeatureObjectId,
+        OrgKey = source.OrgKey,
+        CurrentMileage = source.CurrentMileage,
+        AbolishMergeYear = source.AbolishMergeYear,
+        MaximumMillRate = source.MaximumMillRate,
+        CurrentMillRate = source.CurrentMillRate,
+        FireMillRate = source.FireMillRate,
+        MillLevy = source.MillLevy,
+        TaxAuthorityCode = source.TaxAuthorityCode,
+        InitialTaxYear = source.InitialTaxYear,
+        MatchFeatureLayer = source.MatchFeatureLayer,
+        ServiceAreaCodeId = source.ServiceAreaCodeId,
+        ValidFrom = source.ValidFrom,
+        ValidTo = source.ValidTo,
+        ModifiedBy = source.ModifiedBy
+    };
+
+    private Func<ServiceArea, bool> _quickFilter => x =>
+    {
+        if (string.IsNullOrWhiteSpace(_searchString))
+            return true;
+
+        return x.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true;
+    };
+
+    private async Task<bool> CreateServiceAreaCode(ServiceAreaCode entity)
+    {
+        var result = await ServiceAreaCodesApi.CreateServiceAreaCodeAsync(entity);
+        return result?.IsSuccess ?? false;
+    }
+
+    private async Task<bool> UpdateServiceAreaCode(ServiceAreaCode entity)
+    {
+        var result = await ServiceAreaCodesApi.UpdateServiceAreaCodeAsync(entity.Id, entity);
+        return result?.IsSuccess ?? false;
+    }
+
+    private async Task<bool> DeleteServiceAreaCode(ServiceAreaCode entity)
+    {
+        var result = await ServiceAreaCodesApi.DeleteServiceAreaCodeAsync(entity.Id);
+        return result?.IsSuccess ?? false;
+    }
+
+    // Map helper methods
+    private string? GetFeatureLayerUrl()
+    {
+        // TODO: Replace with your actual ArcGIS Feature Service URL
+        // Example: "https://services.arcgis.com/your-org/arcgis/rest/services/ServiceAreas/FeatureServer/0"
+        return Configuration.GetValue<string>("FeatureLayer:ServiceAreasUrl");
+    }
+
+    private string? GetRoadsLayerUrl()
+    {
+        return Configuration.GetValue<string>("FeatureLayer:RoadsUrl");
+    }
+
+    private Dictionary<string, string>? GetMapQueryParameters()
+    {
+        if (selectedServiceArea?.FeatureObjectId == null)
+            return null;
+
+        return new Dictionary<string, string>
+        {
+            { "where", $"OBJECTID = {selectedServiceArea.FeatureObjectId}" },
+            { "outFields", "*" },
+            { "returnGeometry", "true" }
+        };
+    }
+
+    private async Task OpenOrdinanceDialog(Ordinance? ordinance)
+    {
+        if (selectedServiceArea == null) return;
+
+        var parameters = new DialogParameters<OrdinanceDialog>
+        {
+            { x => x.Ordinance, ordinance },
+            { x => x.ServiceAreaId, selectedServiceArea.Id },
+            { x => x.OrdinanceTypes, ordinanceTypes }
+        };
+
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<OrdinanceDialog>(ordinance == null ? "Add Ordinance" : "Edit Ordinance", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadServiceAreaOrdinances();
+        }
+    }
+
+    private async Task DeleteOrdinance(Ordinance ordinance)
+    {
+        if (selectedServiceArea == null) return;
+
+        var parameters = new DialogParameters
+        {
+            { "ContentText", $"Are you sure you want to remove ordinance '{ordinance.OrdinanceName}' from this service area?" },
+            { "ButtonText", "Delete" },
+            { "Color", Color.Error }
+        };
+
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Delete Ordinance", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            try
+            {
+                var deleteResult = await OrdinancesApi.DeleteOrdinanceAsync(ordinance.Id);
+
+                if (deleteResult?.IsSuccess == true)
+                {
+                    await LoadServiceAreaOrdinances();
+                }
+            }
+            catch (Exception ex)
+            {
+                // Handle error - could show a snackbar
+            }
+        }
+    }
+}

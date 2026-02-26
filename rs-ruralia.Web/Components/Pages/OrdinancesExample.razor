@@ -1,0 +1,613 @@
+@page "/ordinances-example"
+@rendermode InteractiveServer
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<MudGrid>
+    <MudItem xs="3">
+        <MudDataGrid T="Ordinance" 
+                     Items="@ordinances" 
+                     QuickFilter="@_quickFilter"
+                     Height="calc(100vh - 200px)"
+                     FixedHeader="true"
+                     Virtualize="true"
+                     RowClick="RowClicked"
+                     SelectedItem="selectedOrdinance">
+            <ToolBarContent>
+                <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" Immediate="true"
+                              AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
+            </ToolBarContent>
+            <Columns>
+                <PropertyColumn Property="x => x.OrdinanceName" Title="Ordinance" />
+                <PropertyColumn Property="x => x.OrdinanceYear" Title="Year" />
+            </Columns>
+        </MudDataGrid>
+    </MudItem>
+    <MudItem xs="9">
+        @if (selectedOrdinance != null)
+        {
+            <MudExpansionPanels MultiExpansion>
+                <MudExpansionPanel Text="Details" Expanded="true">
+                    <VersionedDetailsPanel TEntity="Ordinance"
+                       AllVersions="@allVersions"
+                       CurrentVersion="@currentViewVersion"
+                       CurrentVersionChanged="@OnCurrentVersionChanged"
+                       GetValidFrom="@(x => x.ValidFrom)"
+                       GetValidTo="@(x => x.ValidTo)"
+                       GetModifiedBy="@(x => x.ModifiedBy)"
+                       GetDisplayText="@(x => $"{x.OrdinanceName} ({x.OrdinanceYear})")"
+                       CanEdit="@canEdit"
+                       IsEditMode="@isEditMode"
+                       OnEditClicked="@EnableEdit"
+                       IsLoading="@(isLoading || isLoadingHistory)"
+                       ErrorMessage="@(errorMessage ?? historyErrorMessage)"
+                       OnRestore="@HandleRestore">
+                        <DetailsContent Context="version">
+                            @if (editContext != null && editModel != null)
+                            {
+                                <EditForm EditContext="@editContext" OnValidSubmit="SaveEdit">
+                                    <DataAnnotationsValidator />
+                                    <MudGrid>
+                                        <MudItem xs="12">
+                                            @if (canEdit && IsViewingCurrentVersion())
+                                            {
+                                                @if (isEditMode)
+                                                {
+                                                    <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
+                                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@isSaving">
+                                                            @if (isSaving)
+                                                            {
+                                                                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                                                                <MudText Class="ms-2">Saving...</MudText>
+                                                            }
+                                                            else
+                                                            {
+                                                                <MudIcon Icon="@Icons.Material.Filled.Save" Class="me-1" /> <MudText>Save</MudText>
+                                                            }
+                                                        </MudButton>
+                                                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="CancelEdit" Disabled="@isSaving">
+                                                            Cancel
+                                                        </MudButton>
+                                                    </MudStack>
+                                                }
+                                                else
+                                                {
+                                                    <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
+                                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="EnableEdit">
+                                                            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="me-1" /> Edit
+                                                        </MudButton>
+                                                    </MudStack>
+                                                }
+                                            }
+                                        </MudItem>
+
+                                        @if (!string.IsNullOrEmpty(successMessage))
+                                        {
+                                            <MudItem xs="12">
+                                                <MudAlert Severity="Severity.Success" Variant="Variant.Filled">@successMessage</MudAlert>
+                                            </MudItem>
+                                        }
+
+                                        @if (!string.IsNullOrEmpty(errorMessage))
+                                        {
+                                            <MudItem xs="12">
+                                                <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
+                                                    <MudText>@errorMessage</MudText>
+                                                    @if (errorDetails != null && errorDetails.Length > 0)
+                                                    {
+                                                        <MudList T="string" Dense="true">
+                                                            @foreach (var detail in errorDetails)
+                                                            {
+                                                                <MudListItem>@detail</MudListItem>
+                                                            }
+                                                        </MudList>
+                                                    }
+                                                </MudAlert>
+                                            </MudItem>
+                                        }
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField @bind-Value="editModel.OrdinanceName" TModel="Ordinance" TValue="string" TLookup="object"
+                                                       Property="@(x => x.OrdinanceName)"
+                                                       ReadOnly="@(!CanEditFields())"
+                                                       For="@(() => editModel.OrdinanceName)" />
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField @bind-Value="editModel.OrdinanceYear" TModel="Ordinance" TValue="int?" TLookup="object"
+                                                       Property="@(x => x.OrdinanceYear)"
+                                                       ReadOnly="@(!CanEditFields())"
+                                                       For="@(() => editModel.OrdinanceYear)" />
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField @bind-Value="editModel.OrdinancePassed" TModel="Ordinance" TValue="bool?" TLookup="object"
+                                                       Property="@(x => x.OrdinancePassed)"
+                                                       ReadOnly="@(!CanEditFields())"
+                                                       For="@(() => editModel.OrdinancePassed)" />
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField @bind-Value="editModel.OrdinanceTypeId" 
+                                                       TModel="Ordinance" 
+                                                       TValue="int?"
+                                                       TLookup="OrdinanceType"
+                                                       Property="@(x => x.OrdinanceTypeId)"
+                                                       ReadOnly="@(!CanEditFields())"
+                                                       LookupItems="@ordinanceTypes"
+                                                       LookupTextSelector="@(item => $"{((OrdinanceType)item).Type} - {((OrdinanceType)item).Description}")"
+                                                       ForeignKeyIdSelector="@(x => x.Id)"
+                                                       ForeignKeyNameSelector="@(x => x.Type ?? "")"
+                                                       ForeignKeyDescriptionSelector="@(x => x.Description ?? "")"
+                                                       OnForeignKeyCreate="@CreateOrdinanceType"
+                                                       OnForeignKeyUpdate="@UpdateOrdinanceType"
+                                                       OnForeignKeyDelete="@DeleteOrdinanceType"
+                                                       OnForeignKeyDataChanged="@(EventCallback.Factory.Create(this, LoadOrdinanceTypes))"
+                                                       ForeignKeyDialogTitle="Manage Ordinance Types"
+                                                       For="@(() => editModel.OrdinanceTypeId)">
+                                                <ForeignKeyFormContent Context="entity">
+                                                    <MudItem xs="12">
+                                                        <AutoField @bind-Value="entity.Type" 
+                                                                   TModel="OrdinanceType" 
+                                                                   TValue="string"
+                                                                   TLookup="object"
+                                                                   Property="@(x => x.Type)"
+                                                                   For="@(() => entity.Type)" />
+                                                    </MudItem>
+                                                    <MudItem xs="12">
+                                                        <AutoField @bind-Value="entity.Description" 
+                                                                   TModel="OrdinanceType" 
+                                                                   TValue="string"
+                                                                   TLookup="object"
+                                                                   Property="@(x => x.Description)"
+                                                                   For="@(() => entity.Description)" />
+                                                    </MudItem>
+                                                </ForeignKeyFormContent>
+                                            </AutoField>
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField Value="editModel.ValidFrom" TModel="Ordinance" TValue="DateTime?" TLookup="object"
+                                                       Property="@(x => x.ValidFrom)"
+                                                       ReadOnly="true" />
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="6">
+                                            <AutoField @bind-Value="editModel.ModifiedBy" TModel="Ordinance" TValue="string" TLookup="object"
+                                                       Property="@(x => x.ModifiedBy)"
+                                                       ReadOnly="true" />
+                                        </MudItem>
+                                    </MudGrid>
+                                </EditForm>
+                            }
+                        </DetailsContent>
+                        <ViewModeContent Context="version">
+                            <MudGrid Spacing="3">
+                                <MudItem xs="12" md="6">
+                                    <MudCard Outlined="true" Class="pa-2">
+                                        <MudCardContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Ordinance</MudText>
+                                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@version.OrdinanceName</MudText>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudCard Outlined="true" Class="pa-2">
+                                        <MudCardContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Year</MudText>
+                                            <MudText Typo="Typo.body1">@(version.OrdinanceYear?.ToString() ?? "—")</MudText>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudCard Outlined="true" Class="pa-2">
+                                        <MudCardContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Ordinance Passed</MudText>
+                                            @if (version.OrdinancePassed == true)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
+                                            }
+                                            else if (version.OrdinancePassed == false)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Close">No</MudChip>
+                                            }
+                                            else
+                                            {
+                                                <MudText Typo="Typo.body1">—</MudText>
+                                            }
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudCard Outlined="true" Class="pa-2">
+                                        <MudCardContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Ordinance Type</MudText>
+                                            <MudText Typo="Typo.body1">
+                                                @{
+                                                    var type = ordinanceTypes?.FirstOrDefault(t => t.Id == version.OrdinanceTypeId);
+                                                    @(type != null ? $"{type.Type} - {type.Description}" : "—")
+                                                }
+                                            </MudText>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                            </MudGrid>
+                        </ViewModeContent>
+                    </VersionedDetailsPanel>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        }
+        else
+        {
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Align="Align.Center">Select an ordinance from the list to view details</MudText>
+            </MudPaper>
+        }
+    </MudItem>
+</MudGrid>
+
+@code {
+    [SupplyParameterFromQuery(Name = "id")]
+    public int? OrdinanceId { get; set; }
+
+    private IEnumerable<Ordinance>? ordinances;
+    private IEnumerable<OrdinanceType>? ordinanceTypes;
+    private Ordinance? selectedOrdinance;
+    private bool isLoading = false;
+    private bool isSaving = false;
+    private bool isEditMode = false;
+    private bool canEdit = false;
+    private string? errorMessage;
+    private string[]? errorDetails;
+    private string? successMessage;
+    private Ordinance? editModel;
+    private string _searchString = string.Empty;
+    private EditContext? editContext;
+
+    // Version navigation fields
+    private IEnumerable<Ordinance>? allVersions;
+    private Ordinance? currentViewVersion;
+    private bool isLoadingHistory = false;
+    private string? historyErrorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOrdinances();
+        await LoadOrdinanceTypes();
+        await CheckEditPermission();
+        SelectOrdinanceFromParameters();
+    }
+
+    protected override void OnParametersSet()
+    {
+        SelectOrdinanceFromParameters();
+    }
+
+    private async Task CheckEditPermission()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            canEdit = user.Identity?.IsAuthenticated == true && 
+                      (user.IsInRole("fnsbuser") || user.IsInRole("admin"));
+        }
+        catch
+        {
+            canEdit = false;
+        }
+    }
+
+    private void SelectOrdinanceFromParameters()
+    {
+        if (ordinances == null || !ordinances.Any() || !OrdinanceId.HasValue)
+            return;
+
+        var targetOrdinance = ordinances.FirstOrDefault(o => o.Id == OrdinanceId.Value);
+
+        if (targetOrdinance != null && selectedOrdinance?.Id != targetOrdinance.Id)
+        {
+            selectedOrdinance = targetOrdinance;
+            isEditMode = false;
+            ClearMessages();
+            _ = LoadAllVersions();
+        }
+    }
+
+    private async Task LoadOrdinances()
+    {
+        isLoading = true;
+        errorMessage = null;
+        errorDetails = null;
+        successMessage = null;
+
+        try
+        {
+            var result = await OrdinancesApi.GetAllOrdinancesAsync();
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                ordinances = result.Data;
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to load ordinances";
+                errorDetails = result?.Errors;
+                ordinances = Array.Empty<Ordinance>();
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = "Network error. Please check your connection and try again.";
+            ordinances = Array.Empty<Ordinance>();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unexpected error: {ex.Message}";
+            ordinances = Array.Empty<Ordinance>();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadOrdinanceTypes()
+    {
+        try
+        {
+            var result = await OrdinanceTypesApi.GetAllOrdinanceTypesAsync();
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                ordinanceTypes = result.Data;
+            }
+            else
+            {
+                ordinanceTypes = Array.Empty<OrdinanceType>();
+            }
+        }
+        catch (Exception)
+        {
+            ordinanceTypes = Array.Empty<OrdinanceType>();
+        }
+    }
+
+    private async Task LoadAllVersions()
+    {
+        if (selectedOrdinance == null) return;
+
+        isLoadingHistory = true;
+        historyErrorMessage = null;
+
+        try
+        {
+            var historyResult = await OrdinancesApi.GetOrdinanceHistoryAsync(selectedOrdinance.Id);
+            var historyRecords = new List<Ordinance>();
+
+            if (historyResult?.IsSuccess == true && historyResult.Data != null)
+            {
+                historyRecords.AddRange(historyResult.Data);
+            }
+
+            var versions = new List<Ordinance> { selectedOrdinance };
+            versions.AddRange(historyRecords.Where(h => h.ValidFrom != selectedOrdinance.ValidFrom));
+            
+            allVersions = versions;
+            currentViewVersion = selectedOrdinance;
+            UpdateEditModel(currentViewVersion);
+        }
+        catch (Exception ex)
+        {
+            historyErrorMessage = $"Error loading versions: {ex.Message}";
+            allVersions = new List<Ordinance> { selectedOrdinance };
+            currentViewVersion = selectedOrdinance;
+            UpdateEditModel(currentViewVersion);
+        }
+        finally
+        {
+            isLoadingHistory = false;
+        }
+    }
+
+    private async Task OnCurrentVersionChanged(Ordinance newVersion)
+    {
+        currentViewVersion = newVersion;
+        UpdateEditModel(newVersion);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateEditModel(Ordinance version)
+    {
+        editModel = CloneOrdinance(version);
+        editContext = new EditContext(editModel);
+        
+        if (!IsViewingCurrentVersion())
+        {
+            isEditMode = false;
+        }
+    }
+
+    private bool IsViewingCurrentVersion()
+    {
+        if (currentViewVersion == null || selectedOrdinance == null)
+            return true;
+
+        return currentViewVersion.ValidFrom == selectedOrdinance.ValidFrom;
+    }
+
+    private bool CanEditFields()
+    {
+        return isEditMode && IsViewingCurrentVersion();
+    }
+
+    private async Task RowClicked(DataGridRowClickEventArgs<Ordinance> args)
+    {
+        selectedOrdinance = args.Item;
+        isEditMode = false;
+        ClearMessages();
+        await LoadAllVersions();
+        await InvokeAsync(StateHasChanged);
+
+        var uri = NavigationManager.GetUriWithQueryParameter("id", selectedOrdinance.Id);
+        NavigationManager.NavigateTo(uri, replace: true);
+    }
+
+    private async Task HandleRestore(Ordinance historicalRecord)
+    {
+        if (selectedOrdinance == null) return;
+
+        isSaving = true;
+        ClearMessages();
+
+        try
+        {
+            var restoredData = CloneOrdinance(historicalRecord);
+            restoredData.Id = selectedOrdinance.Id;
+
+            var result = await OrdinancesApi.UpdateOrdinanceAsync(restoredData.Id, restoredData);
+
+            if (result?.IsSuccess == true)
+            {
+                successMessage = $"Successfully restored version from {historicalRecord.ValidFrom:g}";
+                
+                await LoadOrdinances();
+                
+                selectedOrdinance = ordinances?.FirstOrDefault(o => o.Id == selectedOrdinance.Id);
+                if (selectedOrdinance != null)
+                {
+                    await LoadAllVersions();
+                }
+                
+                isEditMode = false;
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to restore historical version";
+                errorDetails = result?.Errors;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error restoring historical version: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void EnableEdit()
+    {
+        if (!IsViewingCurrentVersion())
+        {
+            if (selectedOrdinance != null)
+            {
+                currentViewVersion = selectedOrdinance;
+                UpdateEditModel(currentViewVersion);
+            }
+        }
+        
+        isEditMode = true;
+        ClearMessages();
+    }
+
+    private async Task SaveEdit()
+    {
+        if (editModel == null) return;
+
+        isSaving = true;
+        ClearMessages();
+
+        try
+        {
+            var result = await OrdinancesApi.UpdateOrdinanceAsync(editModel.Id, editModel);
+
+            if (result?.IsSuccess == true)
+            {
+                successMessage = "Ordinance updated successfully!";
+                isEditMode = false;
+                
+                await LoadOrdinances();
+                selectedOrdinance = ordinances?.FirstOrDefault(o => o.Id == editModel.Id);
+                
+                if (selectedOrdinance != null)
+                {
+                    await LoadAllVersions();
+                }
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to update ordinance";
+                errorDetails = result?.Errors;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error updating ordinance: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void CancelEdit()
+    {
+        if (currentViewVersion != null)
+        {
+            editModel = CloneOrdinance(currentViewVersion);
+            editContext = new EditContext(editModel);
+        }
+        isEditMode = false;
+        ClearMessages();
+    }
+
+    private void ClearMessages()
+    {
+        errorMessage = null;
+        errorDetails = null;
+        successMessage = null;
+    }
+
+    private Ordinance CloneOrdinance(Ordinance source) => new()
+    {
+        Id = source.Id,
+        OrdinanceName = source.OrdinanceName,
+        OrdinanceYear = source.OrdinanceYear,
+        OrdinancePassed = source.OrdinancePassed,
+        OrdinanceTypeId = source.OrdinanceTypeId,
+        ServiceAreaId = source.ServiceAreaId,
+        ValidFrom = source.ValidFrom,
+        ValidTo = source.ValidTo,
+        ModifiedBy = source.ModifiedBy
+    };
+
+    private Func<Ordinance, bool> _quickFilter => x =>
+    {
+        if (string.IsNullOrWhiteSpace(_searchString))
+            return true;
+
+        return x.OrdinanceName?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true ||
+               x.OrdinanceYear?.ToString().Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true;
+    };
+
+    private async Task<bool> CreateOrdinanceType(OrdinanceType entity)
+    {
+        var result = await OrdinanceTypesApi.CreateOrdinanceTypeAsync(entity);
+        return result?.IsSuccess ?? false;
+    }
+
+    private async Task<bool> UpdateOrdinanceType(OrdinanceType entity)
+    {
+        var result = await OrdinanceTypesApi.UpdateOrdinanceTypeAsync(entity.Id, entity);
+        return result?.IsSuccess ?? false;
+    }
+
+    private async Task<bool> DeleteOrdinanceType(OrdinanceType entity)
+    {
+        var result = await OrdinanceTypesApi.DeleteOrdinanceTypeAsync(entity.Id);
+        return result?.IsSuccess ?? false;
+    }
+}
