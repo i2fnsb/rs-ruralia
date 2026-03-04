@@ -6,19 +6,25 @@ window.initializeMap = function (mapId, lat, lng, zoom) {
     try {
         // Create the map
         const map = L.map(mapId).setView([lat, lng], zoom);
-        
+
         // Add OpenStreetMap tiles
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             maxZoom: 19
         }).addTo(map);
-        
+
         // Store the map instance
         window.leafletMaps[mapId] = {
             map: map,
             layers: {}
         };
-        
+
+        // Force map to recalculate its size after a short delay
+        // This fixes tile loading issues when the container size isn't immediately available
+        setTimeout(function() {
+            map.invalidateSize();
+        }, 100);
+
         return true;
     } catch (error) {
         console.error('Error initializing map:', error);
@@ -93,6 +99,11 @@ window.addGeoJsonLayer = function (mapId, geoJsonString, title, layerName, style
             }
         }
 
+        // Invalidate size to ensure tiles load correctly
+        setTimeout(function() {
+            map.invalidateSize();
+        }, 50);
+
         return true;
     } catch (error) {
         console.error('Error adding GeoJSON layer:', error);
@@ -164,6 +175,22 @@ window.disposeMap = function (mapId) {
         return true;
     } catch (error) {
         console.error('Error disposing map:', error);
+        return false;
+    }
+};
+
+window.invalidateMapSize = function (mapId) {
+    try {
+        const mapData = window.leafletMaps[mapId];
+        if (!mapData) {
+            console.error('Map not found:', mapId);
+            return false;
+        }
+
+        mapData.map.invalidateSize();
+        return true;
+    } catch (error) {
+        console.error('Error invalidating map size:', error);
         return false;
     }
 };
