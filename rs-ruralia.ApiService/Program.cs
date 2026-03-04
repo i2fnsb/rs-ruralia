@@ -23,6 +23,15 @@ builder.Services.AddScoped<IDbConnection>(sp =>
 });
 
 // Add Redis using Aspire integration
+var cacheConnectionString = builder.Configuration.GetConnectionString("cache");
+if (!string.IsNullOrEmpty(cacheConnectionString))
+{
+    var endpoint = cacheConnectionString.Split(',')[0];
+    var isLocal = endpoint.Contains("localhost") || endpoint.Contains("127.0.0.1");
+    Console.WriteLine(isLocal 
+        ? $"🔌 [ApiService] Connected to LOCAL Redis: {endpoint}"
+        : $"☁️  [ApiService] Connected to AZURE Redis: {endpoint}");
+}
 builder.AddRedisClient("cache");
 
 // Register services as scoped (one instance per request)
