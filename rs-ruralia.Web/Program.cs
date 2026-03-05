@@ -11,8 +11,22 @@ using Microsoft.Data.SqlClient;
 using MudBlazor.Services;
 using rs_ruralia.Web.Services;
 using Microsoft.Extensions.Hosting;
+using Azure.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add Azure Key Vault in non-development environments
+if (!builder.Environment.IsDevelopment())
+{
+    var keyVaultUrl = builder.Configuration["KeyVaultUrl"] 
+        ?? throw new InvalidOperationException("KeyVaultUrl is required in production");
+    
+    builder.Configuration.AddAzureKeyVault(
+        new Uri(keyVaultUrl), 
+        new DefaultAzureCredential());
+    
+    Console.WriteLine($"🔐 [Web] Loaded secrets from Key Vault: {keyVaultUrl}");
+}
 
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();

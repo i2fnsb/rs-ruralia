@@ -28,6 +28,8 @@
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.Azure.Sql" Version="13.1.0" />
     <PackageReference Include="Aspire.Hosting.Redis" Version="13.1.0" />
+    <PackageReference Include="Azure.Extensions.AspNetCore.Configuration.Secrets" Version="1.4.0" />
+    <PackageReference Include="Azure.Identity" Version="1.18.0" />
   </ItemGroup>
 
 </Project>

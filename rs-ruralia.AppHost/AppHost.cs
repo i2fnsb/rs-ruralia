@@ -1,29 +1,38 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Azure.Identity;
+using Azure.Extensions.AspNetCore.Configuration.Secrets;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
-// Configure connection to existing Azure SQL Database with Managed Identity
-// The connection string should NOT include User ID or Password for managed identity
+// Add Azure Key Vault in non-development environments
+if (!builder.Environment.IsDevelopment())
+{
+    var keyVaultUrl = builder.Configuration["KeyVaultUrl"] 
+        ?? throw new InvalidOperationException("KeyVaultUrl is required in production");
+    
+    builder.Configuration.AddAzureKeyVault(
+        new Uri(keyVaultUrl), 
+        new DefaultAzureCredential());
+    
+    Console.WriteLine($"🔐 [AppHost] Loaded secrets from Key Vault: {keyVaultUrl}");
+}
+
+// Connection strings will come from Key Vault in production, User Secrets in dev
 var authdb = builder.AddConnectionString("authdb");
 var rsdb = builder.AddConnectionString("rsdb");
 
-// Configure Redis based on environment
-// Development: Create a local Redis container
-// Production: Use Azure Managed Redis from connection string
+// Configure Redis
 IResourceBuilder<IResourceWithConnectionString> redis;
 
 if (builder.Environment.IsDevelopment())
 {
-    // Local development - create Redis container
     Console.WriteLine("🐳 [AppHost] Development mode: Creating local Redis container");
     redis = builder.AddRedis("cache");
 }
 else
 {
-    // Production - use Azure Redis connection string
-    var cacheConnectionString = builder.Configuration.GetConnectionString("cache");
-    Console.WriteLine($"☁️  [AppHost] Production mode: Using Azure Redis at {cacheConnectionString?.Split(',')[0] ?? "NOT CONFIGURED"}");
+    Console.WriteLine("☁️  [AppHost] Production mode: Using Azure Redis from Key Vault");
     redis = builder.AddConnectionString("cache");
 }
 
