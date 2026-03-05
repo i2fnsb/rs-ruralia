@@ -4,12 +4,25 @@ using rs_ruralia.Shared.Models;
 using rs_ruralia.ApiService.Services;
 using Dapper;
 using Microsoft.Data.SqlClient;
-using StackExchange.Redis;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data;
 using System.Reflection;
+using Azure.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add Azure Key Vault in non-development environments
+if (!builder.Environment.IsDevelopment())
+{
+    var keyVaultUrl = builder.Configuration["KeyVaultUrl"] 
+        ?? throw new InvalidOperationException("KeyVaultUrl is required in production");
+    
+    builder.Configuration.AddAzureKeyVault(
+        new Uri(keyVaultUrl), 
+        new DefaultAzureCredential());
+    
+    Console.WriteLine($"🔐 [ApiService] Loaded secrets from Key Vault: {keyVaultUrl}");
+}
 
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
