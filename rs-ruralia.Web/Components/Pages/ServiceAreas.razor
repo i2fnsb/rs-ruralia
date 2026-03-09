@@ -19,6 +19,9 @@
 @inject PersonSuffixesApiClient PersonSuffixesApi
 @inject RoadsApiClient RoadsApi
 @inject RoadNamesApiClient RoadNamesApi
+@inject RfqsApiClient RfqsApi
+@inject RfqIfbTypesApiClient RfqIfbTypesApi
+@inject RfqProjectScopesApiClient RfqProjectScopesApi
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IConfiguration Configuration
@@ -628,7 +631,81 @@
                         </MudStack>
                     }
                 </MudExpansionPanel>
-                <MudExpansionPanel Text="Request For Quotes"></MudExpansionPanel>
+                <MudExpansionPanel Text="Request For Quotes">
+                    @if (selectedServiceArea != null)
+                    {
+                        <MudStack Spacing="2">
+                            @if (!string.IsNullOrEmpty(rfqsErrorMessage))
+                            {
+                                <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
+                                    @rfqsErrorMessage
+                                </MudAlert>
+                            }
+
+                            @if (isLoadingRfqs)
+                            {
+                                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                            }
+                            else if (serviceAreaRfqs != null && serviceAreaRfqs.Any())
+                            {
+                                <MudTable T="Rfq" Items="@serviceAreaRfqs" Hover="true" Striped="true" Dense="true">
+                                    <HeaderContent>
+                                        <MudTh>RFQ Number</MudTh>
+                                        <MudTh>Type</MudTh>
+                                        <MudTh>Project Scope</MudTh>
+                                        <MudTh>Issue Date</MudTh>
+                                        <MudTh>Opening Date</MudTh>
+                                        <MudTh>Completed</MudTh>
+                                        <MudTh Style="width: 100px;">Actions</MudTh>
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd DataLabel="RFQ Number">@context.RfqNumber</MudTd>
+                                        <MudTd DataLabel="Type">
+                                            @{
+                                                var ifbType = rfqIfbTypes?.FirstOrDefault(t => t.Id == context.RfqIfbTypeId);
+                                                @(ifbType?.Type ?? "—")
+                                            }
+                                        </MudTd>
+                                        <MudTd DataLabel="Project Scope">
+                                            @{
+                                                var scope = rfqProjectScopes?.FirstOrDefault(s => s.Id == context.RfqProjectScopeId);
+                                                var scopeText = scope?.Scope ?? context.CustomProjectScope ?? "—";
+                                                @(scopeText.Length > 50 ? scopeText.Substring(0, 47) + "..." : scopeText)
+                                            }
+                                        </MudTd>
+                                        <MudTd DataLabel="Issue Date">@(context.IssueDate?.ToString("MMM d, yyyy") ?? "—")</MudTd>
+                                        <MudTd DataLabel="Opening Date">@(context.OpeningDate?.ToString("MMM d, yyyy") ?? "—")</MudTd>
+                                        <MudTd DataLabel="Completed">
+                                            @if (context.Completed == true)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
+                                            }
+                                            else if (context.Completed == false)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.HourglassEmpty">No</MudChip>
+                                            }
+                                            else
+                                            {
+                                                <MudText>—</MudText>
+                                            }
+                                        </MudTd>
+                                        <MudTd DataLabel="Actions">
+                                            <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
+                                                          Size="Size.Small" 
+                                                          Color="Color.Primary" 
+                                                          OnClick="@(() => NavigateToRfq(context))"
+                                                          Title="View RFQ Details" />
+                                        </MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Align="Align.Center" Class="my-4">No RFQs found for this service area.</MudText>
+                            }
+                        </MudStack>
+                    }
+                </MudExpansionPanel>
                 <MudExpansionPanel Text="Roads">
                     @if (selectedServiceArea != null)
                     {
@@ -770,6 +847,13 @@
     private bool isLoadingRoads = false;
     private string? roadsErrorMessage;
 
+    // RFQ management fields
+    private IEnumerable<Rfq>? serviceAreaRfqs;
+    private IEnumerable<RfqIfbType>? rfqIfbTypes;
+    private IEnumerable<RfqProjectScope>? rfqProjectScopes;
+    private bool isLoadingRfqs = false;
+    private string? rfqsErrorMessage;
+
     // Permission flags
     private bool isEditor = false;
 
@@ -781,6 +865,7 @@
         await LoadCommissionSeatLookups();
         await LoadCommissionerStatusLookups();
         await LoadRoadNames();
+        await LoadRfqLookups();
         await CheckEditPermission();
         SelectServiceAreaFromParameters();
     }
@@ -1116,6 +1201,7 @@
             await LoadOrdinanceTypes();
             await LoadCommissionSeats();
             await LoadServiceAreaRoads();
+            await LoadServiceAreaRfqs();
         }
         catch (Exception ex)
         {
@@ -1679,5 +1765,71 @@
     private void NavigateToRoad(Road road)
     {
         NavigationManager.NavigateTo($"/roads?id={road.Id}");
+    }
+
+    private async Task LoadServiceAreaRfqs()
+    {
+        if (selectedServiceArea == null) return;
+
+        isLoadingRfqs = true;
+        rfqsErrorMessage = null;
+
+        try
+        {
+            var result = await RfqsApi.GetAllRfqsAsync();
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                // Filter RFQs by the selected service area
+                serviceAreaRfqs = result.Data
+                    .Where(r => r.ServiceAreaId == selectedServiceArea.Id)
+                    .OrderByDescending(r => r.IssueDate)
+                    .ThenBy(r => r.RfqNumber)
+                    .ToList();
+            }
+            else
+            {
+                rfqsErrorMessage = result?.ErrorMessage ?? "Failed to load RFQs";
+                serviceAreaRfqs = Array.Empty<Rfq>();
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            rfqsErrorMessage = $"Network error loading RFQs: {ex.Message}";
+            serviceAreaRfqs = Array.Empty<Rfq>();
+        }
+        catch (Exception ex)
+        {
+            rfqsErrorMessage = $"Error loading RFQs: {ex.Message}";
+            serviceAreaRfqs = Array.Empty<Rfq>();
+        }
+        finally
+        {
+            isLoadingRfqs = false;
+        }
+    }
+
+    private async Task LoadRfqLookups()
+    {
+        try
+        {
+            var ifbTypesTask = RfqIfbTypesApi.GetAllRfqIfbTypesAsync();
+            var projectScopesTask = RfqProjectScopesApi.GetAllRfqProjectScopesAsync();
+
+            await Task.WhenAll(ifbTypesTask, projectScopesTask);
+
+            rfqIfbTypes = (await ifbTypesTask)?.Data ?? Array.Empty<RfqIfbType>();
+            rfqProjectScopes = (await projectScopesTask)?.Data ?? Array.Empty<RfqProjectScope>();
+        }
+        catch (Exception)
+        {
+            rfqIfbTypes = Array.Empty<RfqIfbType>();
+            rfqProjectScopes = Array.Empty<RfqProjectScope>();
+        }
+    }
+
+    private void NavigateToRfq(Rfq rfq)
+    {
+        NavigationManager.NavigateTo($"/rfqs?id={rfq.Id}");
     }
 }
