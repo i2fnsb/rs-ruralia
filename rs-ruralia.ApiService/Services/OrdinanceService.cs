@@ -235,6 +235,10 @@ public class OrdinanceService
                 return Result<Ordinance>.Failure(errors);
             }
 
+            // Get the OLD ordinance before updating (for cache invalidation of old service area)
+            var oldOrdinance = await _db.QueryFirstOrDefaultAsync<Ordinance>(
+                "SELECT * FROM ordinance WHERE id = @Id", new { Id = ordinance.Id });
+
             var sql = @"
                 UPDATE ordinance SET
                     ordinance = @OrdinanceName,
@@ -252,7 +256,8 @@ public class OrdinanceService
                 return Result<Ordinance>.Failure("Ordinance not found or no changes made");
             }
 
-            await InvalidateCacheAsync(ordinance);
+            // Invalidate cache for both OLD and NEW service areas
+            await InvalidateCacheAsync(ordinance, oldServiceAreaId: oldOrdinance?.ServiceAreaId);
             _logger.LogInformation("UpdateAsync: Successfully updated ordinance ID {Id}", ordinance.Id);
 
             return Result<Ordinance>.Success(ordinance);
@@ -305,7 +310,7 @@ public class OrdinanceService
         }
     }
 
-    private async Task InvalidateCacheAsync(Ordinance? ordinance = null, int? deletedId = null)
+    private async Task InvalidateCacheAsync(Ordinance? ordinance = null, int? deletedId = null, int? oldServiceAreaId = null)
     {
         _logger.LogDebug("InvalidateCacheAsync: Invalidating cache for ordinance ID {Id}", ordinance?.Id ?? deletedId);
         await _cache.KeyDeleteAsync($"{CacheKeyPrefix}all");
@@ -316,9 +321,18 @@ public class OrdinanceService
             await _cache.KeyDeleteAsync($"{CacheKeyPrefix}{ordinance.Id}");
             await _cache.KeyDeleteAsync($"{HistoryCacheKeyPrefix}{ordinance.Id}");
 
+            // Invalidate NEW service area cache
             if (ordinance.ServiceAreaId.HasValue)
             {
                 await _cache.KeyDeleteAsync($"{ServiceAreaCacheKeyPrefix}{ordinance.ServiceAreaId}");
+                _logger.LogDebug("InvalidateCacheAsync: Invalidated cache for NEW service area {ServiceAreaId}", ordinance.ServiceAreaId);
+            }
+
+            // Invalidate OLD service area cache (when transferring between service areas)
+            if (oldServiceAreaId.HasValue && oldServiceAreaId != ordinance.ServiceAreaId)
+            {
+                await _cache.KeyDeleteAsync($"{ServiceAreaCacheKeyPrefix}{oldServiceAreaId}");
+                _logger.LogDebug("InvalidateCacheAsync: Invalidated cache for OLD service area {OldServiceAreaId}", oldServiceAreaId);
             }
         }
         else if (deletedId.HasValue)

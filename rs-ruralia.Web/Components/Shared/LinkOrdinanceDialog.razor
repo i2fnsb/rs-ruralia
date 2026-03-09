@@ -1,0 +1,126 @@
+@using rs_ruralia.Shared.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.body1">
+                Select an ordinance to link to <strong>@TargetServiceAreaName</strong>:
+            </MudText>
+
+            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true">
+                <MudText Typo="Typo.body2">
+                    Note: Selecting an ordinance already linked to another service area will <strong>transfer</strong> it to @TargetServiceAreaName.
+                </MudText>
+            </MudAlert>
+
+            <MudTextField @bind-Value="_searchString" 
+                         Placeholder="Search ordinances..." 
+                         Adornment="Adornment.Start" 
+                         AdornmentIcon="@Icons.Material.Filled.Search" 
+                         Immediate="true"
+                         Class="mb-2" />
+
+            @if (filteredOrdinances != null && filteredOrdinances.Any())
+            {
+                <MudList T="Ordinance" Clickable="true" @bind-SelectedValue="_selectedOrdinance" Color="Color.Primary" Dense="true">
+                    @foreach (var ordinance in filteredOrdinances.Take(20))
+                    {
+                        <MudListItem T="Ordinance" Value="@ordinance">
+                            <MudStack Row="false" Spacing="0">
+                                <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                                    @ordinance.OrdinanceName - @ordinance.OrdinanceYear
+                                </MudText>
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                        @{
+                                            var type = OrdinanceTypes?.FirstOrDefault(t => t.Id == ordinance.OrdinanceTypeId);
+                                            var typeText = type != null ? $"{type.Type} - {type.Description}" : "No type";
+                                            var passedText = ordinance.OrdinancePassed == true ? "Passed" : 
+                                                            ordinance.OrdinancePassed == false ? "Not Passed" : "Status Unknown";
+                                        }
+                                        @typeText | @passedText
+                                    </MudText>
+                                    @if (ordinance.ServiceAreaId.HasValue)
+                                    {
+                                        var currentServiceArea = AllServiceAreas?.FirstOrDefault(sa => sa.Id == ordinance.ServiceAreaId);
+                                        if (currentServiceArea != null)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.SwapHoriz">
+                                                Transfer from: @currentServiceArea.Name
+                                            </MudChip>
+                                        }
+                                    }
+                                </MudStack>
+                            </MudStack>
+                        </MudListItem>
+                    }
+                </MudList>
+
+                @if (filteredOrdinances.Count() > 20)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center">
+                        Showing first 20 of @filteredOrdinances.Count() ordinances. Use search to narrow results.
+                    </MudText>
+                }
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info">No ordinances available to link</MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="@GetButtonColor()" 
+                  Variant="Variant.Filled" 
+                  OnClick="Submit" 
+                  Disabled="@(_selectedOrdinance == null)"
+                  StartIcon="@GetButtonIcon()">
+            @GetButtonText()
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public IEnumerable<Ordinance>? AvailableOrdinances { get; set; }
+    [Parameter] public IEnumerable<OrdinanceType>? OrdinanceTypes { get; set; }
+    [Parameter] public IEnumerable<ServiceArea>? AllServiceAreas { get; set; }
+    [Parameter] public string? TargetServiceAreaName { get; set; }
+
+    private Ordinance? _selectedOrdinance;
+    private string _searchString = string.Empty;
+
+    private IEnumerable<Ordinance> filteredOrdinances => 
+        (AvailableOrdinances ?? Enumerable.Empty<Ordinance>())
+        .Where(o => string.IsNullOrWhiteSpace(_searchString) || 
+                   (o.OrdinanceName?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) ||
+                   (o.OrdinanceYear?.ToString().Contains(_searchString) == true))
+        .OrderBy(o => o.ServiceAreaId.HasValue ? 1 : 0) // Show unlinked first (if any exist)
+        .ThenBy(o => o.OrdinanceYear)
+        .ThenBy(o => o.OrdinanceName);
+
+    private bool IsTransfer() => _selectedOrdinance?.ServiceAreaId.HasValue == true;
+
+    private string GetButtonText()
+    {
+        if (_selectedOrdinance == null) return "Select Ordinance";
+        return IsTransfer() ? "Transfer Ordinance" : "Link Ordinance";
+    }
+
+    private string GetButtonIcon()
+    {
+        if (_selectedOrdinance == null) return Icons.Material.Filled.Link;
+        return IsTransfer() ? Icons.Material.Filled.SwapHoriz : Icons.Material.Filled.Link;
+    }
+
+    private Color GetButtonColor()
+    {
+        if (_selectedOrdinance == null) return Color.Primary;
+        return IsTransfer() ? Color.Warning : Color.Primary;
+    }
+
+    void Submit() => MudDialog.Close(DialogResult.Ok(_selectedOrdinance));
+    void Cancel() => MudDialog.Cancel();
+}
