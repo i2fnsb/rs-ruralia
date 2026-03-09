@@ -17,6 +17,8 @@
 @inject PersonProfilesApiClient PersonProfilesApi
 @inject PersonHonorificsApiClient PersonHonorificsApi
 @inject PersonSuffixesApiClient PersonSuffixesApi
+@inject RoadsApiClient RoadsApi
+@inject RoadNamesApiClient RoadNamesApi
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IConfiguration Configuration
@@ -627,7 +629,75 @@
                     }
                 </MudExpansionPanel>
                 <MudExpansionPanel Text="Request For Quotes"></MudExpansionPanel>
-                <MudExpansionPanel Text="Roads"></MudExpansionPanel>
+                <MudExpansionPanel Text="Roads">
+                    @if (selectedServiceArea != null)
+                    {
+                        <MudStack Spacing="2">
+                            @if (!string.IsNullOrEmpty(roadsErrorMessage))
+                            {
+                                <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
+                                    @roadsErrorMessage
+                                </MudAlert>
+                            }
+
+                            @if (isLoadingRoads)
+                            {
+                                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                            }
+                            else if (serviceAreaRoads != null && serviceAreaRoads.Any())
+                            {
+                                <MudTable T="Road" Items="@serviceAreaRoads" Hover="true" Striped="true" Dense="true">
+                                    <HeaderContent>
+                                        <MudTh>Road Name</MudTh>
+                                        <MudTh>Phase</MudTh>
+                                        <MudTh>Distance (Feet)</MudTh>
+                                        <MudTh>Start Description</MudTh>
+                                        <MudTh>End Description</MudTh>
+                                        <MudTh>Approved for Maintenance</MudTh>
+                                        <MudTh Style="width: 100px;">Actions</MudTh>
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd DataLabel="Road Name">
+                                            @{
+                                                var roadName = roadNames?.FirstOrDefault(rn => rn.Id == context.RoadNameId);
+                                                @(roadName?.Name ?? "—")
+                                            }
+                                        </MudTd>
+                                        <MudTd DataLabel="Phase">@(context.Phase?.ToString() ?? "—")</MudTd>
+                                        <MudTd DataLabel="Distance (Feet)">@(context.DistanceFeet?.ToString("N2") ?? "—")</MudTd>
+                                        <MudTd DataLabel="Start Description">@(context.StartDescription ?? "—")</MudTd>
+                                        <MudTd DataLabel="End Description">@(context.EndDescription ?? "—")</MudTd>
+                                        <MudTd DataLabel="Approved for Maintenance">
+                                            @if (context.ApprovedForMaintenance == true)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
+                                            }
+                                            else if (context.ApprovedForMaintenance == false)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
+                                            }
+                                            else
+                                            {
+                                                <MudText>—</MudText>
+                                            }
+                                        </MudTd>
+                                        <MudTd DataLabel="Actions">
+                                            <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
+                                                          Size="Size.Small" 
+                                                          Color="Color.Primary" 
+                                                          OnClick="@(() => NavigateToRoad(context))"
+                                                          Title="View Road Details" />
+                                        </MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Align="Align.Center" Class="my-4">No roads found for this service area.</MudText>
+                            }
+                        </MudStack>
+                    }
+                </MudExpansionPanel>
             </MudExpansionPanels>
         }
         else
@@ -694,6 +764,12 @@
     private IEnumerable<PersonHonorific>? personHonorifics;
     private IEnumerable<PersonSuffix>? personSuffixes;
 
+    // Roads management fields
+    private IEnumerable<Road>? serviceAreaRoads;
+    private IEnumerable<RoadName>? roadNames;
+    private bool isLoadingRoads = false;
+    private string? roadsErrorMessage;
+
     // Permission flags
     private bool isEditor = false;
 
@@ -704,6 +780,7 @@
         await LoadOrdinanceTypes();
         await LoadCommissionSeatLookups();
         await LoadCommissionerStatusLookups();
+        await LoadRoadNames();
         await CheckEditPermission();
         SelectServiceAreaFromParameters();
     }
@@ -1038,6 +1115,7 @@
             await LoadServiceAreaOrdinances();
             await LoadOrdinanceTypes();
             await LoadCommissionSeats();
+            await LoadServiceAreaRoads();
         }
         catch (Exception ex)
         {
@@ -1528,5 +1606,78 @@
         }
 
         return nameParts.Any() ? string.Join(" ", nameParts) : $"Person ID: {personProfileId}";
+    }
+
+    private async Task LoadServiceAreaRoads()
+    {
+        if (selectedServiceArea == null) return;
+
+        isLoadingRoads = true;
+        roadsErrorMessage = null;
+
+        try
+        {
+            var result = await RoadsApi.GetAllRoadsAsync();
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                var allRoads = result.Data.ToList();
+
+                // Filter roads by the selected service area
+                serviceAreaRoads = allRoads
+                    .Where(r => r.ServiceAreaId == selectedServiceArea.Id)
+                    .OrderBy(r => roadNames?.FirstOrDefault(rn => rn.Id == r.RoadNameId)?.Name ?? "")
+                    .ThenBy(r => r.Phase)
+                    .ToList();
+
+                // Debug info: Log how many roads were found
+                Console.WriteLine($"Total roads from API: {allRoads.Count}, Filtered for service area {selectedServiceArea.Id}: {serviceAreaRoads.Count()}");
+            }
+            else
+            {
+                roadsErrorMessage = result?.ErrorMessage ?? "Failed to load roads";
+                serviceAreaRoads = Array.Empty<Road>();
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            roadsErrorMessage = $"Network error loading roads: {ex.Message}";
+            serviceAreaRoads = Array.Empty<Road>();
+        }
+        catch (Exception ex)
+        {
+            roadsErrorMessage = $"Error loading roads: {ex.Message}";
+            serviceAreaRoads = Array.Empty<Road>();
+        }
+        finally
+        {
+            isLoadingRoads = false;
+        }
+    }
+
+    private async Task LoadRoadNames()
+    {
+        try
+        {
+            var result = await RoadNamesApi.GetAllRoadNamesAsync();
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                roadNames = result.Data;
+            }
+            else
+            {
+                roadNames = Array.Empty<RoadName>();
+            }
+        }
+        catch (Exception)
+        {
+            roadNames = Array.Empty<RoadName>();
+        }
+    }
+
+    private void NavigateToRoad(Road road)
+    {
+        NavigationManager.NavigateTo($"/roads?id={road.Id}");
     }
 }

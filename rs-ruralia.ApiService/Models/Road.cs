@@ -37,7 +37,11 @@ public class Road
   [Display(Name = "End Coordinates")]
   public string? EndCoordinates { get; set; } // geography type stored as string
 
-  [Column("approved_for_maintenance")]
+  [Column("road_location_coordinates")]
+  [Display(Name = "Road Location")]
+  public string? RoadLocation { get; set; } // geography type stored as string
+
+    [Column("approved_for_maintenance")]
   [Display(Name = "Approved for Maintenance")]
   public bool? ApprovedForMaintenance { get; set; }
 

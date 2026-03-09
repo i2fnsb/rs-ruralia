@@ -28,17 +28,27 @@ public class RoadService
         {
             var cacheKey = $"{CacheKeyPrefix}all";
             var cached = await _cache.StringGetAsync(cacheKey);
-            
+
             if (cached.HasValue)
             {
                 var cachedData = JsonSerializer.Deserialize<IEnumerable<Road>>(cached.ToString()!)!;
                 return Result<IEnumerable<Road>>.Success(cachedData);
             }
 
-            var sql = "SELECT * FROM road";
+            // Convert geography columns to text to handle invalid data like "Cul-de-sac"
+            var sql = @"
+                SELECT 
+                    id, phase, distance_feet, start_description, end_description,
+                    CAST(start_coordinates AS NVARCHAR(MAX)) as start_coordinates,
+                    CAST(end_coordinates AS NVARCHAR(MAX)) as end_coordinates,
+                    CAST(road_location_coordinates AS NVARCHAR(MAX)) as road_location_coordinates,
+                    approved_for_maintenance, mpo, legacy_subdivision_name,
+                    road_name_id, road_surface_type_id, responder_code_id, service_area_id,
+                    ModifiedBy, ValidFrom, ValidTo
+                FROM road";
             var result = await _db.QueryAsync<Road>(sql);
             await _cache.StringSetAsync(cacheKey, JsonSerializer.Serialize(result), CacheExpiration);
-            
+
             return Result<IEnumerable<Road>>.Success(result);
         }
         catch (Exception ex)
@@ -56,7 +66,7 @@ public class RoadService
 
             var cacheKey = $"{CacheKeyPrefix}{id}";
             var cached = await _cache.StringGetAsync(cacheKey);
-            
+
             if (cached.HasValue)
             {
                 var cachedData = JsonSerializer.Deserialize<Road>(cached.ToString()!);
@@ -65,15 +75,26 @@ public class RoadService
                     : Result<Road>.Failure("Road not found");
             }
 
-            var sql = "SELECT * FROM road WHERE id = @Id";
+            // Convert geography columns to text to handle invalid data
+            var sql = @"
+                SELECT 
+                    id, phase, distance_feet, start_description, end_description,
+                    CAST(start_coordinates AS NVARCHAR(MAX)) as start_coordinates,
+                    CAST(end_coordinates AS NVARCHAR(MAX)) as end_coordinates,
+                    CAST(road_location_coordinates AS NVARCHAR(MAX)) as road_location_coordinates,
+                    approved_for_maintenance, mpo, legacy_subdivision_name,
+                    road_name_id, road_surface_type_id, responder_code_id, service_area_id,
+                    ModifiedBy, ValidFrom, ValidTo
+                FROM road 
+                WHERE id = @Id";
             var result = await _db.QueryFirstOrDefaultAsync<Road>(sql, new { Id = id });
-            
+
             if (result != null)
             {
                 await _cache.StringSetAsync(cacheKey, JsonSerializer.Serialize(result), CacheExpiration);
                 return Result<Road>.Success(result);
             }
-            
+
             return Result<Road>.Failure("Road not found");
         }
         catch (Exception ex)
@@ -91,27 +112,36 @@ public class RoadService
 
             var cacheKey = $"{HistoryCacheKeyPrefix}{id}";
             var cached = await _cache.StringGetAsync(cacheKey);
-            
+
             if (cached.HasValue)
             {
                 var cachedData = JsonSerializer.Deserialize<IEnumerable<Road>>(cached.ToString()!)!;
                 return Result<IEnumerable<Road>>.Success(cachedData);
             }
 
+            // Convert geography columns to text to handle invalid data
             var sql = @"
-                SELECT * FROM road 
+                SELECT 
+                    id, phase, distance_feet, start_description, end_description,
+                    CAST(start_coordinates AS NVARCHAR(MAX)) as start_coordinates,
+                    CAST(end_coordinates AS NVARCHAR(MAX)) as end_coordinates,
+                    CAST(road_location_coordinates AS NVARCHAR(MAX)) as road_location_coordinates,
+                    approved_for_maintenance, mpo, legacy_subdivision_name,
+                    road_name_id, road_surface_type_id, responder_code_id, service_area_id,
+                    ModifiedBy, ValidFrom, ValidTo
+                FROM road 
                 FOR SYSTEM_TIME ALL
                 WHERE id = @Id
                 ORDER BY ValidFrom DESC";
-            
+
             var result = await _db.QueryAsync<Road>(sql, new { Id = id });
-            
+
             if (result.Any())
             {
                 await _cache.StringSetAsync(cacheKey, JsonSerializer.Serialize(result), HistoryCacheExpiration);
                 return Result<IEnumerable<Road>>.Success(result);
             }
-            
+
             return Result<IEnumerable<Road>>.Failure("No history found");
         }
         catch (Exception ex)
@@ -131,8 +161,8 @@ public class RoadService
             }
 
             var sql = @"
-                INSERT INTO road (phase, distance_feet, start_description, end_description, start_coordinates, end_coordinates, approved_for_maintenance, mpo, legacy_subdivision_name, road_name_id, road_surface_type_id, responder_code_id, service_area_id)
-                VALUES (@Phase @DistanceFeet @StartDescription @EndDescription @StartCoordinates @EndCoordinates @ApprovedForMaintenance @Mpo @LegacySubdivisionName @RoadNameId @RoadSurfaceTypeId @ResponderCodeId @ServiceAreaId -join ', ');
+                INSERT INTO road (phase, distance_feet, start_description, end_description, start_coordinates, end_coordinates, road_location_coordinates, approved_for_maintenance, mpo, legacy_subdivision_name, road_name_id, road_surface_type_id, responder_code_id, service_area_id)
+                VALUES (@Phase @DistanceFeet @StartDescription @EndDescription @StartCoordinates @EndCoordinates @RoadLocation @ApprovedForMaintenance @Mpo @LegacySubdivisionName @RoadNameId @RoadSurfaceTypeId @ResponderCodeId @ServiceAreaId -join ', ');
                 SELECT CAST(SCOPE_IDENTITY() as int)";
 
             entity.Id = await _db.ExecuteScalarAsync<int>(sql, entity);
@@ -158,7 +188,7 @@ public class RoadService
 
             var sql = @"
                 UPDATE road SET
-                    phase = @Phase,                     distance_feet = @DistanceFeet,                     start_description = @StartDescription,                     end_description = @EndDescription,                     start_coordinates = @StartCoordinates,                     end_coordinates = @EndCoordinates,                     approved_for_maintenance = @ApprovedForMaintenance,                     mpo = @Mpo,                     legacy_subdivision_name = @LegacySubdivisionName,                     road_name_id = @RoadNameId,                     road_surface_type_id = @RoadSurfaceTypeId,                     responder_code_id = @ResponderCodeId,
+                    phase = @Phase,                     distance_feet = @DistanceFeet,                     start_description = @StartDescription,                     end_description = @EndDescription,                     start_coordinates = @StartCoordinates,                     end_coordinates = @EndCoordinates, road_location_coordinates = @RoadLocation,                     approved_for_maintenance = @ApprovedForMaintenance,                     mpo = @Mpo,                     legacy_subdivision_name = @LegacySubdivisionName,                     road_name_id = @RoadNameId,                     road_surface_type_id = @RoadSurfaceTypeId,                     responder_code_id = @ResponderCodeId,
                     service_area_id = @ServiceAreaId
                 WHERE id = @Id";
 
