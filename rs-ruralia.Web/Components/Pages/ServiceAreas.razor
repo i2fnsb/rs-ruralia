@@ -5,6 +5,18 @@
 @inject ServiceAreaCodesApiClient ServiceAreaCodesApi
 @inject OrdinancesApiClient OrdinancesApi
 @inject OrdinanceTypesApiClient OrdinanceTypesApi
+@inject CommissionSeatsApiClient CommissionSeatsApi
+@inject CommissionSeatTypesApiClient CommissionSeatTypesApi
+@inject CommissionSeatClassesApiClient CommissionSeatClassesApi
+@inject CommissionSeatStatusesApiClient CommissionSeatStatusesApi
+@inject CommissionerProfilesApiClient CommissionerProfilesApi
+@inject CommissionerStatusesApiClient CommissionerStatusesApi
+@inject CorrespondenceProfilesApiClient CorrespondenceProfilesApi
+@inject CorrespondencePhonesApiClient CorrespondencePhonesApi
+@inject CorrespondenceEmailsApiClient CorrespondenceEmailsApi
+@inject PersonProfilesApiClient PersonProfilesApi
+@inject PersonHonorificsApiClient PersonHonorificsApi
+@inject PersonSuffixesApiClient PersonSuffixesApi
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IConfiguration Configuration
@@ -483,8 +495,137 @@
                         </MudStack>
                     }
                 </MudExpansionPanel>
-                <MudExpansionPanel Text="Commission Seats"></MudExpansionPanel>
-                <MudExpansionPanel Text="Commissioners"></MudExpansionPanel>
+                <MudExpansionPanel Text="Commission">
+                    @if (selectedServiceArea != null)
+                    {
+                        <MudStack Spacing="2">
+                            @if (isLoadingCommissionSeats)
+                            {
+                                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                            }
+                            else if (commissionSeats != null && commissionSeats.Any())
+                            {
+                                @foreach (var seat in GetOrderedCommissionSeats())
+                                {
+                                    var seatType = commissionSeatTypes?.FirstOrDefault(t => t.Id == seat.CommissionSeatTypeId);
+                                    var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == seat.CommissionSeatClassId);
+                                    var seatStatus = commissionSeatStatuses?.FirstOrDefault(s => s.Id == seat.CommissionSeatStatusId);
+                                    var seatCommissioners = GetCommissionersForSeat(seat.Id);
+
+                                    <MudCard Outlined="true" Class="mb-2">
+                                        <MudCardHeader>
+                                            <CardHeaderContent>
+                                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                                    <MudStack Row="false" Spacing="0">
+                                                        <MudText Typo="Typo.h6">
+                                                            @seatType?.Type
+                                                            @if (isEditor)
+                                                            {
+                                                                @($" - {seatClass?.Class}")
+                                                            }
+                                                        </MudText>
+                                                        <MudStack Row="true" Spacing="2">
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Info">@seatStatus?.Status</MudChip>
+                                                            @if (seat.TermStartDate.HasValue && seat.TermEndDate.HasValue)
+                                                            {
+                                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                                    Term: @seat.TermStartDate?.ToString("MMM d, yyyy") - @seat.TermEndDate?.ToString("MMM d, yyyy")
+                                                                </MudText>
+                                                            }
+                                                        </MudStack>
+                                                    </MudStack>
+                                                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
+                                                                  Size="Size.Small" 
+                                                                  Color="Color.Primary" 
+                                                                  OnClick="@(() => NavigateToCommissionSeat(seat))"
+                                                                  Title="View Commission Seat Details" />
+                                                </MudStack>
+                                            </CardHeaderContent>
+                                        </MudCardHeader>
+                                        <MudCardContent>
+                                            @if (seatCommissioners.Any())
+                                            {
+                                                <MudTable T="CommissionerProfile" Items="@seatCommissioners" Hover="true" Dense="true" Elevation="0">
+                                                    <HeaderContent>
+                                                        <MudTh>Person</MudTh>
+                                                        <MudTh>Contact</MudTh>
+                                                        <MudTh>Status</MudTh>
+                                                        <MudTh>Appointed</MudTh>
+                                                        <MudTh>End Date</MudTh>
+                                                        <MudTh>Oath</MudTh>
+                                                        <MudTh Style="width: 80px;">Actions</MudTh>
+                                                    </HeaderContent>
+                                                    <RowTemplate>
+                                                        <MudTd DataLabel="Person">@GetFormattedPersonName(context.PersonProfileId)</MudTd>
+                                                        <MudTd DataLabel="Contact">
+                                                            @{
+                                                                var correspondence = GetPublicCorrespondence(context.Id);
+                                                            }
+                                                            @if (correspondence.HasValue)
+                                                            {
+                                                                <MudStack Spacing="0">
+                                                                    @if (!string.IsNullOrEmpty(correspondence.Value.EmailAddress))
+                                                                    {
+                                                                        <MudText Typo="Typo.caption">
+                                                                            <MudIcon Icon="@Icons.Material.Filled.Email" Size="Size.Small" /> @correspondence.Value.EmailAddress
+                                                                        </MudText>
+                                                                    }
+                                                                    @if (!string.IsNullOrEmpty(correspondence.Value.PhoneNumber))
+                                                                    {
+                                                                        <MudText Typo="Typo.caption">
+                                                                            <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" /> @correspondence.Value.PhoneNumber
+                                                                        </MudText>
+                                                                    }
+                                                                </MudStack>
+                                                            }
+                                                            else
+                                                            {
+                                                                <MudText Typo="Typo.caption" Color="Color.Secondary">No public contact</MudText>
+                                                            }
+                                                        </MudTd>
+                                                        <MudTd DataLabel="Status">
+                                                            @{
+                                                                var commissionerStatus = commissionerStatuses?.FirstOrDefault(s => s.Id == context.CommissionerStatusId);
+                                                            }
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Secondary">@commissionerStatus?.Status</MudChip>
+                                                        </MudTd>
+                                                        <MudTd DataLabel="Appointed">@(context.AppointedDate?.ToString("MMM d, yyyy") ?? "—")</MudTd>
+                                                        <MudTd DataLabel="End Date">@(context.EndDate?.ToString("MMM d, yyyy") ?? "—")</MudTd>
+                                                        <MudTd DataLabel="Oath">
+                                                            @if (context.Oath == true)
+                                                            {
+                                                                <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Color="Color.Success" />
+                                                            }
+                                                            else
+                                                            {
+                                                                <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" />
+                                                            }
+                                                        </MudTd>
+                                                        <MudTd DataLabel="Actions">
+                                                            <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
+                                                                          Size="Size.Small" 
+                                                                          Color="Color.Primary" 
+                                                                          OnClick="@(() => NavigationManager.NavigateTo($"/commissioners?id={context.Id}"))"
+                                                                          Title="View Details" />
+                                                        </MudTd>
+                                                    </RowTemplate>
+                                                </MudTable>
+                                            }
+                                            else
+                                            {
+                                                <MudAlert Severity="Severity.Info" Dense="true">No commissioners assigned to this seat</MudAlert>
+                                            }
+                                        </MudCardContent>
+                                    </MudCard>
+                                }
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Align="Align.Center" Class="my-4">No commission seats for this service area.</MudText>
+                            }
+                        </MudStack>
+                    }
+                </MudExpansionPanel>
                 <MudExpansionPanel Text="Request For Quotes"></MudExpansionPanel>
                 <MudExpansionPanel Text="Roads"></MudExpansionPanel>
             </MudExpansionPanels>
@@ -525,16 +666,44 @@
     // Map fields
     private bool showRoadsOnMap = false;
     private FeatureLayerMap? _mapRef;
+
     // Ordinances management fields
     private IEnumerable<Ordinance>? serviceAreaOrdinances;
     private IEnumerable<OrdinanceType>? ordinanceTypes;
     private bool isLoadingOrdinances = false;
+
+    // Commission Seats management fields
+    private IEnumerable<CommissionSeat>? commissionSeats;
+    private IEnumerable<CommissionSeatType>? commissionSeatTypes;
+    private IEnumerable<CommissionSeatClass>? commissionSeatClasses;
+    private IEnumerable<CommissionSeatStatus>? commissionSeatStatuses;
+    private bool isLoadingCommissionSeats = false;
+
+    // Commissioners management fields
+    private IEnumerable<CommissionerProfile>? commissioners;
+    private IEnumerable<CommissionerStatus>? commissionerStatuses;
+    private bool isLoadingCommissioners = false;
+
+    // Correspondence data
+    private IEnumerable<CorrespondenceProfile>? correspondenceProfiles;
+    private IEnumerable<CorrespondencePhone>? correspondencePhones;
+    private IEnumerable<CorrespondenceEmail>? correspondenceEmails;
+
+    // Person data
+    private IEnumerable<PersonProfile>? personProfiles;
+    private IEnumerable<PersonHonorific>? personHonorifics;
+    private IEnumerable<PersonSuffix>? personSuffixes;
+
+    // Permission flags
+    private bool isEditor = false;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadServiceAreas();
         await LoadServiceAreaCodes();
         await LoadOrdinanceTypes();
+        await LoadCommissionSeatLookups();
+        await LoadCommissionerStatusLookups();
         await CheckEditPermission();
         SelectServiceAreaFromParameters();
     }
@@ -553,10 +722,15 @@
 
             canEdit = user.Identity?.IsAuthenticated == true && 
                       (user.IsInRole("fnsbuser") || user.IsInRole("admin"));
+
+            // Check if user has editor role (can see UKN and inactive items)
+            isEditor = user.Identity?.IsAuthenticated == true && 
+                      (user.IsInRole("editor") || user.IsInRole("admin"));
         }
         catch
         {
             canEdit = false;
+            isEditor = false;
         }
     }
 
@@ -685,6 +859,153 @@
         }
     }
 
+    private async Task LoadCommissionSeats()
+    {
+        if (selectedServiceArea == null) return;
+
+        isLoadingCommissionSeats = true;
+
+        try
+        {
+            var result = await CommissionSeatsApi.GetCommissionSeatsByServiceAreaAsync(selectedServiceArea.Id);
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                commissionSeats = result.Data;
+                await LoadCommissioners();
+            }
+            else
+            {
+                commissionSeats = Array.Empty<CommissionSeat>();
+                commissioners = Array.Empty<CommissionerProfile>();
+            }
+        }
+        catch (Exception)
+        {
+            commissionSeats = Array.Empty<CommissionSeat>();
+            commissioners = Array.Empty<CommissionerProfile>();
+        }
+        finally
+        {
+            isLoadingCommissionSeats = false;
+        }
+    }
+
+    private async Task LoadCommissionSeatLookups()
+    {
+        try
+        {
+            var typesTask = CommissionSeatTypesApi.GetAllCommissionSeatTypesAsync();
+            var classesTask = CommissionSeatClassesApi.GetAllCommissionSeatClassesAsync();
+            var statusesTask = CommissionSeatStatusesApi.GetAllCommissionSeatStatusesAsync();
+
+            await Task.WhenAll(typesTask, classesTask, statusesTask);
+
+            commissionSeatTypes = (await typesTask)?.Data ?? Array.Empty<CommissionSeatType>();
+            commissionSeatClasses = (await classesTask)?.Data ?? Array.Empty<CommissionSeatClass>();
+            commissionSeatStatuses = (await statusesTask)?.Data ?? Array.Empty<CommissionSeatStatus>();
+        }
+        catch (Exception)
+        {
+            commissionSeatTypes = Array.Empty<CommissionSeatType>();
+            commissionSeatClasses = Array.Empty<CommissionSeatClass>();
+            commissionSeatStatuses = Array.Empty<CommissionSeatStatus>();
+        }
+    }
+
+    private async Task LoadCommissioners()
+    {
+        if (commissionSeats == null || !commissionSeats.Any()) 
+        {
+            commissioners = Array.Empty<CommissionerProfile>();
+            return;
+        }
+
+        isLoadingCommissioners = true;
+
+        try
+        {
+            var allCommissionersTask = CommissionerProfilesApi.GetAllCommissionerProfilesAsync();
+            var correspondenceProfilesTask = CorrespondenceProfilesApi.GetAllCorrespondenceProfilesAsync();
+            var correspondencePhonesTask = CorrespondencePhonesApi.GetAllCorrespondencePhonesAsync();
+            var correspondenceEmailsTask = CorrespondenceEmailsApi.GetAllCorrespondenceEmailsAsync();
+            var personProfilesTask = PersonProfilesApi.GetAllPersonProfilesAsync();
+            var personHonorificsTask = PersonHonorificsApi.GetAllPersonHonorificsAsync();
+            var personSuffixesTask = PersonSuffixesApi.GetAllPersonSuffixesAsync();
+
+            await Task.WhenAll(
+                allCommissionersTask, 
+                correspondenceProfilesTask, 
+                correspondencePhonesTask, 
+                correspondenceEmailsTask,
+                personProfilesTask,
+                personHonorificsTask,
+                personSuffixesTask);
+
+            var allCommissionersResult = await allCommissionersTask;
+
+            if (allCommissionersResult?.IsSuccess == true && allCommissionersResult.Data != null)
+            {
+                // Filter commissioners that belong to seats in this service area
+                var seatIds = commissionSeats.Select(s => s.Id).ToHashSet();
+                commissioners = allCommissionersResult.Data
+                    .Where(c => seatIds.Contains(c.CommissionSeatId))
+                    .ToList();
+            }
+            else
+            {
+                commissioners = Array.Empty<CommissionerProfile>();
+            }
+
+            // Load correspondence data
+            var correspondenceProfilesResult = await correspondenceProfilesTask;
+            correspondenceProfiles = correspondenceProfilesResult?.Data ?? Array.Empty<CorrespondenceProfile>();
+
+            var correspondencePhonesResult = await correspondencePhonesTask;
+            correspondencePhones = correspondencePhonesResult?.Data ?? Array.Empty<CorrespondencePhone>();
+
+            var correspondenceEmailsResult = await correspondenceEmailsTask;
+            correspondenceEmails = correspondenceEmailsResult?.Data ?? Array.Empty<CorrespondenceEmail>();
+
+            // Load person data
+            var personProfilesResult = await personProfilesTask;
+            personProfiles = personProfilesResult?.Data ?? Array.Empty<PersonProfile>();
+
+            var personHonorificsResult = await personHonorificsTask;
+            personHonorifics = personHonorificsResult?.Data ?? Array.Empty<PersonHonorific>();
+
+            var personSuffixesResult = await personSuffixesTask;
+            personSuffixes = personSuffixesResult?.Data ?? Array.Empty<PersonSuffix>();
+        }
+        catch (Exception)
+        {
+            commissioners = Array.Empty<CommissionerProfile>();
+            correspondenceProfiles = Array.Empty<CorrespondenceProfile>();
+            correspondencePhones = Array.Empty<CorrespondencePhone>();
+            correspondenceEmails = Array.Empty<CorrespondenceEmail>();
+            personProfiles = Array.Empty<PersonProfile>();
+            personHonorifics = Array.Empty<PersonHonorific>();
+            personSuffixes = Array.Empty<PersonSuffix>();
+        }
+        finally
+        {
+            isLoadingCommissioners = false;
+        }
+    }
+
+    private async Task LoadCommissionerStatusLookups()
+    {
+        try
+        {
+            var result = await CommissionerStatusesApi.GetAllCommissionerStatusesAsync();
+            commissionerStatuses = result?.Data ?? Array.Empty<CommissionerStatus>();
+        }
+        catch (Exception)
+        {
+            commissionerStatuses = Array.Empty<CommissionerStatus>();
+        }
+    }
+
     private async Task LoadAllVersions()
     {
         if (selectedServiceArea == null) return;
@@ -712,10 +1033,11 @@
             // Set the current version as the view version
             currentViewVersion = selectedServiceArea;
             UpdateEditModel(currentViewVersion);
-            
-            // Load ordinances for this service area
+
+            // Load related data for this service area
             await LoadServiceAreaOrdinances();
             await LoadOrdinanceTypes();
+            await LoadCommissionSeats();
         }
         catch (Exception ex)
         {
@@ -1061,5 +1383,150 @@
     private void NavigateToOrdinance(Ordinance ordinance)
     {
         NavigationManager.NavigateTo($"/ordinances?id={ordinance.Id}");
+    }
+
+    private void NavigateToCommissionSeat(CommissionSeat seat)
+    {
+        // TODO: Create Commission Seat details page
+        NavigationManager.NavigateTo($"/commission-seats?id={seat.Id}");
+    }
+
+    // Helper methods for ordering and grouping
+    private IEnumerable<CommissionSeat> GetOrderedCommissionSeats()
+    {
+        if (commissionSeats == null || !commissionSeats.Any())
+            return Enumerable.Empty<CommissionSeat>();
+
+        var filteredSeats = commissionSeats.AsEnumerable();
+
+        // Filter out UKN class seats if user is not an editor
+        if (!isEditor)
+        {
+            filteredSeats = filteredSeats.Where(seat => !IsUnknownClass(seat.CommissionSeatClassId));
+        }
+
+        return filteredSeats
+            .OrderBy(seat => IsUnknownClass(seat.CommissionSeatClassId) ? 1 : 0) // UKN class at bottom
+            .ThenBy(seat => GetSeatTypeSortOrder(seat.CommissionSeatTypeId))
+            .ThenBy(seat => commissionSeatClasses?.FirstOrDefault(c => c.Id == seat.CommissionSeatClassId)?.Class ?? "")
+            .ToList();
+    }
+
+    private bool IsUnknownClass(int classId)
+    {
+        var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == classId);
+        var className = seatClass?.Class?.ToUpperInvariant() ?? "";
+        return className.Contains("UKN") || className.Contains("UNKNOWN");
+    }
+
+    private int GetSeatTypeSortOrder(int seatTypeId)
+    {
+        var seatType = commissionSeatTypes?.FirstOrDefault(t => t.Id == seatTypeId);
+        var typeName = seatType?.Type?.ToLowerInvariant() ?? "";
+
+        // Order: 1) Commission Chair, 2) Commission (by Class), 3) Alternate Commissioner
+        if (typeName.Contains("chair") && !typeName.Contains("alternate"))
+            return 1; // Commission Chair
+        else if (typeName.Contains("alternate"))
+            return 3; // Alternate Commissioner
+        else if (typeName.Contains("commission"))
+            return 2; // Regular Commission seat
+        else
+            return 4; // Other types
+    }
+
+    private IEnumerable<CommissionerProfile> GetCommissionersForSeat(int seatId)
+    {
+        if (commissioners == null)
+            return Enumerable.Empty<CommissionerProfile>();
+
+        var seatCommissioners = commissioners.Where(c => c.CommissionSeatId == seatId);
+
+        // Filter out inactive commissioners if user is not an editor
+        if (!isEditor)
+        {
+            seatCommissioners = seatCommissioners.Where(c =>
+            {
+                var status = commissionerStatuses?.FirstOrDefault(s => s.Id == c.CommissionerStatusId);
+                return status?.Active == true;
+            });
+        }
+
+        return seatCommissioners
+            .OrderBy(c => c.CommissionerStatusId)
+            .ToList();
+    }
+
+    private (string? PhoneNumber, string? EmailAddress)? GetPublicCorrespondence(int commissionerProfileId)
+    {
+        // Find correspondence profile for this commissioner where public_profile = 1
+        var correspondence = correspondenceProfiles?
+            .FirstOrDefault(cp => cp.CommissionerProfileId == commissionerProfileId && cp.PublicProfile == true);
+
+        if (correspondence == null)
+            return null;
+
+        // Get phone number if enabled
+        string? phoneNumber = null;
+        if (correspondence.Phone == true && correspondence.CorrespondencePhoneId.HasValue)
+        {
+            var phone = correspondencePhones?.FirstOrDefault(p => p.Id == correspondence.CorrespondencePhoneId);
+            phoneNumber = phone?.Number;
+        }
+
+        // Get email address if enabled
+        string? emailAddress = null;
+        if (correspondence.Email == true && correspondence.CorrespondenceEmailId.HasValue)
+        {
+            var email = correspondenceEmails?.FirstOrDefault(e => e.Id == correspondence.CorrespondenceEmailId);
+            emailAddress = email?.Email;
+        }
+
+        // Only return if we have at least one contact method
+        if (!string.IsNullOrEmpty(phoneNumber) || !string.IsNullOrEmpty(emailAddress))
+        {
+            return (phoneNumber, emailAddress);
+        }
+
+        return null;
+    }
+
+    private string GetFormattedPersonName(int personProfileId)
+    {
+        var person = personProfiles?.FirstOrDefault(p => p.Id == personProfileId);
+        if (person == null)
+            return $"Person ID: {personProfileId}";
+
+        var nameParts = new List<string>();
+
+        // Add honorific
+        if (person.PersonHonorificId.HasValue)
+        {
+            var honorific = personHonorifics?.FirstOrDefault(h => h.Id == person.PersonHonorificId);
+            if (!string.IsNullOrEmpty(honorific?.Honorific))
+                nameParts.Add(honorific.Honorific);
+        }
+
+        // Add first name
+        if (!string.IsNullOrEmpty(person.FirstName))
+            nameParts.Add(person.FirstName);
+
+        // Add preferred name in quotes
+        if (!string.IsNullOrEmpty(person.PreferredName))
+            nameParts.Add($"\"{person.PreferredName}\"");
+
+        // Add last name
+        if (!string.IsNullOrEmpty(person.LastName))
+            nameParts.Add(person.LastName);
+
+        // Add suffix
+        if (person.PersonSuffixId.HasValue)
+        {
+            var suffix = personSuffixes?.FirstOrDefault(s => s.Id == person.PersonSuffixId);
+            if (!string.IsNullOrEmpty(suffix?.Suffix))
+                nameParts.Add(suffix.Suffix);
+        }
+
+        return nameParts.Any() ? string.Join(" ", nameParts) : $"Person ID: {personProfileId}";
     }
 }
