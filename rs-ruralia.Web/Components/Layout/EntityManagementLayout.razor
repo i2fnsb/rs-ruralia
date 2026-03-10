@@ -1,0 +1,224 @@
+@typeparam TEntity where TEntity : class
+
+@* Entity Management Layout - Common structure for all entity pages *@
+
+<!-- Header Section -->
+<EntityHeader TEntity="TEntity"
+              Title="@Title" 
+              Subtitle="@Subtitle"
+              Icon="@Icon"
+              ShowViewModeSelector="@ShowViewModeSelector">
+    <ActionContent>
+        @if (HeaderActions != null)
+        {
+            @HeaderActions
+        }
+    </ActionContent>
+</EntityHeader>
+
+<!-- Main Content Grid -->
+<MudGrid Spacing="3">
+    <!-- Left Sidebar - Entity List/DataGrid -->
+    <MudItem xs="12" md="@SidebarWidth">
+        <MudPaper Elevation="2" Class="pa-0" Style="@($"height: {ListHeight}; display: flex; flex-direction: column;")">
+            <!-- List Header -->
+            <MudPaper Elevation="0" Class="pa-3" Style="background: linear-gradient(135deg, var(--mud-palette-primary) 0%, var(--mud-palette-primary-darken) 100%);">
+                <MudStack Row="false" Spacing="2">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@ListIcon" Color="Color.Surface" Size="Size.Large" />
+                        <MudText Typo="Typo.h6" Style="color: white; font-weight: 600;">@ListTitle</MudText>
+                        @if (ListHeaderActions != null)
+                        {
+                            @ListHeaderActions
+                        }
+                    </MudStack>
+                    
+                    @if (ShowSearch)
+                    {
+                        <MudTextField @bind-Value="SearchString" 
+                                      Placeholder="@SearchPlaceholder" 
+                                      Adornment="Adornment.Start" 
+                                      Immediate="true"
+                                      AdornmentIcon="@Icons.Material.Filled.Search" 
+                                      IconSize="Size.Medium" 
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Style="background: white; border-radius: 4px;"
+                                      Class="mt-0" />
+                    }
+                    
+                    @if (ShowTotalCount && TotalCount.HasValue)
+                    {
+                        <MudChip T="string" 
+                                Size="Size.Small" 
+                                Color="Color.Surface" 
+                                Style="color: white;"
+                                Icon="@CountIcon">
+                            @TotalCount Total
+                        </MudChip>
+                    }
+                </MudStack>
+            </MudPaper>
+            
+            <!-- List Content -->
+            <div style="flex: 1; overflow: auto;">
+                @if (ListContent != null)
+                {
+                    @ListContent
+                }
+                else
+                {
+                    <MudStack Spacing="3" Class="pa-4" AlignItems="AlignItems.Center" Justify="Justify.Center" Style="height: 100%;">
+                        <MudIcon Icon="@Icons.Material.Filled.Info" Color="Color.Secondary" Style="font-size: 3rem; opacity: 0.5;" />
+                        <MudText Typo="Typo.body1" Color="Color.Secondary">
+                            No list content provided
+                        </MudText>
+                    </MudStack>
+                }
+            </div>
+        </MudPaper>
+    </MudItem>
+    
+    <!-- Right Content - Details and Sections -->
+    <MudItem xs="12" md="@ContentWidth">
+        @if (HasSelection)
+        {
+            @if (DetailContent != null)
+            {
+                @DetailContent
+            }
+            else
+            {
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudText Typo="Typo.body1" Color="Color.Secondary">
+                        No detail content provided
+                    </MudText>
+                </MudPaper>
+            }
+        }
+        else
+        {
+            @if (EmptyStateContent != null)
+            {
+                @EmptyStateContent
+            }
+            else
+            {
+                <!-- Default Empty State -->
+                <MudPaper Class="pa-8" Elevation="0" 
+                         Style="text-align: center; background: linear-gradient(135deg, rgba(var(--mud-palette-primary-rgb), 0.05) 0%, rgba(var(--mud-palette-primary-rgb), 0.02) 100%); border: 2px dashed var(--mud-palette-divider); border-radius: 8px;">
+                    <MudStack AlignItems="AlignItems.Center" Spacing="3">
+                        <MudIcon Icon="@Icons.Material.Filled.TouchApp" 
+                                 Color="Color.Primary" 
+                                 Style="font-size: 4rem; opacity: 0.5;" />
+                        <MudStack Spacing="1" AlignItems="AlignItems.Center">
+                            <MudText Typo="Typo.h5" Color="Color.Primary" Style="font-weight: 600;">
+                                Select @EntitySingularName
+                            </MudText>
+                            <MudText Typo="Typo.body1" Color="Color.Secondary">
+                                Choose an item from the list to view details
+                            </MudText>
+                        </MudStack>
+                        @if (ShowTotalCount && TotalCount.HasValue && TotalCount.Value > 0)
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Style="vertical-align: middle;" />
+                                @TotalCount @EntityPluralName available
+                            </MudText>
+                        }
+                    </MudStack>
+                </MudPaper>
+            }
+        }
+    </MudItem>
+</MudGrid>
+
+@code {
+    #region Header Parameters
+    
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Subtitle { get; set; }
+
+    [Parameter, EditorRequired]
+    public string Icon { get; set; } = Icons.Material.Filled.Info;
+
+    [Parameter]
+    public bool ShowViewModeSelector { get; set; } = true;
+
+    [Parameter]
+    public RenderFragment? HeaderActions { get; set; }
+
+    #endregion
+
+    #region List/DataGrid Parameters
+
+    [Parameter, EditorRequired]
+    public string ListTitle { get; set; } = "Items";
+
+    [Parameter]
+    public string ListIcon { get; set; } = Icons.Material.Filled.List;
+
+    [Parameter]
+    public RenderFragment? ListHeaderActions { get; set; }
+
+    [Parameter]
+    public RenderFragment? ListContent { get; set; }
+
+    [Parameter]
+    public bool ShowSearch { get; set; } = true;
+
+    [Parameter]
+    public string SearchPlaceholder { get; set; } = "Search...";
+
+    [Parameter]
+    public string SearchString { get; set; } = string.Empty;
+
+    [Parameter]
+    public EventCallback<string> SearchStringChanged { get; set; }
+
+    [Parameter]
+    public bool ShowTotalCount { get; set; } = true;
+
+    [Parameter]
+    public int? TotalCount { get; set; }
+
+    [Parameter]
+    public string CountIcon { get; set; } = Icons.Material.Filled.List;
+
+    [Parameter]
+    public string ListHeight { get; set; } = "calc(100vh - 180px)";
+
+    #endregion
+
+    #region Content Parameters
+
+    [Parameter]
+    public RenderFragment? DetailContent { get; set; }
+
+    [Parameter]
+    public RenderFragment? EmptyStateContent { get; set; }
+
+    [Parameter]
+    public bool HasSelection { get; set; } = false;
+
+    [Parameter]
+    public string EntitySingularName { get; set; } = "an Item";
+
+    [Parameter]
+    public string EntityPluralName { get; set; } = "items";
+
+    #endregion
+
+    #region Layout Parameters
+
+    [Parameter]
+    public int SidebarWidth { get; set; } = 3;
+
+    [Parameter]
+    public int ContentWidth { get; set; } = 9;
+
+    #endregion
+}

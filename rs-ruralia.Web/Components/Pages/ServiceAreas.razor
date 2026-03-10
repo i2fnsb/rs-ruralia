@@ -2,7 +2,6 @@
 @rendermode InteractiveServer 
 @using rs_ruralia.Shared.Enums
 @using rs_ruralia.Web.Components.Dialogs
-@* @(new InteractiveServerRenderMode(prerender: false)) *@
 @inject ServiceAreasApiClient ServiceAreasApi
 @inject ServiceAreaCodesApiClient ServiceAreaCodesApi
 @inject OrdinancesApiClient OrdinancesApi
@@ -32,12 +31,25 @@
 @inject ViewModeService ViewModeService
 @implements IDisposable
 
-<EntityHeader TEntity="ServiceArea"
-              Title="Service Areas" 
-              Subtitle="Manage and view rural service area details, ordinances, commissions, and infrastructure"
-              Icon="@Icons.Material.Filled.Landscape"
-              ShowViewModeSelector="true">
-    <ActionContent>
+<EntityManagementLayout TEntity="ServiceArea"
+                       Title="Service Areas"
+                       Subtitle="Manage and view rural service area details, ordinances, commissions, and infrastructure"
+                       Icon="@Icons.Material.Filled.Landscape"
+                       ShowViewModeSelector="true"
+                       ListTitle="Service Areas"
+                       ListIcon="@Icons.Material.Filled.List"
+                       SearchPlaceholder="Search areas..."
+                       ShowSearch="true"
+                       SearchString="@_searchString"
+                       ShowTotalCount="true"
+                       TotalCount="@(serviceAreas?.Count())"
+                       CountIcon="@Icons.Material.Filled.LocationCity"
+                       HasSelection="@(selectedServiceArea != null)"
+                       EntitySingularName="a Service Area"
+                       EntityPluralName="service areas">
+
+    <!-- Header Actions -->
+    <HeaderActions>
         @if (selectedServiceArea != null)
         {
             <MudChip T="string" 
@@ -47,96 +59,68 @@
                 @selectedServiceArea.Name
             </MudChip>
         }
-    </ActionContent>
-</EntityHeader>
+    </HeaderActions>
 
-<MudGrid Spacing="3">
-    <MudItem xs="12" md="3">
-        <MudPaper Elevation="2" Class="pa-0" Style="height: calc(100vh - 180px); display: flex; flex-direction: column;">
-            <!-- Header -->
-            <MudPaper Elevation="0" Class="pa-3" Style="background: linear-gradient(135deg, var(--mud-palette-primary) 0%, var(--mud-palette-primary-darken) 100%);">
-                <MudStack Row="false" Spacing="2">
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                        <MudIcon Icon="@Icons.Material.Filled.List" Color="Color.Surface" Size="Size.Large" />
-                        <MudText Typo="Typo.h6" Style="color: white; font-weight: 600;">Service Areas</MudText>
-                        @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
-                        {
-                            <MudIconButton Icon="@Icons.Material.Filled.Add" 
-                                          Color="Color.Primary" 
-                                          Size="Size.Medium"
-                                          OnClick="@OpenCreateDialog"
-                                          Style="margin-left: auto; background: white; border-radius: 8px; border: 2px solid var(--mud-palette-primary);" />
-                        }
-                    </MudStack>
-                    <MudTextField @bind-Value="_searchString"
-                                  Placeholder="Search areas..." 
-                                  Adornment="Adornment.Start" 
-                                  Immediate="true"
-                                  AdornmentIcon="@Icons.Material.Filled.Search" 
-                                  IconSize="Size.Medium" 
-                                  Variant="Variant.Outlined"
-                                  Margin="Margin.Dense"
-                                  Style="background: white; border-radius: 4px;"
-                                  Class="mt-0" />
-                    @if (serviceAreas != null && serviceAreas.Any())
-                    {
-                        <MudChip T="string" 
-                                Size="Size.Small" 
-                                Color="Color.Surface" 
-                                Style="color: white;"
-                                Icon="@Icons.Material.Filled.LocationCity">
-                            @serviceAreas.Count() Total
-                        </MudChip>
-                    }
-                </MudStack>
-            </MudPaper>
+    <!-- List Header Actions (Create Button) -->
+    <ListHeaderActions>
+        @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Add" 
+                          Color="Color.Primary" 
+                          Size="Size.Medium"
+                          OnClick="@OpenCreateDialog"
+                          Title="Create New Service Area"
+                          Style="margin-left: auto; background: white; border-radius: 8px; border: 2px solid var(--mud-palette-primary);" />
+        }
+    </ListHeaderActions>
 
-            <!-- Data Grid -->
-            @if (isLoading)
-            {
-                <MudStack Spacing="2" Class="pa-4" Style="flex: 1;">
-                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
-                    <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary">
-                        Loading service areas...
-                    </MudText>
-                    @for (int i = 0; i < 5; i++)
-                    {
-                        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="50px" />
-                    }
-                </MudStack>
-            }
-            else if (serviceAreas == null || !serviceAreas.Any())
-            {
-                <MudStack Spacing="3" Class="pa-4" AlignItems="AlignItems.Center" Justify="Justify.Center" Style="flex: 1;">
-                    <MudIcon Icon="@Icons.Material.Filled.SearchOff" Color="Color.Secondary" Style="font-size: 3rem; opacity: 0.5;" />
-                    <MudText Typo="Typo.body1" Color="Color.Secondary" Align="Align.Center">
-                        No service areas found
-                    </MudText>
-                    @if (!string.IsNullOrWhiteSpace(_searchString))
-                    {
-                        <MudButton Variant="Variant.Text" 
-                                  Color="Color.Primary" 
-                                  StartIcon="@Icons.Material.Filled.Clear"
-                                  OnClick="@(() => _searchString = string.Empty)">
-                            Clear Search
-                        </MudButton>
-                    }
-                </MudStack>
-            }
-            else
-            {
-                <MudDataGrid T="ServiceArea"
-                         Items="@serviceAreas" 
-                         QuickFilter="@_quickFilter"
-                         Height="100%"
-                         FixedHeader="true"
-                         Virtualize="true"
-                         RowClick="RowClicked"
-                         SelectedItem="selectedServiceArea"
-                         Dense="true"
-                         Hover="true"
-                         RowStyleFunc="@RowStyleFunc"
-                         Style="flex: 1; overflow: auto;">
+    <!-- List Content (DataGrid) -->
+    <ListContent>
+        @if (isLoading)
+        {
+            <MudStack Spacing="2" Class="pa-4" Style="flex: 1;">
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary">
+                    Loading service areas...
+                </MudText>
+                @for (int i = 0; i < 5; i++)
+                {
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="50px" />
+                }
+            </MudStack>
+        }
+        else if (serviceAreas == null || !serviceAreas.Any())
+        {
+            <MudStack Spacing="3" Class="pa-4" AlignItems="AlignItems.Center" Justify="Justify.Center" Style="flex: 1;">
+                <MudIcon Icon="@Icons.Material.Filled.SearchOff" Color="Color.Secondary" Style="font-size: 3rem; opacity: 0.5;" />
+                <MudText Typo="Typo.body1" Color="Color.Secondary" Align="Align.Center">
+                    No service areas found
+                </MudText>
+                @if (!string.IsNullOrWhiteSpace(_searchString))
+                {
+                    <MudButton Variant="Variant.Text" 
+                              Color="Color.Primary" 
+                              StartIcon="@Icons.Material.Filled.Clear"
+                              OnClick="@(() => _searchString = string.Empty)">
+                        Clear Search
+                    </MudButton>
+                }
+            </MudStack>
+        }
+        else
+        {
+            <MudDataGrid T="ServiceArea"
+                     Items="@serviceAreas" 
+                     QuickFilter="@_quickFilter"
+                     Height="100%"
+                     FixedHeader="true"
+                     Virtualize="true"
+                     RowClick="RowClicked"
+                     SelectedItem="selectedServiceArea"
+                     Dense="true"
+                     Hover="true"
+                     RowStyleFunc="@RowStyleFunc"
+                     Style="flex: 1; overflow: auto;">
                 <Columns>
                     <TemplateColumn Title="" CellStyle="width: 40px; padding: 8px;">
                         <CellTemplate>
@@ -159,14 +143,13 @@
                     </TemplateColumn>
                 </Columns>
             </MudDataGrid>
-            }
-        </MudPaper>
-    </MudItem>
-    <MudItem xs="12" md="9">
-        @if (selectedServiceArea != null)
-        {
-            <MudExpansionPanels MultiExpansion="true">
-                <SectionPanel Title="Details" 
+        }
+    </ListContent>
+
+    <!-- Detail Content (Expandable Sections) -->
+    <DetailContent>
+        <MudExpansionPanels MultiExpansion="true">
+            <SectionPanel Title="Details"
                              Icon="@Icons.Material.Filled.Info" 
                              Expanded="true"
                              MinimumViewMode="ViewMode.Public">
@@ -888,34 +871,8 @@
                     }
                 </SectionPanel>
             </MudExpansionPanels>
-        }
-        else
-        {
-            <MudPaper Class="pa-8" Elevation="0" Style="text-align: center; background: linear-gradient(135deg, rgba(var(--mud-palette-primary-rgb), 0.05) 0%, rgba(var(--mud-palette-primary-rgb), 0.02) 100%); border: 2px dashed var(--mud-palette-divider); border-radius: 8px;">
-                <MudStack AlignItems="AlignItems.Center" Spacing="3">
-                    <MudIcon Icon="@Icons.Material.Filled.TouchApp" 
-                             Color="Color.Primary" 
-                             Style="font-size: 4rem; opacity: 0.5;" />
-                    <MudStack Spacing="1" AlignItems="AlignItems.Center">
-                        <MudText Typo="Typo.h5" Color="Color.Primary" Style="font-weight: 600;">
-                            Select a Service Area
-                        </MudText>
-                        <MudText Typo="Typo.body1" Color="Color.Secondary">
-                            Choose a service area from the list to view its details, ordinances, commission, and infrastructure
-                        </MudText>
-                    </MudStack>
-                    @if (serviceAreas != null && serviceAreas.Any())
-                    {
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">
-                            <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Style="vertical-align: middle;" />
-                            @serviceAreas.Count() service areas available
-                        </MudText>
-                    }
-                </MudStack>
-            </MudPaper>
-        }
-    </MudItem>
-</MudGrid>
+    </DetailContent>
+</EntityManagementLayout>
 
 @code {
     [SupplyParameterFromQuery(Name = "id")]

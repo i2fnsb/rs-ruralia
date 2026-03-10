@@ -1,250 +1,416 @@
 @page "/ordinances"
 @rendermode InteractiveServer
+@using rs_ruralia.Shared.Enums
+@using rs_ruralia.Web.Components.Dialogs
+@inject OrdinancesApiClient OrdinancesApi
+@inject OrdinanceTypesApiClient OrdinanceTypesApi
+@inject ServiceAreasApiClient ServiceAreasApi
+@inject NotesApiClient NotesApi
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IDialogService DialogService
+@inject ViewModeService ViewModeService
+@implements IDisposable
 
-<MudGrid>
-    <MudItem xs="3">
-        <MudDataGrid T="Ordinance" 
-                     Items="@ordinances" 
-                     QuickFilter="@_quickFilter"
-                     Height="calc(100vh - 200px)"
-                     FixedHeader="true"
-                     Virtualize="true"
-                     RowClick="RowClicked"
-                     SelectedItem="selectedOrdinance">
-            <ToolBarContent>
-                <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" Immediate="true"
-                              AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
-            </ToolBarContent>
-            <Columns>
-                <PropertyColumn Property="x => x.OrdinanceName" Title="Ordinance" />
-                <PropertyColumn Property="x => x.OrdinanceYear" Title="Year" />
-            </Columns>
-        </MudDataGrid>
-    </MudItem>
-    <MudItem xs="9">
+<EntityManagementLayout TEntity="Ordinance"
+                       Title="Ordinances"
+                       Subtitle="Manage and view rural service area ordinances and regulations"
+                       Icon="@Icons.Material.Filled.Gavel"
+                       ShowViewModeSelector="true"
+                       ListTitle="Ordinances"
+                       ListIcon="@Icons.Material.Filled.Gavel"
+                       SearchPlaceholder="Search ordinances..."
+                       ShowSearch="true"
+                       SearchString="@_searchString"
+                       ShowTotalCount="true"
+                       TotalCount="@(ordinances?.Count())"
+                       CountIcon="@Icons.Material.Filled.Description"
+                       HasSelection="@(selectedOrdinance != null)"
+                       EntitySingularName="an Ordinance"
+                       EntityPluralName="ordinances">
+
+    <!-- Header Actions -->
+    <HeaderActions>
         @if (selectedOrdinance != null)
         {
-            <MudExpansionPanels MultiExpansion>
-                <MudExpansionPanel Text="Details" Expanded="true">
-                    <VersionedDetailsPanel TEntity="Ordinance"
-                       AllVersions="@allVersions"
-                       CurrentVersion="@currentViewVersion"
-                       CurrentVersionChanged="@OnCurrentVersionChanged"
-                       GetValidFrom="@(x => x.ValidFrom)"
-                       GetValidTo="@(x => x.ValidTo)"
-                       GetModifiedBy="@(x => x.ModifiedBy)"
-                       GetDisplayText="@(x => $"{x.OrdinanceName} ({x.OrdinanceYear})")"
-                       CanEdit="@canEdit"
-                       IsEditMode="@isEditMode"
-                       OnEditClicked="@EnableEdit"
-                       IsLoading="@(isLoading || isLoadingHistory)"
-                       ErrorMessage="@(errorMessage ?? historyErrorMessage)"
-                       OnRestore="@HandleRestore">
-                        <DetailsContent Context="version">
-                            @if (editContext != null && editModel != null)
-                            {
-                                <EditForm EditContext="@editContext" OnValidSubmit="SaveEdit">
-                                    <DataAnnotationsValidator />
-                                    <MudGrid>
-                                        <MudItem xs="12">
-                                            @if (canEdit && IsViewingCurrentVersion())
-                                            {
-                                                @if (isEditMode)
-                                                {
-                                                    <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
-                                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@isSaving">
-                                                            @if (isSaving)
-                                                            {
-                                                                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
-                                                                <MudText Class="ms-2">Saving...</MudText>
-                                                            }
-                                                            else
-                                                            {
-                                                                <MudIcon Icon="@Icons.Material.Filled.Save" Class="me-1" /> <MudText>Save</MudText>
-                                                            }
-                                                        </MudButton>
-                                                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="CancelEdit" Disabled="@isSaving">
-                                                            Cancel
-                                                        </MudButton>
-                                                    </MudStack>
-                                                }
-                                                else
-                                                {
-                                                    <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
-                                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="EnableEdit">
-                                                            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="me-1" /> Edit
-                                                        </MudButton>
-                                                    </MudStack>
-                                                }
-                                            }
-                                        </MudItem>
+            <MudChip T="string" 
+                     Size="Size.Medium" 
+                     Color="Color.Surface" 
+                     Style="color: white; font-weight: 500;">
+                @selectedOrdinance.OrdinanceName (@selectedOrdinance.OrdinanceYear)
+            </MudChip>
+        }
+    </HeaderActions>
 
-                                        @if (!string.IsNullOrEmpty(successMessage))
-                                        {
-                                            <MudItem xs="12">
-                                                <MudAlert Severity="Severity.Success" Variant="Variant.Filled">@successMessage</MudAlert>
-                                            </MudItem>
-                                        }
+    <!-- List Header Actions (Create Button) -->
+    <ListHeaderActions>
+        @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Add" 
+                          Color="Color.Primary" 
+                          Size="Size.Medium"
+                          OnClick="@OpenCreateDialog"
+                          Title="Create New Ordinance"
+                          Style="margin-left: auto; background: white; border-radius: 8px; border: 2px solid var(--mud-palette-primary);" />
+        }
+    </ListHeaderActions>
 
-                                        @if (!string.IsNullOrEmpty(errorMessage))
-                                        {
-                                            <MudItem xs="12">
-                                                <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
-                                                    <MudText>@errorMessage</MudText>
-                                                    @if (errorDetails != null && errorDetails.Length > 0)
-                                                    {
-                                                        <MudList T="string" Dense="true">
-                                                            @foreach (var detail in errorDetails)
-                                                            {
-                                                                <MudListItem>@detail</MudListItem>
-                                                            }
-                                                        </MudList>
-                                                    }
-                                                </MudAlert>
-                                            </MudItem>
-                                        }
-
-                                        <MudItem xs="12" md="6">
-                                            <AutoField @bind-Value="editModel.OrdinanceName" TModel="Ordinance" TValue="string" TLookup="object"
-                                                       Property="@(x => x.OrdinanceName)"
-                                                       ReadOnly="@(!CanEditFields())"
-                                                       For="@(() => editModel.OrdinanceName)" />
-                                        </MudItem>
-
-                                        <MudItem xs="12" md="6">
-                                            <AutoField @bind-Value="editModel.OrdinanceYear" TModel="Ordinance" TValue="int?" TLookup="object"
-                                                       Property="@(x => x.OrdinanceYear)"
-                                                       ReadOnly="@(!CanEditFields())"
-                                                       For="@(() => editModel.OrdinanceYear)" />
-                                        </MudItem>
-
-                                        <MudItem xs="12" md="6">
-                                            <AutoField @bind-Value="editModel.OrdinancePassed" TModel="Ordinance" TValue="bool?" TLookup="object"
-                                                       Property="@(x => x.OrdinancePassed)"
-                                                       ReadOnly="@(!CanEditFields())"
-                                                       For="@(() => editModel.OrdinancePassed)" />
-                                        </MudItem>
-
-                                        <MudItem xs="12" md="6">
-                                            <AutoField @bind-Value="editModel.OrdinanceTypeId" 
-                                                       TModel="Ordinance" 
-                                                       TValue="int?"
-                                                       TLookup="OrdinanceType"
-                                                       Property="@(x => x.OrdinanceTypeId)"
-                                                       ReadOnly="@(!CanEditFields())"
-                                                       LookupItems="@ordinanceTypes"
-                                                       LookupTextSelector="@(item => $"{((OrdinanceType)item).Type} - {((OrdinanceType)item).Description}")"
-                                                       ForeignKeyIdSelector="@(x => x.Id)"
-                                                       ForeignKeyNameSelector="@(x => x.Type ?? "")"
-                                                       ForeignKeyDescriptionSelector="@(x => x.Description ?? "")"
-                                                       OnForeignKeyCreate="@CreateOrdinanceType"
-                                                       OnForeignKeyUpdate="@UpdateOrdinanceType"
-                                                       OnForeignKeyDelete="@DeleteOrdinanceType"
-                                                       OnForeignKeyDataChanged="@(EventCallback.Factory.Create(this, LoadOrdinanceTypes))"
-                                                       ForeignKeyDialogTitle="Manage Ordinance Types"
-                                                       For="@(() => editModel.OrdinanceTypeId)">
-                                                <ForeignKeyFormContent Context="entity">
-                                                    <MudItem xs="12">
-                                                        <AutoField @bind-Value="entity.Type" 
-                                                                   TModel="OrdinanceType" 
-                                                                   TValue="string"
-                                                                   TLookup="object"
-                                                                   Property="@(x => x.Type)"
-                                                                   For="@(() => entity.Type)" />
-                                                    </MudItem>
-                                                    <MudItem xs="12">
-                                                        <AutoField @bind-Value="entity.Description" 
-                                                                   TModel="OrdinanceType" 
-                                                                   TValue="string"
-                                                                   TLookup="object"
-                                                                   Property="@(x => x.Description)"
-                                                                   For="@(() => entity.Description)" />
-                                                    </MudItem>
-                                                </ForeignKeyFormContent>
-                                            </AutoField>
-                                        </MudItem>
-
-                                        <MudItem xs="12" md="6">
-                                            <AutoField Value="editModel.ValidFrom" TModel="Ordinance" TValue="DateTime?" TLookup="object"
-                                                       Property="@(x => x.ValidFrom)"
-                                                       ReadOnly="true" />
-                                        </MudItem>
-
-                                        <MudItem xs="12" md="6">
-                                            <AutoField @bind-Value="editModel.ModifiedBy" TModel="Ordinance" TValue="string" TLookup="object"
-                                                       Property="@(x => x.ModifiedBy)"
-                                                       ReadOnly="true" />
-                                        </MudItem>
-                                    </MudGrid>
-                                </EditForm>
-                            }
-                        </DetailsContent>
-                        <ViewModeContent Context="version">
-                            <MudGrid Spacing="3">
-                                <MudItem xs="12" md="6">
-                                    <MudCard Outlined="true" Class="pa-2">
-                                        <MudCardContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Ordinance</MudText>
-                                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@version.OrdinanceName</MudText>
-                                        </MudCardContent>
-                                    </MudCard>
-                                </MudItem>
-                                <MudItem xs="12" md="6">
-                                    <MudCard Outlined="true" Class="pa-2">
-                                        <MudCardContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Year</MudText>
-                                            <MudText Typo="Typo.body1">@(version.OrdinanceYear?.ToString() ?? "—")</MudText>
-                                        </MudCardContent>
-                                    </MudCard>
-                                </MudItem>
-                                <MudItem xs="12" md="6">
-                                    <MudCard Outlined="true" Class="pa-2">
-                                        <MudCardContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Ordinance Passed</MudText>
-                                            @if (version.OrdinancePassed == true)
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
-                                            }
-                                            else if (version.OrdinancePassed == false)
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Close">No</MudChip>
-                                            }
-                                            else
-                                            {
-                                                <MudText Typo="Typo.body1">—</MudText>
-                                            }
-                                        </MudCardContent>
-                                    </MudCard>
-                                </MudItem>
-                                <MudItem xs="12" md="6">
-                                    <MudCard Outlined="true" Class="pa-2">
-                                        <MudCardContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Ordinance Type</MudText>
-                                            <MudText Typo="Typo.body1">
-                                                @{
-                                                    var type = ordinanceTypes?.FirstOrDefault(t => t.Id == version.OrdinanceTypeId);
-                                                    @(type != null ? $"{type.Type} - {type.Description}" : "—")
-                                                }
-                                            </MudText>
-                                        </MudCardContent>
-                                    </MudCard>
-                                </MudItem>
-                            </MudGrid>
-                        </ViewModeContent>
-                    </VersionedDetailsPanel>
-                </MudExpansionPanel>
-            </MudExpansionPanels>
+    <!-- List Content (DataGrid) -->
+    <ListContent>
+        @if (isLoading)
+        {
+            <MudStack Spacing="2" Class="pa-4" Style="flex: 1;">
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary">
+                    Loading ordinances...
+                </MudText>
+                @for (int i = 0; i < 5; i++)
+                {
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="50px" />
+                }
+            </MudStack>
+        }
+        else if (ordinances == null || !ordinances.Any())
+        {
+            <MudStack Spacing="3" Class="pa-4" AlignItems="AlignItems.Center" Justify="Justify.Center" Style="flex: 1;">
+                <MudIcon Icon="@Icons.Material.Filled.SearchOff" Color="Color.Secondary" Style="font-size: 3rem; opacity: 0.5;" />
+                <MudText Typo="Typo.body1" Color="Color.Secondary" Align="Align.Center">
+                    No ordinances found
+                </MudText>
+                @if (!string.IsNullOrWhiteSpace(_searchString))
+                {
+                    <MudButton Variant="Variant.Text" 
+                              Color="Color.Primary" 
+                              StartIcon="@Icons.Material.Filled.Clear"
+                              OnClick="@(() => _searchString = string.Empty)">
+                        Clear Search
+                    </MudButton>
+                }
+            </MudStack>
         }
         else
         {
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.h6" Align="Align.Center">Select an ordinance from the list to view details</MudText>
-            </MudPaper>
+            <MudDataGrid T="Ordinance"
+                     Items="@ordinances" 
+                     QuickFilter="@_quickFilter"
+                     Height="100%"
+                     FixedHeader="true"
+                     Virtualize="true"
+                     RowClick="RowClicked"
+                     SelectedItem="selectedOrdinance"
+                     Dense="true"
+                     Hover="true"
+                     RowStyleFunc="@RowStyleFunc"
+                     Style="flex: 1; overflow: auto;">
+                <Columns>
+                    <TemplateColumn Title="" CellStyle="width: 40px; padding: 8px;">
+                        <CellTemplate>
+                            @if (selectedOrdinance?.Id == context.Item.Id)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Primary" Size="Size.Small" />
+                            }
+                            else
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Gavel" Color="Color.Default" Size="Size.Small" Style="opacity: 0.5;" />
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <PropertyColumn Property="x => x.OrdinanceName" Title="Ordinance" />
+                    <PropertyColumn Property="x => x.OrdinanceYear" Title="Year" />
+                </Columns>
+            </MudDataGrid>
         }
-    </MudItem>
-</MudGrid>
+    </ListContent>
+
+    <!-- Detail Content (Expandable Sections) -->
+    <DetailContent>
+        <MudExpansionPanels MultiExpansion="true">
+            <!-- Details Section -->
+            <SectionPanel Title="Details" 
+                         Icon="@Icons.Material.Filled.Info" 
+                         Expanded="true"
+                         MinimumViewMode="ViewMode.Public">
+                <VersionedDetailsPanel TEntity="Ordinance"
+                   AllVersions="@allVersions"
+                   CurrentVersion="@currentViewVersion"
+                   CurrentVersionChanged="@OnCurrentVersionChanged"
+                   GetValidFrom="@(x => x.ValidFrom)"
+                   GetValidTo="@(x => x.ValidTo)"
+                   GetModifiedBy="@(x => x.ModifiedBy)"
+                   GetDisplayText="@(x => $"{x.OrdinanceName} ({x.OrdinanceYear})")"
+                   CanEdit="@(canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))"
+                   IsEditMode="@isEditMode"
+                   OnEditClicked="@EnableEdit"
+                   IsLoading="@(isLoading || isLoadingHistory)"
+                   ErrorMessage="@(errorMessage ?? historyErrorMessage)"
+                   OnRestore="@HandleRestore">
+                    <!-- Edit Mode Content -->
+                    <DetailsContent Context="version">
+                        @if (editContext != null && editModel != null)
+                        {
+                            <EditForm EditContext="@editContext" OnValidSubmit="SaveEdit">
+                                <DataAnnotationsValidator />
+                                <MudGrid>
+                                    <MudItem xs="12">
+                                        @if (canEdit && IsViewingCurrentVersion() && ViewModeService.IsAtLeast(ViewMode.Admin))
+                                        {
+                                            @if (isEditMode)
+                                            {
+                                                <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
+                                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@isSaving">
+                                                        @if (isSaving)
+                                                        {
+                                                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                                                            <MudText Class="ms-2">Saving...</MudText>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudIcon Icon="@Icons.Material.Filled.Save" Class="me-1" /> <MudText>Save</MudText>
+                                                        }
+                                                    </MudButton>
+                                                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="CancelEdit" Disabled="@isSaving">
+                                                        Cancel
+                                                    </MudButton>
+                                                </MudStack>
+                                            }
+                                            else
+                                            {
+                                                <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
+                                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="EnableEdit">
+                                                        <MudIcon Icon="@Icons.Material.Filled.Edit" Class="me-1" /> Edit
+                                                    </MudButton>
+                                                </MudStack>
+                                            }
+                                        }
+                                    </MudItem>
+
+                                    @if (!string.IsNullOrEmpty(successMessage))
+                                    {
+                                        <MudItem xs="12">
+                                            <MudAlert Severity="Severity.Success" Variant="Variant.Filled">@successMessage</MudAlert>
+                                        </MudItem>
+                                    }
+
+                                    @if (!string.IsNullOrEmpty(errorMessage))
+                                    {
+                                        <MudItem xs="12">
+                                            <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
+                                                <MudText>@errorMessage</MudText>
+                                                @if (errorDetails != null && errorDetails.Length > 0)
+                                                {
+                                                    <MudList T="string" Dense="true">
+                                                        @foreach (var detail in errorDetails)
+                                                        {
+                                                            <MudListItem>@detail</MudListItem>
+                                                        }
+                                                    </MudList>
+                                                }
+                                            </MudAlert>
+                                        </MudItem>
+                                    }
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.OrdinanceName" 
+                                                   TModel="Ordinance" 
+                                                   TValue="string" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.OrdinanceName)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   For="@(() => editModel.OrdinanceName)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.OrdinanceYear" 
+                                                   TModel="Ordinance" 
+                                                   TValue="int?" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.OrdinanceYear)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   For="@(() => editModel.OrdinanceYear)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.OrdinancePassed" 
+                                                   TModel="Ordinance" 
+                                                   TValue="bool?" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.OrdinancePassed)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   For="@(() => editModel.OrdinancePassed)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.OrdinanceTypeId" 
+                                                   TModel="Ordinance" 
+                                                   TValue="int?"
+                                                   TLookup="OrdinanceType"
+                                                   Property="@(x => x.OrdinanceTypeId)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   LookupItems="@ordinanceTypes"
+                                                   LookupTextSelector="@(item => $"{((OrdinanceType)item).Type} - {((OrdinanceType)item).Description}")"
+                                                   ForeignKeyIdSelector="@(x => x.Id)"
+                                                   ForeignKeyNameSelector="@(x => x.Type ?? "")"
+                                                   ForeignKeyDescriptionSelector="@(x => x.Description ?? "")"
+                                                   OnForeignKeyCreate="@CreateOrdinanceType"
+                                                   OnForeignKeyUpdate="@UpdateOrdinanceType"
+                                                   OnForeignKeyDelete="@DeleteOrdinanceType"
+                                                   OnForeignKeyDataChanged="@(EventCallback.Factory.Create(this, LoadOrdinanceTypes))"
+                                                   ForeignKeyDialogTitle="Manage Ordinance Types"
+                                                   For="@(() => editModel.OrdinanceTypeId)">
+                                            <ForeignKeyFormContent Context="entity">
+                                                <MudItem xs="12">
+                                                    <AutoField @bind-Value="entity.Type" 
+                                                               TModel="OrdinanceType" 
+                                                               TValue="string"
+                                                               TLookup="object"
+                                                               Property="@(x => x.Type)"
+                                                               For="@(() => entity.Type)" />
+                                                </MudItem>
+                                                <MudItem xs="12">
+                                                    <AutoField @bind-Value="entity.Description" 
+                                                               TModel="OrdinanceType" 
+                                                               TValue="string"
+                                                               TLookup="object"
+                                                               Property="@(x => x.Description)"
+                                                               For="@(() => entity.Description)" />
+                                                </MudItem>
+                                            </ForeignKeyFormContent>
+                                        </AutoField>
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.ServiceAreaId" 
+                                                   TModel="Ordinance" 
+                                                   TValue="int?"
+                                                   TLookup="ServiceArea"
+                                                   Property="@(x => x.ServiceAreaId)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   LookupItems="@serviceAreas"
+                                                   LookupTextSelector="@(item => ((ServiceArea)item).Name ?? "")"
+                                                   For="@(() => editModel.ServiceAreaId)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField Value="editModel.ValidFrom" 
+                                                   TModel="Ordinance" 
+                                                   TValue="DateTime?" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.ValidFrom)"
+                                                   ReadOnly="true" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.ModifiedBy" 
+                                                   TModel="Ordinance" 
+                                                   TValue="string" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.ModifiedBy)"
+                                                   ReadOnly="true" />
+                                    </MudItem>
+                                </MudGrid>
+                            </EditForm>
+                        }
+                    </DetailsContent>
+
+                    <!-- View Mode Content -->
+                    <ViewModeContent Context="version">
+                        <MudGrid Spacing="3">
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string"
+                                         Label="Ordinance Name" 
+                                         Value="@version.OrdinanceName" 
+                                         Icon="@Icons.Material.Filled.Gavel"
+                                         ValueStyle="font-weight: 600; font-size: 1.1rem;" />
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string"
+                                         Label="Year" 
+                                         Value="@(version.OrdinanceYear?.ToString())"
+                                         Icon="@Icons.Material.Filled.CalendarToday" />
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="bool?"
+                                         Label="Ordinance Passed" 
+                                         Icon="@Icons.Material.Filled.HowToVote">
+                                    <ValueContent>
+                                        @if (version.OrdinancePassed == true)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
+                                        }
+                                        else if (version.OrdinancePassed == false)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Close">No</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudText>—</MudText>
+                                        }
+                                    </ValueContent>
+                                </InfoCard>
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string"
+                                         Label="Ordinance Type" 
+                                         Icon="@Icons.Material.Filled.Category">
+                                    <ValueContent>
+                                        @{
+                                            var type = ordinanceTypes?.FirstOrDefault(t => t.Id == version.OrdinanceTypeId);
+                                            <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                                                @(type != null ? $"{type.Type} - {type.Description}" : "—")
+                                            </MudText>
+                                        }
+                                    </ValueContent>
+                                </InfoCard>
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string"
+                                         Label="Service Area" 
+                                         Icon="@Icons.Material.Filled.Landscape">
+                                    <ValueContent>
+                                        @{
+                                            var serviceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == version.ServiceAreaId);
+                                            if (serviceArea != null)
+                                            {
+                                                <MudButton Variant="Variant.Text" 
+                                                          Color="Color.Primary" 
+                                                          Size="Size.Small"
+                                                          StartIcon="@Icons.Material.Filled.OpenInNew"
+                                                          OnClick="@(() => NavigationManager.NavigateTo($"/service-areas?id={serviceArea.Id}"))">
+                                                    @serviceArea.Name
+                                                </MudButton>
+                                            }
+                                            else
+                                            {
+                                                <MudText>—</MudText>
+                                            }
+                                        }
+                                    </ValueContent>
+                                </InfoCard>
+                            </MudItem>
+                        </MudGrid>
+                    </ViewModeContent>
+                </VersionedDetailsPanel>
+            </SectionPanel>
+
+            <!-- Notes Section -->
+            @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
+            {
+                <SectionPanel Title="Notes"
+                             Icon="@Icons.Material.Filled.Notes"
+                             MinimumViewMode="ViewMode.Admin">
+                    <NotesPanel EntityType="Notes" 
+                               EntityId="@selectedOrdinance.Id"
+                               HighlightedNoteDate="@(currentViewVersion?.ValidFrom)"
+                               ShowHistory="true" />
+                </SectionPanel>
+            }
+        </MudExpansionPanels>
+    </DetailContent>
+</EntityManagementLayout>
 
 @code {
     [SupplyParameterFromQuery(Name = "id")]
@@ -252,6 +418,7 @@
 
     private IEnumerable<Ordinance>? ordinances;
     private IEnumerable<OrdinanceType>? ordinanceTypes;
+    private IEnumerable<ServiceArea>? serviceAreas;
     private Ordinance? selectedOrdinance;
     private bool isLoading = false;
     private bool isSaving = false;
@@ -274,8 +441,13 @@
     {
         await LoadOrdinances();
         await LoadOrdinanceTypes();
+        await LoadServiceAreas();
         await CheckEditPermission();
+        await InitializeViewModes();
         SelectOrdinanceFromParameters();
+
+        // Subscribe to view mode changes
+        ViewModeService.OnViewModeChanged += HandleViewModeChanged;
     }
 
     protected override void OnParametersSet()
@@ -297,6 +469,51 @@
         {
             canEdit = false;
         }
+    }
+
+    private async Task InitializeViewModes()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var availableModes = new List<ViewMode> { ViewMode.Public };
+
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                if (user.IsInRole("commissioner")) availableModes.Add(ViewMode.Commission);
+                if (user.IsInRole("vendor")) availableModes.Add(ViewMode.Vendor);
+                if (user.IsInRole("fnsbuser")) availableModes.Add(ViewMode.FnsbUser);
+                if (user.IsInRole("admin") || user.IsInRole("editor")) availableModes.Add(ViewMode.Admin);
+            }
+
+            ViewModeService.SetAvailableViewModes(availableModes);
+
+            var highestMode = availableModes.LastOrDefault();
+            if (highestMode != default(ViewMode))
+            {
+                ViewModeService.SetViewMode(highestMode);
+            }
+        }
+        catch
+        {
+            ViewModeService.SetAvailableViewModes(new List<ViewMode> { ViewMode.Public });
+            ViewModeService.SetViewMode(ViewMode.Public);
+        }
+    }
+
+    public void Dispose()
+    {
+        ViewModeService.OnViewModeChanged -= HandleViewModeChanged;
+    }
+
+    private void HandleViewModeChanged()
+    {
+        if (isEditMode && !ViewModeService.IsAtLeast(ViewMode.Admin))
+        {
+            CancelEdit();
+        }
+        StateHasChanged();
     }
 
     private void SelectOrdinanceFromParameters()
@@ -371,6 +588,27 @@
         catch (Exception)
         {
             ordinanceTypes = Array.Empty<OrdinanceType>();
+        }
+    }
+
+    private async Task LoadServiceAreas()
+    {
+        try
+        {
+            var result = await ServiceAreasApi.GetAllServiceAreasAsync();
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                serviceAreas = result.Data;
+            }
+            else
+            {
+                serviceAreas = Array.Empty<ServiceArea>();
+            }
+        }
+        catch (Exception)
+        {
+            serviceAreas = Array.Empty<ServiceArea>();
         }
     }
 
@@ -522,20 +760,33 @@
 
         try
         {
+            // Get the authenticated user's email for ModifiedBy
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userEmail = user.Identity?.Name ?? user.Claims.FirstOrDefault(c => c.Type.Contains("email"))?.Value;
+
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                editModel.ModifiedBy = userEmail;
+            }
+
             var result = await OrdinancesApi.UpdateOrdinanceAsync(editModel.Id, editModel);
 
             if (result?.IsSuccess == true)
             {
                 successMessage = "Ordinance updated successfully!";
                 isEditMode = false;
-                
+
                 await LoadOrdinances();
                 selectedOrdinance = ordinances?.FirstOrDefault(o => o.Id == editModel.Id);
-                
+
                 if (selectedOrdinance != null)
                 {
                     await LoadAllVersions();
                 }
+
+                // Prompt user to add a note about the changes
+                await PromptForEditNote(editModel.Id, userEmail);
             }
             else
             {
@@ -593,6 +844,15 @@
                x.OrdinanceYear?.ToString().Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true;
     };
 
+    private string RowStyleFunc(Ordinance item, int index)
+    {
+        if (selectedOrdinance?.Id == item.Id)
+        {
+            return "background-color: var(--mud-palette-primary-lighten); cursor: pointer;";
+        }
+        return "cursor: pointer;";
+    }
+
     private async Task<bool> CreateOrdinanceType(OrdinanceType entity)
     {
         var result = await OrdinanceTypesApi.CreateOrdinanceTypeAsync(entity);
@@ -609,5 +869,165 @@
     {
         var result = await OrdinanceTypesApi.DeleteOrdinanceTypeAsync(entity.Id);
         return result?.IsSuccess ?? false;
+    }
+
+    private async Task PromptForEditNote(int ordinanceId, string? userEmail)
+    {
+        var parameters = new DialogParameters
+        {
+            { "ServiceAreaName", $"{selectedOrdinance?.OrdinanceName} ({selectedOrdinance?.OrdinanceYear})" }
+        };
+
+        var options = new DialogOptions 
+        { 
+            CloseButton = true, 
+            MaxWidth = MaxWidth.Medium, 
+            FullWidth = true 
+        };
+
+        var dialog = await DialogService.ShowAsync<AddEditNoteDialog>("Add Note About Changes", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is string noteText && !string.IsNullOrWhiteSpace(noteText))
+        {
+            await CreateEditNote(ordinanceId, noteText, userEmail);
+        }
+    }
+
+    private async Task CreateEditNote(int ordinanceId, string noteText, string? userEmail)
+    {
+        try
+        {
+            var note = new Note
+            {
+                NoteText = noteText,
+                // Note: Need to add OrdinanceId property to Note model if it doesn't exist
+                ModifiedBy = userEmail ?? "Unknown User",
+                ValidFrom = DateTime.UtcNow
+            };
+
+            var result = await NotesApi.CreateNoteAsync(note);
+
+            if (result?.IsSuccess == true)
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception)
+        {
+            // Silently fail - note creation is optional
+        }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var parameters = new DialogParameters<CreateEntityDialog<Ordinance>>
+        {
+            { x => x.EntityDisplayName, "Ordinance" },
+            { x => x.Description, "Create a new ordinance record. All fields marked with * are required." },
+            { x => x.OnCreate, new Func<Ordinance, Task<(bool, string?, string[]?)>>(CreateOrdinance) },
+            { x => x.AutoSetModifiedBy, true },
+            { x => x.FormContent, GetOrdinanceFormContent() }
+        };
+
+        var options = new DialogOptions 
+        { 
+            CloseButton = true, 
+            MaxWidth = MaxWidth.Large, 
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await DialogService.ShowAsync<CreateEntityDialog<Ordinance>>("Create New Ordinance", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is Ordinance createdOrdinance)
+        {
+            await LoadOrdinances();
+
+            selectedOrdinance = ordinances?.FirstOrDefault(o => o.Id == createdOrdinance.Id);
+            if (selectedOrdinance != null)
+            {
+                await LoadAllVersions();
+
+                var uri = NavigationManager.GetUriWithQueryParameter("id", selectedOrdinance.Id);
+                NavigationManager.NavigateTo(uri, replace: true);
+            }
+
+            successMessage = $"Ordinance '{createdOrdinance.OrdinanceName}' created successfully!";
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private RenderFragment<Ordinance> GetOrdinanceFormContent() => entity => __builder =>
+    {
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.OrdinanceName" 
+                       TModel="Ordinance" 
+                       TValue="string" 
+                       TLookup="object"
+                       Property="@(x => x.OrdinanceName)"
+                       For="@(() => entity.OrdinanceName)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.OrdinanceYear" 
+                       TModel="Ordinance" 
+                       TValue="int?" 
+                       TLookup="object"
+                       Property="@(x => x.OrdinanceYear)"
+                       For="@(() => entity.OrdinanceYear)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.OrdinancePassed" 
+                       TModel="Ordinance" 
+                       TValue="bool?" 
+                       TLookup="object"
+                       Property="@(x => x.OrdinancePassed)"
+                       For="@(() => entity.OrdinancePassed)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.OrdinanceTypeId" 
+                       TModel="Ordinance" 
+                       TValue="int?"
+                       TLookup="OrdinanceType"
+                       Property="@(x => x.OrdinanceTypeId)"
+                       LookupItems="@ordinanceTypes"
+                       LookupTextSelector="@(item => $"{((OrdinanceType)item).Type} - {((OrdinanceType)item).Description}")"
+                       For="@(() => entity.OrdinanceTypeId)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.ServiceAreaId" 
+                       TModel="Ordinance" 
+                       TValue="int?"
+                       TLookup="ServiceArea"
+                       Property="@(x => x.ServiceAreaId)"
+                       LookupItems="@serviceAreas"
+                       LookupTextSelector="@(item => ((ServiceArea)item).Name ?? "")"
+                       For="@(() => entity.ServiceAreaId)" />
+        </MudItem>
+    };
+
+    private async Task<(bool Success, string? ErrorMessage, string[]? ErrorDetails)> CreateOrdinance(Ordinance entity)
+    {
+        try
+        {
+            var result = await OrdinancesApi.CreateOrdinanceAsync(entity);
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                entity.Id = result.Data.Id;
+                entity.ValidFrom = result.Data.ValidFrom;
+
+                return (true, null, null);
+            }
+            else
+            {
+                return (false, result?.ErrorMessage ?? "Failed to create ordinance", result?.Errors);
+            }
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Error creating ordinance: {ex.Message}", null);
+        }
     }
 }
