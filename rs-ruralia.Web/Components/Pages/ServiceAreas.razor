@@ -1,5 +1,7 @@
 @page "/service-areas"
 @rendermode InteractiveServer 
+@using rs_ruralia.Shared.Enums
+@using rs_ruralia.Web.Components.Dialogs
 @* @(new InteractiveServerRenderMode(prerender: false)) *@
 @inject ServiceAreasApiClient ServiceAreasApi
 @inject ServiceAreaCodesApiClient ServiceAreaCodesApi
@@ -22,35 +24,144 @@
 @inject RfqsApiClient RfqsApi
 @inject RfqIfbTypesApiClient RfqIfbTypesApi
 @inject RfqProjectScopesApiClient RfqProjectScopesApi
+@inject NotesApiClient NotesApi
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IConfiguration Configuration
 @inject IDialogService DialogService
+@inject ViewModeService ViewModeService
+@implements IDisposable
 
-<MudGrid>
-    <MudItem xs="2">
-        <MudDataGrid T="ServiceArea" 
-                     Items="@serviceAreas" 
-                     QuickFilter="@_quickFilter"
-                     Height="calc(100vh - 200px)"
-                     FixedHeader="true"
-                     Virtualize="true"
-                     RowClick="RowClicked"
-                     SelectedItem="selectedServiceArea">
-            <ToolBarContent>
-                <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" Immediate="true"
-                              AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
-            </ToolBarContent>
-            <Columns>
-                <PropertyColumn Property="x => x.Name" Title="Service Area" />
-            </Columns>
-        </MudDataGrid>
-    </MudItem>
-    <MudItem xs="10">
+<EntityHeader TEntity="ServiceArea"
+              Title="Service Areas" 
+              Subtitle="Manage and view rural service area details, ordinances, commissions, and infrastructure"
+              Icon="@Icons.Material.Filled.Landscape"
+              ShowViewModeSelector="true">
+    <ActionContent>
         @if (selectedServiceArea != null)
         {
-            <MudExpansionPanels MultiExpansion>
-                <MudExpansionPanel Text="Details" Expanded="true">
+            <MudChip T="string" 
+                     Size="Size.Medium" 
+                     Color="Color.Surface" 
+                     Style="color: white; font-weight: 500;">
+                @selectedServiceArea.Name
+            </MudChip>
+        }
+    </ActionContent>
+</EntityHeader>
+
+<MudGrid Spacing="3">
+    <MudItem xs="12" md="3">
+        <MudPaper Elevation="2" Class="pa-0" Style="height: calc(100vh - 180px); display: flex; flex-direction: column;">
+            <!-- Header -->
+            <MudPaper Elevation="0" Class="pa-3" Style="background: linear-gradient(135deg, var(--mud-palette-primary) 0%, var(--mud-palette-primary-darken) 100%);">
+                <MudStack Row="false" Spacing="2">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.List" Color="Color.Surface" Size="Size.Large" />
+                        <MudText Typo="Typo.h6" Style="color: white; font-weight: 600;">Service Areas</MudText>
+                    </MudStack>
+                    <MudTextField @bind-Value="_searchString" 
+                                  Placeholder="Search areas..." 
+                                  Adornment="Adornment.Start" 
+                                  Immediate="true"
+                                  AdornmentIcon="@Icons.Material.Filled.Search" 
+                                  IconSize="Size.Medium" 
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Style="background: white; border-radius: 4px;"
+                                  Class="mt-0" />
+                    @if (serviceAreas != null && serviceAreas.Any())
+                    {
+                        <MudChip T="string" 
+                                Size="Size.Small" 
+                                Color="Color.Surface" 
+                                Style="color: white;"
+                                Icon="@Icons.Material.Filled.LocationCity">
+                            @serviceAreas.Count() Total
+                        </MudChip>
+                    }
+                </MudStack>
+            </MudPaper>
+
+            <!-- Data Grid -->
+            @if (isLoading)
+            {
+                <MudStack Spacing="2" Class="pa-4" Style="flex: 1;">
+                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                    <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary">
+                        Loading service areas...
+                    </MudText>
+                    @for (int i = 0; i < 5; i++)
+                    {
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="50px" />
+                    }
+                </MudStack>
+            }
+            else if (serviceAreas == null || !serviceAreas.Any())
+            {
+                <MudStack Spacing="3" Class="pa-4" AlignItems="AlignItems.Center" Justify="Justify.Center" Style="flex: 1;">
+                    <MudIcon Icon="@Icons.Material.Filled.SearchOff" Color="Color.Secondary" Style="font-size: 3rem; opacity: 0.5;" />
+                    <MudText Typo="Typo.body1" Color="Color.Secondary" Align="Align.Center">
+                        No service areas found
+                    </MudText>
+                    @if (!string.IsNullOrWhiteSpace(_searchString))
+                    {
+                        <MudButton Variant="Variant.Text" 
+                                  Color="Color.Primary" 
+                                  StartIcon="@Icons.Material.Filled.Clear"
+                                  OnClick="@(() => _searchString = string.Empty)">
+                            Clear Search
+                        </MudButton>
+                    }
+                </MudStack>
+            }
+            else
+            {
+                <MudDataGrid T="ServiceArea"
+                         Items="@serviceAreas" 
+                         QuickFilter="@_quickFilter"
+                         Height="100%"
+                         FixedHeader="true"
+                         Virtualize="true"
+                         RowClick="RowClicked"
+                         SelectedItem="selectedServiceArea"
+                         Dense="true"
+                         Hover="true"
+                         RowStyleFunc="@RowStyleFunc"
+                         Style="flex: 1; overflow: auto;">
+                <Columns>
+                    <TemplateColumn Title="" CellStyle="width: 40px; padding: 8px;">
+                        <CellTemplate>
+                            @if (selectedServiceArea?.Id == context.Item.Id)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Primary" Size="Size.Small" />
+                            }
+                            else
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Landscape" Color="Color.Default" Size="Size.Small" Style="opacity: 0.5;" />
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Service Area">
+                        <CellTemplate>
+                            <MudText Typo="Typo.body2" Style="@(selectedServiceArea?.Id == context.Item.Id ? "font-weight: 600;" : "font-weight: 500;")">
+                                @context.Item.Name
+                            </MudText>
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+            </MudDataGrid>
+            }
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" md="9">
+        @if (selectedServiceArea != null)
+        {
+            <MudExpansionPanels MultiExpansion="true">
+                <SectionPanel Title="Details" 
+                             Icon="@Icons.Material.Filled.Info" 
+                             Expanded="true"
+                             MinimumViewMode="ViewMode.Public">
                     <VersionedDetailsPanel TEntity="ServiceArea"
                        AllVersions="@allVersions"
                        CurrentVersion="@currentViewVersion"
@@ -59,7 +170,7 @@
                        GetValidTo="@(x => x.ValidTo)"
                        GetModifiedBy="@(x => x.ModifiedBy)"
                        GetDisplayText="@(x => x.Name ?? "")"
-                       CanEdit="@canEdit"
+                       CanEdit="@(canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))"
                        IsEditMode="@isEditMode"
                        OnEditClicked="@EnableEdit"
                        IsLoading="@(isLoading || isLoadingHistory)"
@@ -73,7 +184,7 @@
                                     <DataAnnotationsValidator />
                                     <MudGrid>
                                         <MudItem xs="12">
-                                            @if (canEdit && IsViewingCurrentVersion())
+                                            @if (canEdit && IsViewingCurrentVersion() && ViewModeService.IsAtLeast(ViewMode.Admin))
                                             {
                                                 @if (isEditMode)
                                                 {
@@ -277,97 +388,73 @@
                         <ViewModeContent Context="version">
                             <MudGrid Spacing="3">
                                 <MudItem xs="12" md="6">
-                                    <MudCard Outlined="true" Class="pa-2">
-                                        <MudCardContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Name</MudText>
-                                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@version.Name</MudText>
-                                        </MudCardContent>
-                                    </MudCard>
+                                    <InfoCard TValue="string"
+                                             Label="Name" 
+                                             Value="@version.Name" 
+                                             Icon="@Icons.Material.Filled.Label"
+                                             ValueStyle="font-weight: 600; font-size: 1.1rem;" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <MudCard Outlined="true" Class="pa-2">
-                                        <MudCardContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Feature Object ID</MudText>
-                                            <MudText Typo="Typo.body1">@version.FeatureObjectId</MudText>
-                                        </MudCardContent>
-                                    </MudCard>
+                                    <InfoCard TValue="string"
+                                             Label="Feature Object ID" 
+                                             Value="@version.FeatureObjectId"
+                                             Icon="@Icons.Material.Filled.Fingerprint" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <MudCard Outlined="true" Class="pa-2">
-                                        <MudCardContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Org Key</MudText>
-                                            <MudText Typo="Typo.body1">@(version.OrgKey?.ToString() ?? "—")</MudText>
-                                        </MudCardContent>
-                                    </MudCard>
+                                    <InfoCard TValue="string"
+                                             Label="Org Key" 
+                                             Value="@version.OrgKey?.ToString()"
+                                             Icon="@Icons.Material.Filled.Key" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <MudCard Outlined="true" Class="pa-2">
-                                        <MudCardContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Current Mileage</MudText>
-                                            <MudText Typo="Typo.body1">@(version.CurrentMileage?.ToString("N3") ?? "—")</MudText>
-                                        </MudCardContent>
-                                    </MudCard>
+                                    <InfoCard TValue="string"
+                                             Label="Current Mileage" 
+                                             Value="@(version.CurrentMileage?.ToString("N3"))"
+                                             Icon="@Icons.Material.Filled.Straighten"
+                                             HelperText="Total road miles maintained" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <MudCard Outlined="true" Class="pa-2">
-                                        <MudCardContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Abolish/Merge Year</MudText>
-                                            <MudText Typo="Typo.body1">@(version.AbolishMergeYear?.ToString() ?? "—")</MudText>
-                                        </MudCardContent>
-                                    </MudCard>
+                                    <InfoCard TValue="string"
+                                             Label="Abolish/Merge Year"
+                                             Value="@version.AbolishMergeYear?.ToString()"
+                                             Icon="@Icons.Material.Filled.MergeType" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <MudCard Outlined="true" Class="pa-2">
-                                        <MudCardContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Maximum Mill Rate</MudText>
-                                            <MudText Typo="Typo.body1">@(version.MaximumMillRate?.ToString("N3") ?? "—")</MudText>
-                                        </MudCardContent>
-                                    </MudCard>
+                                    <InfoCard Label="Maximum Mill Rate" 
+                                             Value="@(version.MaximumMillRate?.ToString("N3"))"
+                                             Icon="@Icons.Material.Filled.TrendingUp" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <MudCard Outlined="true" Class="pa-2">
-                                        <MudCardContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Current Mill Rate</MudText>
-                                            <MudText Typo="Typo.body1">@(version.CurrentMillRate?.ToString("N3") ?? "—")</MudText>
-                                        </MudCardContent>
-                                    </MudCard>
+                                    <InfoCard Label="Current Mill Rate" 
+                                             Value="@(version.CurrentMillRate?.ToString("N3"))"
+                                             Icon="@Icons.Material.Filled.AttachMoney" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <MudCard Outlined="true" Class="pa-2">
-                                        <MudCardContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Fire Mill Rate</MudText>
-                                            <MudText Typo="Typo.body1">@(version.FireMillRate?.ToString("N3") ?? "—")</MudText>
-                                        </MudCardContent>
-                                    </MudCard>
+                                    <InfoCard Label="Fire Mill Rate" 
+                                             Value="@(version.FireMillRate?.ToString("N3"))"
+                                             Icon="@Icons.Material.Filled.LocalFireDepartment" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <MudCard Outlined="true" Class="pa-2">
-                                        <MudCardContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Mill Levy</MudText>
-                                            <MudText Typo="Typo.body1">@(version.MillLevy?.ToString("N13") ?? "—")</MudText>
-                                        </MudCardContent>
-                                    </MudCard>
+                                    <InfoCard Label="Mill Levy" 
+                                             Value="@(version.MillLevy?.ToString("N13"))"
+                                             Icon="@Icons.Material.Filled.Calculate" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <MudCard Outlined="true" Class="pa-2">
-                                        <MudCardContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Tax Authority Code</MudText>
-                                            <MudText Typo="Typo.body1">@(version.TaxAuthorityCode ?? "—")</MudText>
-                                        </MudCardContent>
-                                    </MudCard>
+                                    <InfoCard Label="Tax Authority Code" 
+                                             Value="@version.TaxAuthorityCode"
+                                             Icon="@Icons.Material.Filled.AccountBalance" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <MudCard Outlined="true" Class="pa-2">
-                                        <MudCardContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Initial Tax Year</MudText>
-                                            <MudText Typo="Typo.body1">@(version.InitialTaxYear?.ToString() ?? "—")</MudText>
-                                        </MudCardContent>
-                                    </MudCard>
+                                    <InfoCard TValue="string"
+                                             Label="Initial Tax Year" 
+                                             Value="@version.InitialTaxYear?.ToString()"
+                                             Icon="@Icons.Material.Filled.CalendarToday" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <MudCard Outlined="true" Class="pa-2">
-                                        <MudCardContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Match Feature Layer</MudText>
+                                    <InfoCard TValue="bool?"
+                                             Label="Match Feature Layer" 
+                                             Icon="@Icons.Material.Filled.Layers">
+                                        <ValueContent>
                                             @if (version.MatchFeatureLayer == true)
                                             {
                                                 <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
@@ -378,40 +465,45 @@
                                             }
                                             else
                                             {
-                                                <MudText Typo="Typo.body1">—</MudText>
+                                                <MudText>—</MudText>
                                             }
-                                        </MudCardContent>
-                                    </MudCard>
+                                        </ValueContent>
+                                    </InfoCard>
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <MudCard Outlined="true" Class="pa-2">
-                                        <MudCardContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Service Area Code</MudText>
-                                            <MudText Typo="Typo.body1">
-                                                @{
-                                                    var code = serviceAreaCodes?.FirstOrDefault(c => c.Id == version.ServiceAreaCodeId);
+                                    <InfoCard TValue="string"
+                                             Label="Service Area Code" 
+                                             Icon="@Icons.Material.Filled.Category">
+                                        <ValueContent>
+                                            @{
+                                                var code = serviceAreaCodes?.FirstOrDefault(c => c.Id == version.ServiceAreaCodeId);
+                                                <MudText Typo="Typo.body1" Style="font-weight: 500;">
                                                     @(code != null ? $"{code.Code} - {code.Description}" : "—")
-                                                }
-                                            </MudText>
-                                        </MudCardContent>
-                                    </MudCard>
+                                                </MudText>
+                                            }
+                                        </ValueContent>
+                                    </InfoCard>
                                 </MudItem>
                             </MudGrid>
                         </ViewModeContent>
                     </VersionedDetailsPanel>
-                </MudExpansionPanel>
+                </SectionPanel>
 
                 @if (canEdit)
                 {
-                    <MudExpansionPanel Text="Notes">
+                    <SectionPanel Title="Notes"
+                                 Icon="@Icons.Material.Filled.Notes"
+                                 MinimumViewMode="ViewMode.Admin">
                         <NotesPanel EntityType="service_area" 
                                    EntityId="@selectedServiceArea.Id"
                                    HighlightedNoteDate="@(currentViewVersion?.ValidFrom)"
                                    ShowHistory="true" />
-                    </MudExpansionPanel>
+                    </SectionPanel>
                 }
 
-                <MudExpansionPanel Text="Map">
+                <SectionPanel Title="Map" 
+                             Icon="@Icons.Material.Filled.Map"
+                             MinimumViewMode="ViewMode.Public">
                     @if (!string.IsNullOrEmpty(selectedServiceArea?.FeatureObjectId))
                     {
                         <MudStack Spacing="2">
@@ -432,20 +524,17 @@
                             No feature layer URL configured for this service area.
                         </MudAlert>
                     }
-                </MudExpansionPanel>
-                <MudExpansionPanel Text="Ordinances">
+                </SectionPanel>
+                <SectionPanel Title="Ordinances" 
+                             Icon="@Icons.Material.Filled.Gavel"
+                             MinimumViewMode="ViewMode.Public"
+                             ShowCount="true"
+                             Count="@(serviceAreaOrdinances?.Count() ?? 0)"
+                             CountColor="Color.Info">
+                    <ChildContent>
                     @if (selectedServiceArea != null)
                     {
                         <MudStack Spacing="2">
-                            @if (canEdit)
-                            {
-                                <MudStack Row="true" Justify="Justify.FlexEnd">
-                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Link" OnClick="@OpenLinkOrdinanceDialog">
-                                        Link Ordinance
-                                    </MudButton>
-                                </MudStack>
-                            }
-
                             @if (isLoadingOrdinances)
                             {
                                 <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
@@ -499,8 +588,15 @@
                             }
                         </MudStack>
                     }
-                </MudExpansionPanel>
-                <MudExpansionPanel Text="Commission">
+                    </ChildContent>
+                </SectionPanel>
+
+                <SectionPanel Title="Commission" 
+                             Icon="@Icons.Material.Filled.Groups"
+                             MinimumViewMode="ViewMode.Public"
+                             ShowCount="true"
+                             Count="@(GetOrderedCommissionSeats()?.Count() ?? 0)"
+                             CountColor="Color.Secondary">
                     @if (selectedServiceArea != null)
                     {
                         <MudStack Spacing="2">
@@ -630,8 +726,14 @@
                             }
                         </MudStack>
                     }
-                </MudExpansionPanel>
-                <MudExpansionPanel Text="Request For Quotes">
+                </SectionPanel>
+
+                <SectionPanel Title="Request For Quotes" 
+                             Icon="@Icons.Material.Filled.RequestQuote"
+                             MinimumViewMode="ViewMode.Public"
+                             ShowCount="true"
+                             Count="@(serviceAreaRfqs?.Count() ?? 0)"
+                             CountColor="Color.Warning">
                     @if (selectedServiceArea != null)
                     {
                         <MudStack Spacing="2">
@@ -705,8 +807,14 @@
                             }
                         </MudStack>
                     }
-                </MudExpansionPanel>
-                <MudExpansionPanel Text="Roads">
+                </SectionPanel>
+
+                <SectionPanel Title="Roads" 
+                             Icon="@Icons.Material.Filled.Route"
+                             MinimumViewMode="ViewMode.Public"
+                             ShowCount="true"
+                             Count="@(serviceAreaRoads?.Count() ?? 0)"
+                             CountColor="Color.Tertiary">
                     @if (selectedServiceArea != null)
                     {
                         <MudStack Spacing="2">
@@ -774,13 +882,32 @@
                             }
                         </MudStack>
                     }
-                </MudExpansionPanel>
+                </SectionPanel>
             </MudExpansionPanels>
         }
         else
         {
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.h6" Align="Align.Center">Select a service area from the list to view details</MudText>
+            <MudPaper Class="pa-8" Elevation="0" Style="text-align: center; background: linear-gradient(135deg, rgba(var(--mud-palette-primary-rgb), 0.05) 0%, rgba(var(--mud-palette-primary-rgb), 0.02) 100%); border: 2px dashed var(--mud-palette-divider); border-radius: 8px;">
+                <MudStack AlignItems="AlignItems.Center" Spacing="3">
+                    <MudIcon Icon="@Icons.Material.Filled.TouchApp" 
+                             Color="Color.Primary" 
+                             Style="font-size: 4rem; opacity: 0.5;" />
+                    <MudStack Spacing="1" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.h5" Color="Color.Primary" Style="font-weight: 600;">
+                            Select a Service Area
+                        </MudText>
+                        <MudText Typo="Typo.body1" Color="Color.Secondary">
+                            Choose a service area from the list to view its details, ordinances, commission, and infrastructure
+                        </MudText>
+                    </MudStack>
+                    @if (serviceAreas != null && serviceAreas.Any())
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Style="vertical-align: middle;" />
+                            @serviceAreas.Count() service areas available
+                        </MudText>
+                    }
+                </MudStack>
             </MudPaper>
         }
     </MudItem>
@@ -867,7 +994,11 @@
         await LoadRoadNames();
         await LoadRfqLookups();
         await CheckEditPermission();
+        await InitializeViewModes();
         SelectServiceAreaFromParameters();
+
+        // Subscribe to view mode changes to exit edit mode when switching away from Admin
+        ViewModeService.OnViewModeChanged += HandleViewModeChanged;
     }
 
     protected override void OnParametersSet()
@@ -894,6 +1025,61 @@
             canEdit = false;
             isEditor = false;
         }
+    }
+
+    private async Task InitializeViewModes()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var availableModes = new List<ViewMode> { ViewMode.Public };
+
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                if (user.IsInRole("commissioner"))
+                {
+                    availableModes.Add(ViewMode.Commission);
+                }
+
+                if (user.IsInRole("vendor"))
+                {
+                    availableModes.Add(ViewMode.Vendor);
+                }
+
+                if (user.IsInRole("fnsbuser"))
+                {
+                    availableModes.Add(ViewMode.FnsbUser);
+                }
+
+                if (user.IsInRole("admin") || user.IsInRole("editor"))
+                {
+                    availableModes.Add(ViewMode.Admin);
+                }
+            }
+
+            ViewModeService.SetAvailableViewModes(availableModes);
+        }
+        catch
+        {
+            ViewModeService.SetAvailableViewModes(new List<ViewMode> { ViewMode.Public });
+        }
+    }
+
+    public void Dispose()
+    {
+        // Unsubscribe from view mode changes
+        ViewModeService.OnViewModeChanged -= HandleViewModeChanged;
+    }
+
+    private void HandleViewModeChanged()
+    {
+        // Exit edit mode when switching away from Admin view
+        if (isEditMode && !ViewModeService.IsAtLeast(ViewMode.Admin))
+        {
+            CancelEdit();
+        }
+        StateHasChanged();
     }
 
     private void SelectServiceAreaFromParameters()
@@ -1333,21 +1519,34 @@
 
         try
         {
+            // Get the authenticated user's email for ModifiedBy
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userEmail = user.Identity?.Name ?? user.Claims.FirstOrDefault(c => c.Type.Contains("email"))?.Value;
+
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                editModel.ModifiedBy = userEmail;
+            }
+
             var result = await ServiceAreasApi.UpdateServiceAreaAsync(editModel.Id, editModel);
 
             if (result?.IsSuccess == true)
             {
                 successMessage = "Service area updated successfully!";
                 isEditMode = false;
-                
+
                 // Reload data
                 await LoadServiceAreas();
                 selectedServiceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == editModel.Id);
-                
+
                 if (selectedServiceArea != null)
                 {
                     await LoadAllVersions();
                 }
+
+                // Prompt user to add a note about the changes
+                await PromptForEditNote(editModel.Id, userEmail);
             }
             else
             {
@@ -1411,6 +1610,15 @@
 
         return x.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true;
     };
+
+    private string RowStyleFunc(ServiceArea item, int index)
+    {
+        if (selectedServiceArea?.Id == item.Id)
+        {
+            return "background-color: var(--mud-palette-primary-lighten); cursor: pointer;";
+        }
+        return "cursor: pointer;";
+    }
 
     private async Task<bool> CreateServiceAreaCode(ServiceAreaCode entity)
     {
@@ -1831,5 +2039,54 @@
     private void NavigateToRfq(Rfq rfq)
     {
         NavigationManager.NavigateTo($"/rfqs?id={rfq.Id}");
+    }
+
+    private async Task PromptForEditNote(int serviceAreaId, string? userEmail)
+    {
+        var parameters = new DialogParameters
+        {
+            { "ServiceAreaName", selectedServiceArea?.Name ?? "Service Area" }
+        };
+
+        var options = new DialogOptions 
+        { 
+            CloseButton = true, 
+            MaxWidth = MaxWidth.Medium, 
+            FullWidth = true 
+        };
+
+        var dialog = await DialogService.ShowAsync<AddEditNoteDialog>("Add Note About Changes", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is string noteText && !string.IsNullOrWhiteSpace(noteText))
+        {
+            await CreateEditNote(serviceAreaId, noteText, userEmail);
+        }
+    }
+
+    private async Task CreateEditNote(int serviceAreaId, string noteText, string? userEmail)
+    {
+        try
+        {
+            var note = new Note
+            {
+                NoteText = noteText,
+                ServiceAreaId = serviceAreaId,
+                ModifiedBy = userEmail ?? "Unknown User",
+                ValidFrom = DateTime.UtcNow
+            };
+
+            var result = await NotesApi.CreateNoteAsync(note);
+
+            if (result?.IsSuccess == true)
+            {
+                // Note created successfully - could show a toast notification here
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception)
+        {
+            // Silently fail - note creation is optional
+        }
     }
 }

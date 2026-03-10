@@ -1,0 +1,64 @@
+@using rs_ruralia.Shared.Enums
+@inject ViewModeService ViewModeService
+@implements IDisposable
+
+<MudPaper Elevation="3" Class="pa-3" Style="background: white; border-radius: 8px; border: 2px solid var(--mud-palette-primary);">
+    <MudStack Row="false" Spacing="2">
+        <MudText Typo="Typo.subtitle2" Color="Color.Primary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+            <MudIcon Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Style="vertical-align: middle;" /> View Mode
+        </MudText>
+        <MudButtonGroup Variant="Variant.Outlined" Size="Size.Medium" Color="Color.Primary" Style="width: 100%;">
+            @foreach (var mode in ViewModeService.AvailableViewModes)
+            {
+                var isSelected = ViewModeService.CurrentViewMode == mode;
+                <MudButton 
+                    Variant="@(isSelected ? Variant.Filled : Variant.Outlined)"
+                    Color="@(isSelected ? Color.Primary : Color.Default)"
+                    OnClick="@(() => ViewModeService.SetViewMode(mode))"
+                    StartIcon="@GetIconForViewMode(mode)"
+                    Style="@(isSelected ? "font-weight: 700; box-shadow: 0 4px 8px rgba(0,0,0,0.2); transform: scale(1.05); border-width: 2px;" : "font-weight: 500; opacity: 0.7; border-width: 1px;")"
+                    Class="@(isSelected ? "mud-elevation-4" : "")">
+                    @GetDisplayName(mode)
+                </MudButton>
+            }
+        </MudButtonGroup>
+        @if (ViewModeService.AvailableViewModes.Count > 1)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center">
+                Currently viewing as: <strong>@GetDisplayName(ViewModeService.CurrentViewMode)</strong>
+            </MudText>
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    protected override void OnInitialized()
+    {
+        ViewModeService.OnViewModeChanged += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        ViewModeService.OnViewModeChanged -= StateHasChanged;
+    }
+
+    private string GetDisplayName(ViewMode mode) => mode switch
+    {
+        ViewMode.Admin => "Admin",
+        ViewMode.FnsbUser => "FNSB User",
+        ViewMode.Commission => "Commission",
+        ViewMode.Vendor => "Vendor",
+        ViewMode.Public => "Public",
+        _ => mode.ToString()
+    };
+
+    private string GetIconForViewMode(ViewMode mode) => mode switch
+    {
+        ViewMode.Admin => Icons.Material.Filled.AdminPanelSettings,
+        ViewMode.FnsbUser => Icons.Material.Filled.Badge,
+        ViewMode.Commission => Icons.Material.Filled.Gavel,
+        ViewMode.Vendor => Icons.Material.Filled.Store,
+        ViewMode.Public => Icons.Material.Filled.Public,
+        _ => Icons.Material.Filled.Visibility
+    };
+}

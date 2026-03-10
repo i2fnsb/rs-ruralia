@@ -1,0 +1,70 @@
+@using MudBlazor
+@inject IDialogService DialogService
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudAlert Severity="Severity.Info" Variant="Variant.Text">
+                <MudText Typo="Typo.body2">
+                    You've successfully updated <strong>@ServiceAreaName</strong>. 
+                    Please provide a brief note describing the changes you made.
+                </MudText>
+            </MudAlert>
+
+            <MudTextField @bind-Value="noteText"
+                         Label="Change Note"
+                         Variant="Variant.Outlined"
+                         Lines="5"
+                         Placeholder="e.g., Updated mill rates for 2025, Corrected feature object ID, etc."
+                         HelperText="This note will be saved with the current timestamp for audit purposes"
+                         AutoFocus="true"
+                         Immediate="true" />
+
+            @if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                <MudAlert Severity="Severity.Error">@errorMessage</MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" 
+                   Variant="Variant.Text" 
+                   Color="Color.Default">
+            Skip
+        </MudButton>
+        <MudButton OnClick="Submit" 
+                   Variant="Variant.Filled" 
+                   Color="Color.Primary"
+                   Disabled="@(string.IsNullOrWhiteSpace(noteText))"
+                   StartIcon="@Icons.Material.Filled.Save">
+            Save Note
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] 
+    IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public string ServiceAreaName { get; set; } = string.Empty;
+
+    private string noteText = string.Empty;
+    private string? errorMessage;
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private void Submit()
+    {
+        if (string.IsNullOrWhiteSpace(noteText))
+        {
+            errorMessage = "Please enter a note before saving.";
+            return;
+        }
+
+        MudDialog.Close(DialogResult.Ok(noteText));
+    }
+}

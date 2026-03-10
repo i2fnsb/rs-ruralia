@@ -1,0 +1,55 @@
+@typeparam TEntity
+
+<MudPaper Elevation="0" Class="pa-4 mb-4" Style="background: linear-gradient(135deg, var(--mud-palette-primary) 0%, var(--mud-palette-primary-darken) 100%);">
+    <MudGrid>
+        <MudItem xs="12" md="@(ShowViewModeSelector ? 8 : 12)">
+            <MudStack Row="false" Spacing="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icon" Size="Size.Large" Style="color: white;" />
+                    <MudStack Row="false" Spacing="0" Style="flex: 1;">
+                        <MudText Typo="Typo.h4" Style="color: white; font-weight: 600;">
+                            @Title
+                        </MudText>
+                        @if (!string.IsNullOrEmpty(Subtitle))
+                        {
+                            <MudText Typo="Typo.body1" Style="color: rgba(255, 255, 255, 0.85);">
+                                @Subtitle
+                            </MudText>
+                        }
+                    </MudStack>
+                </MudStack>
+                @if (ActionContent != null)
+                {
+                    <MudStack Row="true" Justify="Justify.FlexStart" AlignItems="AlignItems.Center">
+                        @ActionContent
+                    </MudStack>
+                }
+            </MudStack>
+        </MudItem>
+        @if (ShowViewModeSelector)
+        {
+            <MudItem xs="12" md="4">
+                <MudStack AlignItems="AlignItems.End" Justify="Justify.Center" Style="height: 100%;">
+                    <ViewModeSelector />
+                </MudStack>
+            </MudItem>
+        }
+    </MudGrid>
+</MudPaper>
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Subtitle { get; set; }
+
+    [Parameter]
+    public string Icon { get; set; } = Icons.Material.Filled.Info;
+
+    [Parameter]
+    public bool ShowViewModeSelector { get; set; } = true;
+
+    [Parameter]
+    public RenderFragment? ActionContent { get; set; }
+}

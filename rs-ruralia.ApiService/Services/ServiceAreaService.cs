@@ -255,11 +255,11 @@ public class ServiceAreaService
                 INSERT INTO service_area 
                 (feature_object_id, name, org_key, current_mileage, maximum_mill_rate, 
                  current_mill_rate, fire_mill_rate, mill_levy, tax_authority_code, 
-                 initial_tax_year, match_feature_layer, service_area_code_id)
+                 initial_tax_year, match_feature_layer, service_area_code_id, ModifiedBy)
                 VALUES 
                 (@FeatureObjectId, @Name, @OrgKey, @CurrentMileage, @MaximumMillRate,
                  @CurrentMillRate, @FireMillRate, @MillLevy, @TaxAuthorityCode,
-                 @InitialTaxYear, @MatchFeatureLayer, @ServiceAreaCodeId);
+                 @InitialTaxYear, @MatchFeatureLayer, @ServiceAreaCodeId, @ModifiedBy);
                 SELECT CAST(SCOPE_IDENTITY() as int)";
 
             serviceArea.Id = await _db.ExecuteScalarAsync<int>(sql, serviceArea);
@@ -300,7 +300,8 @@ public class ServiceAreaService
                     tax_authority_code = @TaxAuthorityCode,
                     initial_tax_year = @InitialTaxYear,
                     match_feature_layer = @MatchFeatureLayer,
-                    service_area_code_id = @ServiceAreaCodeId
+                    service_area_code_id = @ServiceAreaCodeId,
+                    ModifiedBy = @ModifiedBy
                 WHERE id = @Id";
 
             var affected = await _db.ExecuteAsync(sql, serviceArea);
