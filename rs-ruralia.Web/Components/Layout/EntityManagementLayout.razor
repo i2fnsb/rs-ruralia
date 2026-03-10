@@ -1,4 +1,8 @@
 @typeparam TEntity where TEntity : class
+@using rs_ruralia.Shared.Enums
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ViewModeService ViewModeService
+@implements IDisposable
 
 @* Entity Management Layout - Common structure for all entity pages *@
 
@@ -221,4 +225,125 @@
     public int ContentWidth { get; set; } = 9;
 
     #endregion
+
+    #region ViewMode and Permission Management
+
+    [Parameter]
+    public bool EnableViewModeManagement { get; set; } = true;
+
+    [Parameter]
+    public bool EnableEditPermissionCheck { get; set; } = true;
+
+    [Parameter]
+    public EventCallback<bool> CanEditChanged { get; set; }
+
+    [Parameter]
+    public EventCallback OnViewModeChanged { get; set; }
+
+    [Parameter]
+    public EventCallback OnEditModeCancelled { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> IsEditorChanged { get; set; }
+
+    private bool _canEdit = false;
+    private bool _isEditor = false;
+
+    public bool CanEdit => _canEdit;
+    public bool IsEditor => _isEditor;
+
+    #endregion
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (EnableEditPermissionCheck)
+        {
+            await CheckEditPermission();
+        }
+
+        if (EnableViewModeManagement)
+        {
+            await InitializeViewModes();
+            ViewModeService.OnViewModeChanged += HandleViewModeChanged;
+        }
+    }
+
+    private async Task CheckEditPermission()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            _canEdit = user.Identity?.IsAuthenticated == true && 
+                      (user.IsInRole("fnsbuser") || user.IsInRole("admin"));
+
+            // Check if user has editor role (can see UKN and inactive items)
+            _isEditor = user.Identity?.IsAuthenticated == true && 
+                       (user.IsInRole("editor") || user.IsInRole("admin"));
+
+            await CanEditChanged.InvokeAsync(_canEdit);
+            await IsEditorChanged.InvokeAsync(_isEditor);
+        }
+        catch
+        {
+            _canEdit = false;
+            _isEditor = false;
+            await CanEditChanged.InvokeAsync(_canEdit);
+            await IsEditorChanged.InvokeAsync(_isEditor);
+        }
+    }
+
+    private async Task InitializeViewModes()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var availableModes = new List<ViewMode> { ViewMode.Public };
+
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                if (user.IsInRole("commissioner")) availableModes.Add(ViewMode.Commission);
+                if (user.IsInRole("vendor")) availableModes.Add(ViewMode.Vendor);
+                if (user.IsInRole("fnsbuser")) availableModes.Add(ViewMode.FnsbUser);
+                if (user.IsInRole("admin") || user.IsInRole("editor")) availableModes.Add(ViewMode.Admin);
+            }
+
+            ViewModeService.SetAvailableViewModes(availableModes);
+
+            // Set the default view mode to the user's highest permission level
+            var highestMode = availableModes.LastOrDefault();
+            if (highestMode != default(ViewMode))
+            {
+                ViewModeService.SetViewMode(highestMode);
+            }
+        }
+        catch
+        {
+            ViewModeService.SetAvailableViewModes(new List<ViewMode> { ViewMode.Public });
+            ViewModeService.SetViewMode(ViewMode.Public);
+        }
+    }
+
+    private async void HandleViewModeChanged()
+    {
+        await OnViewModeChanged.InvokeAsync();
+
+        // If switching away from Admin view, notify parent to cancel edit mode
+        if (!ViewModeService.IsAtLeast(ViewMode.Admin))
+        {
+            await OnEditModeCancelled.InvokeAsync();
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        if (EnableViewModeManagement)
+        {
+            ViewModeService.OnViewModeChanged -= HandleViewModeChanged;
+        }
+    }
 }

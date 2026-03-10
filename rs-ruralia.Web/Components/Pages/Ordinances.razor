@@ -10,7 +10,6 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IDialogService DialogService
 @inject ViewModeService ViewModeService
-@implements IDisposable
 
 <EntityManagementLayout TEntity="Ordinance"
                        Title="Ordinances"
@@ -27,7 +26,11 @@
                        CountIcon="@Icons.Material.Filled.Description"
                        HasSelection="@(selectedOrdinance != null)"
                        EntitySingularName="an Ordinance"
-                       EntityPluralName="ordinances">
+                       EntityPluralName="ordinances"
+                       EnableViewModeManagement="true"
+                       EnableEditPermissionCheck="true"
+                       CanEditChanged="@(async (canEdit) => { this.canEdit = canEdit; await InvokeAsync(StateHasChanged); })"
+                       OnEditModeCancelled="@HandleEditModeCancelled">
 
     <!-- Header Actions -->
     <HeaderActions>
@@ -442,12 +445,7 @@
         await LoadOrdinances();
         await LoadOrdinanceTypes();
         await LoadServiceAreas();
-        await CheckEditPermission();
-        await InitializeViewModes();
         SelectOrdinanceFromParameters();
-
-        // Subscribe to view mode changes
-        ViewModeService.OnViewModeChanged += HandleViewModeChanged;
     }
 
     protected override void OnParametersSet()
@@ -455,65 +453,12 @@
         SelectOrdinanceFromParameters();
     }
 
-    private async Task CheckEditPermission()
+    private void HandleEditModeCancelled()
     {
-        try
-        {
-            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var user = authState.User;
-
-            canEdit = user.Identity?.IsAuthenticated == true && 
-                      (user.IsInRole("fnsbuser") || user.IsInRole("admin"));
-        }
-        catch
-        {
-            canEdit = false;
-        }
-    }
-
-    private async Task InitializeViewModes()
-    {
-        try
-        {
-            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var user = authState.User;
-            var availableModes = new List<ViewMode> { ViewMode.Public };
-
-            if (user.Identity?.IsAuthenticated == true)
-            {
-                if (user.IsInRole("commissioner")) availableModes.Add(ViewMode.Commission);
-                if (user.IsInRole("vendor")) availableModes.Add(ViewMode.Vendor);
-                if (user.IsInRole("fnsbuser")) availableModes.Add(ViewMode.FnsbUser);
-                if (user.IsInRole("admin") || user.IsInRole("editor")) availableModes.Add(ViewMode.Admin);
-            }
-
-            ViewModeService.SetAvailableViewModes(availableModes);
-
-            var highestMode = availableModes.LastOrDefault();
-            if (highestMode != default(ViewMode))
-            {
-                ViewModeService.SetViewMode(highestMode);
-            }
-        }
-        catch
-        {
-            ViewModeService.SetAvailableViewModes(new List<ViewMode> { ViewMode.Public });
-            ViewModeService.SetViewMode(ViewMode.Public);
-        }
-    }
-
-    public void Dispose()
-    {
-        ViewModeService.OnViewModeChanged -= HandleViewModeChanged;
-    }
-
-    private void HandleViewModeChanged()
-    {
-        if (isEditMode && !ViewModeService.IsAtLeast(ViewMode.Admin))
+        if (isEditMode)
         {
             CancelEdit();
         }
-        StateHasChanged();
     }
 
     private void SelectOrdinanceFromParameters()

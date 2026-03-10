@@ -29,7 +29,6 @@
 @inject IConfiguration Configuration
 @inject IDialogService DialogService
 @inject ViewModeService ViewModeService
-@implements IDisposable
 
 <EntityManagementLayout TEntity="ServiceArea"
                        Title="Service Areas"
@@ -46,7 +45,12 @@
                        CountIcon="@Icons.Material.Filled.LocationCity"
                        HasSelection="@(selectedServiceArea != null)"
                        EntitySingularName="a Service Area"
-                       EntityPluralName="service areas">
+                       EntityPluralName="service areas"
+                       EnableViewModeManagement="true"
+                       EnableEditPermissionCheck="true"
+                       CanEditChanged="@(async (canEdit) => { this.canEdit = canEdit; await InvokeAsync(StateHasChanged); })"
+                       IsEditorChanged="@(async (editor) => { this.isEditor = editor; await InvokeAsync(StateHasChanged); })"
+                       OnEditModeCancelled="@HandleEditModeCancelled">
 
     <!-- Header Actions -->
     <HeaderActions>
@@ -69,7 +73,6 @@
                           Color="Color.Primary" 
                           Size="Size.Medium"
                           OnClick="@OpenCreateDialog"
-                          Title="Create New Service Area"
                           Style="margin-left: auto; background: white; border-radius: 8px; border: 2px solid var(--mud-palette-primary);" />
         }
     </ListHeaderActions>
@@ -954,12 +957,7 @@
         await LoadCommissionerStatusLookups();
         await LoadRoadNames();
         await LoadRfqLookups();
-        await CheckEditPermission();
-        await InitializeViewModes();
         SelectServiceAreaFromParameters();
-
-        // Subscribe to view mode changes to exit edit mode when switching away from Admin
-        ViewModeService.OnViewModeChanged += HandleViewModeChanged;
     }
 
     protected override void OnParametersSet()
@@ -967,88 +965,12 @@
         SelectServiceAreaFromParameters();
     }
 
-    private async Task CheckEditPermission()
+    private void HandleEditModeCancelled()
     {
-        try
-        {
-            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var user = authState.User;
-
-            canEdit = user.Identity?.IsAuthenticated == true && 
-                      (user.IsInRole("fnsbuser") || user.IsInRole("admin"));
-
-            // Check if user has editor role (can see UKN and inactive items)
-            isEditor = user.Identity?.IsAuthenticated == true && 
-                      (user.IsInRole("editor") || user.IsInRole("admin"));
-        }
-        catch
-        {
-            canEdit = false;
-            isEditor = false;
-        }
-    }
-
-    private async Task InitializeViewModes()
-    {
-        try
-        {
-            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var user = authState.User;
-            var availableModes = new List<ViewMode> { ViewMode.Public };
-
-            if (user.Identity?.IsAuthenticated == true)
-            {
-                if (user.IsInRole("commissioner"))
-                {
-                    availableModes.Add(ViewMode.Commission);
-                }
-
-                if (user.IsInRole("vendor"))
-                {
-                    availableModes.Add(ViewMode.Vendor);
-                }
-
-                if (user.IsInRole("fnsbuser"))
-                {
-                    availableModes.Add(ViewMode.FnsbUser);
-                }
-
-                if (user.IsInRole("admin") || user.IsInRole("editor"))
-                {
-                    availableModes.Add(ViewMode.Admin);
-                }
-            }
-
-            ViewModeService.SetAvailableViewModes(availableModes);
-
-            // Set the default view mode to the user's highest permission level
-            var highestMode = availableModes.LastOrDefault();
-            if (highestMode != default(ViewMode))
-            {
-                ViewModeService.SetViewMode(highestMode);
-            }
-        }
-        catch
-        {
-            ViewModeService.SetAvailableViewModes(new List<ViewMode> { ViewMode.Public });
-            ViewModeService.SetViewMode(ViewMode.Public);
-        }
-    }
-
-    public void Dispose()
-    {
-        // Unsubscribe from view mode changes
-        ViewModeService.OnViewModeChanged -= HandleViewModeChanged;
-    }
-
-    private void HandleViewModeChanged()
-    {
-        // Exit edit mode when switching away from Admin view
-        if (isEditMode && !ViewModeService.IsAtLeast(ViewMode.Admin))
+        if (isEditMode)
         {
             CancelEdit();
         }
-        StateHasChanged();
     }
 
     private void SelectServiceAreaFromParameters()
