@@ -116,11 +116,11 @@ public class NoteService
             var sql = @"
                 INSERT INTO note (note, road_id, service_area_id, commissioner_profile_id, 
                     commission_seat_id, correspondence_profile_id, person_profile_id, 
-                    vendor_profile_id, rfq_id, ModifiedBy)
+                    vendor_profile_id, rfq_id, ordinance_id, ModifiedBy)
                 OUTPUT INSERTED.*
                 VALUES (@NoteText, @RoadId, @ServiceAreaId, @CommissionerProfileId, 
                     @CommissionSeatId, @CorrespondenceProfileId, @PersonProfileId, 
-                    @VendorProfileId, @RfqId, @ModifiedBy)";
+                    @VendorProfileId, @RfqId, @OrdinanceId, @ModifiedBy)";
 
             var result = await _db.QueryFirstOrDefaultAsync<Note>(sql, note);
 
@@ -153,6 +153,7 @@ public class NoteService
                     person_profile_id = @PersonProfileId,
                     vendor_profile_id = @VendorProfileId,
                     rfq_id = @RfqId,
+                    ordinance_id = @OrdinanceId
                     ModifiedBy = @ModifiedBy
                 WHERE id = @Id";
 
@@ -219,7 +220,8 @@ public class NoteService
             ("correspondence_profile", note.CorrespondenceProfileId),
             ("person_profile", note.PersonProfileId),
             ("vendor_profile", note.VendorProfileId),
-            ("rfq", note.RfqId)
+            ("rfq", note.RfqId),
+            ("ordinance", note.OrdinanceId)
         };
 
         foreach (var (entityType, entityId) in entityTypes)
@@ -241,6 +243,7 @@ public class NoteService
         "person_profile" or "personprofile" => "person_profile_id",
         "vendor_profile" or "vendorprofile" => "vendor_profile_id",
         "rfq" => "rfq_id",
+        "ordinance" => "ordinance_id",
         _ => null
     };
 }

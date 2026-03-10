@@ -150,10 +150,10 @@
                                                       Color="Color.Primary" 
                                                       Size="Size.Small"
                                                       OnClick="@(() => StartEditNote(note))" />
-                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                        @* <MudIconButton Icon="@Icons.Material.Filled.Delete" 
                                                       Color="Color.Error" 
                                                       Size="Size.Small"
-                                                      OnClick="@(() => DeleteNote(note.Id))" />
+                                                      OnClick="@(() => DeleteNote(note.Id))" /> *@
                                     }
                                 </MudStack>
                             }
@@ -202,7 +202,7 @@
     }
 </style>
 
-@code {
+    @code {
     [Parameter, EditorRequired]
     public string EntityType { get; set; } = string.Empty;
 
@@ -295,14 +295,14 @@
         else
         {
             expandedNoteHistories.Add(noteId);
-            
+
             // Load history if not already loaded
             if (!noteHistories.ContainsKey(noteId))
             {
                 try
                 {
                     var result = await NotesApi.GetNoteHistoryAsync(noteId);
-                    
+
                     if (result?.IsSuccess == true && result.Data != null)
                     {
                         noteHistories[noteId] = result.Data;
@@ -373,6 +373,9 @@
                     break;
                 case "rfq":
                     note.RfqId = EntityId;
+                    break;
+                case "ordinance":
+                    note.OrdinanceId = EntityId;
                     break;
                 default:
                     errorMessage = $"Unknown entity type: {EntityType}";
@@ -451,6 +454,7 @@
                 PersonProfileId = noteToEdit.PersonProfileId,
                 VendorProfileId = noteToEdit.VendorProfileId,
                 RfqId = noteToEdit.RfqId,
+                OrdinanceId = noteToEdit.OrdinanceId,
                 ModifiedBy = userEmail
             };
 

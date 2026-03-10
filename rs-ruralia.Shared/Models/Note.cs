@@ -47,6 +47,10 @@ public class Note
     [Display(Name = "RFQ ID")]
     public int? RfqId { get; set; }
 
+    [Column("ordinance_id")]
+    [Display(Name = "Ordinance ID")]
+    public int? OrdinanceId { get; set; }
+
     [Column("ModifiedBy")]
     [MaxLength(100)]
     [Display(Name = "Modified By")]

@@ -328,7 +328,7 @@
                 <SectionPanel Title="Notes"
                              Icon="@Icons.Material.Filled.Notes"
                              MinimumViewMode="ViewMode.Admin">
-                    <NotesPanel EntityType="Notes" 
+                    <NotesPanel EntityType="ordinance" 
                                EntityId="@selectedOrdinance.Id"
                                HighlightedNoteDate="@(currentViewVersion?.ValidFrom)"
                                ShowHistory="true" />
@@ -751,7 +751,7 @@
             var note = new Note
             {
                 NoteText = noteText,
-                // Note: Need to add OrdinanceId property to Note model if it doesn't exist
+                OrdinanceId = ordinanceId,
                 ModifiedBy = userEmail ?? "Unknown User",
                 ValidFrom = DateTime.UtcNow
             };
