@@ -25,7 +25,7 @@
                        TotalCount="@(ordinances?.Count())"
                        CountIcon="@Icons.Material.Filled.Description"
                        HasSelection="@(selectedOrdinance != null)"
-                       EntitySingularName="an Ordinance"
+                       EntitySingularName="Ordinance"
                        EntityPluralName="ordinances"
                        EnableViewModeManagement="true"
                        EnableEditPermissionCheck="true"
@@ -242,24 +242,27 @@
                     <ViewModeContent Context="version">
                         <MudGrid Spacing="3">
                             <MudItem xs="12" md="6">
-                                <InfoCard TValue="string"
+                                <InfoCard TValue="string" TModel="Ordinance"
                                          Label="Ordinance Name" 
                                          Value="@version.OrdinanceName" 
                                          Icon="@Icons.Material.Filled.Gavel"
-                                         ValueStyle="font-weight: 600; font-size: 1.1rem;" />
+                                         ValueStyle="font-weight: 600; font-size: 1.1rem;"
+                                         PropertyExpression="@(x => x.OrdinanceName)" />
                             </MudItem>
 
                             <MudItem xs="12" md="6">
-                                <InfoCard TValue="string"
+                                <InfoCard TValue="string" TModel="Ordinance"
                                          Label="Year" 
                                          Value="@(version.OrdinanceYear?.ToString())"
-                                         Icon="@Icons.Material.Filled.CalendarToday" />
+                                         Icon="@Icons.Material.Filled.CalendarToday"
+                                         PropertyExpression="@(x => x.OrdinanceYear)" />
                             </MudItem>
 
                             <MudItem xs="12" md="6">
-                                <InfoCard TValue="bool?"
+                                <InfoCard TValue="bool?" TModel="Ordinance"
                                          Label="Ordinance Passed" 
-                                         Icon="@Icons.Material.Filled.HowToVote">
+                                         Icon="@Icons.Material.Filled.HowToVote"
+                                         PropertyExpression="@(x => x.OrdinancePassed)">
                                     <ValueContent>
                                         @if (version.OrdinancePassed == true)
                                         {
@@ -278,9 +281,10 @@
                             </MudItem>
 
                             <MudItem xs="12" md="6">
-                                <InfoCard TValue="string"
+                                <InfoCard TValue="string" TModel="Ordinance"
                                          Label="Ordinance Type" 
-                                         Icon="@Icons.Material.Filled.Category">
+                                         Icon="@Icons.Material.Filled.Category"
+                                         PropertyExpression="@(x => x.OrdinanceTypeId)">
                                     <ValueContent>
                                         @{
                                             var type = ordinanceTypes?.FirstOrDefault(t => t.Id == version.OrdinanceTypeId);
@@ -293,9 +297,10 @@
                             </MudItem>
 
                             <MudItem xs="12" md="6">
-                                <InfoCard TValue="string"
+                                <InfoCard TValue="string" TModel="Ordinance"
                                          Label="Service Area" 
-                                         Icon="@Icons.Material.Filled.Landscape">
+                                         Icon="@Icons.Material.Filled.Landscape"
+                                         PropertyExpression="@(x => x.ServiceAreaId)">
                                     <ValueContent>
                                         @{
                                             var serviceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == version.ServiceAreaId);
@@ -327,11 +332,15 @@
             {
                 <SectionPanel Title="Notes"
                              Icon="@Icons.Material.Filled.Notes"
-                             MinimumViewMode="ViewMode.Admin">
+                             MinimumViewMode="ViewMode.Admin"
+                             ShowCount="true"
+                             Count="@notesCount"
+                             CountColor="Color.Dark">
                     <NotesPanel EntityType="ordinance" 
                                EntityId="@selectedOrdinance.Id"
                                HighlightedNoteDate="@(currentViewVersion?.ValidFrom)"
-                               ShowHistory="true" />
+                               ShowHistory="true"
+                               NotesCountChanged="@OnNotesCountChanged" />
                 </SectionPanel>
             }
         </MudExpansionPanels>
@@ -346,6 +355,9 @@
     private IEnumerable<OrdinanceType>? ordinanceTypes;
     private IEnumerable<ServiceArea>? serviceAreas;
     private Ordinance? selectedOrdinance;
+
+    // Notes management field
+    private int notesCount = 0;
     private bool isLoading = false;
     private bool isSaving = false;
     private bool isEditMode = false;
@@ -522,6 +534,12 @@
         currentViewVersion = newVersion;
         UpdateEditModel(newVersion);
         await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnNotesCountChanged(int count)
+    {
+        notesCount = count;
+        StateHasChanged();
     }
 
     private void UpdateEditModel(Ordinance version)

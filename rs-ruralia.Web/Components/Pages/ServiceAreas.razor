@@ -2,6 +2,7 @@
 @rendermode InteractiveServer 
 @using rs_ruralia.Shared.Enums
 @using rs_ruralia.Web.Components.Dialogs
+@using rs_ruralia.Web.Helpers
 @inject ServiceAreasApiClient ServiceAreasApi
 @inject ServiceAreaCodesApiClient ServiceAreaCodesApi
 @inject OrdinancesApiClient OrdinancesApi
@@ -44,7 +45,7 @@
                        TotalCount="@(serviceAreas?.Count())"
                        CountIcon="@Icons.Material.Filled.LocationCity"
                        HasSelection="@(selectedServiceArea != null)"
-                       EntitySingularName="a Service Area"
+                       EntitySingularName="Service Area"
                        EntityPluralName="service areas"
                        EnableViewModeManagement="true"
                        EnableEditPermissionCheck="true"
@@ -297,72 +298,88 @@
                         <ViewModeContent Context="version">
                             <MudGrid Spacing="3">
                                 <MudItem xs="12" md="6">
-                                    <InfoCard TValue="string"
+                                    <InfoCard TValue="string" TModel="ServiceArea"
                                              Label="Name" 
                                              Value="@version.Name" 
                                              Icon="@Icons.Material.Filled.Label"
-                                             ValueStyle="font-weight: 600; font-size: 1.1rem;" />
+                                             ValueStyle="font-weight: 600; font-size: 1.1rem;"
+                                             PropertyExpression="@(x => x.Name)" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <InfoCard TValue="string"
+                                    <InfoCard TValue="string" TModel="ServiceArea"
                                              Label="Feature Object ID" 
                                              Value="@version.FeatureObjectId"
-                                             Icon="@Icons.Material.Filled.Fingerprint" />
+                                             Icon="@Icons.Material.Filled.Fingerprint"
+                                             PropertyExpression="@(x => x.FeatureObjectId)" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <InfoCard TValue="string"
+                                    <InfoCard TValue="string" TModel="ServiceArea"
                                              Label="Org Key" 
                                              Value="@version.OrgKey?.ToString()"
-                                             Icon="@Icons.Material.Filled.Key" />
+                                             Icon="@Icons.Material.Filled.Key"
+                                             PropertyExpression="@(x => x.OrgKey)" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <InfoCard TValue="string"
+                                    <InfoCard TValue="string" TModel="ServiceArea"
                                              Label="Current Mileage" 
                                              Value="@(version.CurrentMileage?.ToString("N3"))"
                                              Icon="@Icons.Material.Filled.Straighten"
-                                             HelperText="Total road miles maintained" />
+                                             PropertyExpression="@(x => x.CurrentMileage)" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <InfoCard TValue="string"
+                                    <InfoCard TValue="string" TModel="ServiceArea"
                                              Label="Abolish/Merge Year"
                                              Value="@version.AbolishMergeYear?.ToString()"
-                                             Icon="@Icons.Material.Filled.MergeType" />
+                                             Icon="@Icons.Material.Filled.MergeType"
+                                             PropertyExpression="@(x => x.AbolishMergeYear)" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <InfoCard Label="Maximum Mill Rate" 
+                                    <InfoCard TValue="string" TModel="ServiceArea"
+                                             Label="Maximum Mill Rate" 
                                              Value="@(version.MaximumMillRate?.ToString("N3"))"
-                                             Icon="@Icons.Material.Filled.TrendingUp" />
+                                             Icon="@Icons.Material.Filled.TrendingUp"
+                                             PropertyExpression="@(x => x.MaximumMillRate)" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <InfoCard Label="Current Mill Rate" 
+                                    <InfoCard TValue="string" TModel="ServiceArea"
+                                             Label="Current Mill Rate" 
                                              Value="@(version.CurrentMillRate?.ToString("N3"))"
-                                             Icon="@Icons.Material.Filled.AttachMoney" />
+                                             Icon="@Icons.Material.Filled.AttachMoney"
+                                             PropertyExpression="@(x => x.CurrentMillRate)" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <InfoCard Label="Fire Mill Rate" 
+                                    <InfoCard TValue="string" TModel="ServiceArea"
+                                             Label="Fire Mill Rate" 
                                              Value="@(version.FireMillRate?.ToString("N3"))"
-                                             Icon="@Icons.Material.Filled.LocalFireDepartment" />
+                                             Icon="@Icons.Material.Filled.LocalFireDepartment"
+                                             PropertyExpression="@(x => x.FireMillRate)" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <InfoCard Label="Mill Levy" 
+                                    <InfoCard TValue="string" TModel="ServiceArea"
+                                             Label="Mill Levy" 
                                              Value="@(version.MillLevy?.ToString("N13"))"
-                                             Icon="@Icons.Material.Filled.Calculate" />
+                                             Icon="@Icons.Material.Filled.Calculate"
+                                             PropertyExpression="@(x => x.MillLevy)" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <InfoCard Label="Tax Authority Code" 
+                                    <InfoCard TValue="string" TModel="ServiceArea"
+                                             Label="Tax Authority Code" 
                                              Value="@version.TaxAuthorityCode"
-                                             Icon="@Icons.Material.Filled.AccountBalance" />
+                                             Icon="@Icons.Material.Filled.AccountBalance"
+                                             PropertyExpression="@(x => x.TaxAuthorityCode)" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <InfoCard TValue="string"
+                                    <InfoCard TValue="string" TModel="ServiceArea"
                                              Label="Initial Tax Year" 
                                              Value="@version.InitialTaxYear?.ToString()"
-                                             Icon="@Icons.Material.Filled.CalendarToday" />
+                                             Icon="@Icons.Material.Filled.CalendarToday"
+                                             PropertyExpression="@(x => x.InitialTaxYear)" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <InfoCard TValue="bool?"
+                                    <InfoCard TValue="bool?" TModel="ServiceArea"
                                              Label="Match Feature Layer" 
-                                             Icon="@Icons.Material.Filled.Layers">
+                                             Icon="@Icons.Material.Filled.Layers"
+                                             PropertyExpression="@(x => x.MatchFeatureLayer)">
                                         <ValueContent>
                                             @if (version.MatchFeatureLayer == true)
                                             {
@@ -380,9 +397,10 @@
                                     </InfoCard>
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <InfoCard TValue="string"
+                                    <InfoCard TValue="string" TModel="ServiceArea"
                                              Label="Service Area Code" 
-                                             Icon="@Icons.Material.Filled.Category">
+                                             Icon="@Icons.Material.Filled.Category"
+                                             PropertyExpression="@(x => x.ServiceAreaCodeId)">
                                         <ValueContent>
                                             @{
                                                 var code = serviceAreaCodes?.FirstOrDefault(c => c.Id == version.ServiceAreaCodeId);
@@ -402,11 +420,15 @@
                 {
                     <SectionPanel Title="Notes"
                                  Icon="@Icons.Material.Filled.Notes"
-                                 MinimumViewMode="ViewMode.Admin">
+                                 MinimumViewMode="ViewMode.Admin"
+                                 ShowCount="true"
+                                 Count="@notesCount"
+                                 CountColor="Color.Dark">
                         <NotesPanel EntityType="service_area" 
                                    EntityId="@selectedServiceArea.Id"
                                    HighlightedNoteDate="@(currentViewVersion?.ValidFrom)"
-                                   ShowHistory="true" />
+                                   ShowHistory="true"
+                                   NotesCountChanged="@OnNotesCountChanged" />
                     </SectionPanel>
                 }
 
@@ -821,6 +843,9 @@
     private IEnumerable<OrdinanceType>? ordinanceTypes;
     private bool isLoadingOrdinances = false;
 
+    // Notes management field
+    private int notesCount = 0;
+
     // Commission Seats management fields
     private IEnumerable<CommissionSeat>? commissionSeats;
     private IEnumerable<CommissionSeatType>? commissionSeatTypes;
@@ -1209,6 +1234,12 @@
         currentViewVersion = newVersion;
         UpdateEditModel(newVersion);
         await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnNotesCountChanged(int count)
+    {
+        notesCount = count;
+        StateHasChanged();
     }
 
     private void UpdateEditModel(ServiceArea version)

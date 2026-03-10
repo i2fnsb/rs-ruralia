@@ -83,7 +83,7 @@
             </MudPaper>
             
             <!-- List Content -->
-            <div style="flex: 1; overflow: auto;">
+            <div style="flex: 1; min-height: 0; position: relative;">
                 @if (ListContent != null)
                 {
                     @ListContent
@@ -92,7 +92,7 @@
                 {
                     @if (IsLoadingItems)
                     {
-                        <MudStack Spacing="2" Class="pa-4" Style="flex: 1;">
+                        <MudStack Spacing="2" Class="pa-4" Style="height: 100%;">
                             <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
                             <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary">
                                 Loading @EntityPluralName...
@@ -105,7 +105,7 @@
                     }
                     else if (Items == null || !Items.Any())
                     {
-                        <MudStack Spacing="3" Class="pa-4" AlignItems="AlignItems.Center" Justify="Justify.Center" Style="flex: 1;">
+                        <MudStack Spacing="3" Class="pa-4" AlignItems="AlignItems.Center" Justify="Justify.Center" Style="height: 100%;">
                             <MudIcon Icon="@Icons.Material.Filled.SearchOff" Color="Color.Secondary" Style="font-size: 3rem; opacity: 0.5;" />
                             <MudText Typo="Typo.body1" Color="Color.Secondary" Align="Align.Center">
                                 No @EntityPluralName found
@@ -125,6 +125,7 @@
                     {
                         <MudDataGrid T="TEntity"
                                  Items="@Items" 
+                                 Style="position: absolute; top: 0; left: 0; right: 0; bottom: 0;"
                                  Height="100%"
                                  FixedHeader="true"
                                  Virtualize="true"

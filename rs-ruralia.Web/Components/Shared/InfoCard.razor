@@ -1,4 +1,6 @@
 @typeparam TValue
+@typeparam TModel
+@using rs_ruralia.Web.Helpers
 
 <MudCard Outlined="true" Class="@($"pa-3 {Class}")" Style="@Style">
     <MudCardContent>
@@ -22,10 +24,10 @@
                     @(Value?.ToString() ?? EmptyText)
                 }
             </MudText>
-            @if (HelperText != null)
+            @if (!string.IsNullOrEmpty(GetHelperText()))
             {
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    @HelperText
+                    @GetHelperText()
                 </MudText>
             }
         </MudStack>
@@ -54,12 +56,47 @@
     [Parameter]
     public string? ValueStyle { get; set; } = "font-weight: 500;";
 
+    /// <summary>
+    /// Explicit helper text to display. If null and PropertyExpression is provided, 
+    /// description will be extracted from the Display attribute.
+    /// </summary>
     [Parameter]
     public string? HelperText { get; set; }
+
+    /// <summary>
+    /// Property expression for the model (e.g., x => x.Name). 
+    /// Used to automatically extract description from Display attribute.
+    /// </summary>
+    [Parameter]
+    public Expression<Func<TModel, object>>? PropertyExpression { get; set; }
 
     [Parameter]
     public string? Class { get; set; }
 
     [Parameter]
     public string? Style { get; set; }
+
+    private string? GetHelperText()
+    {
+        // If HelperText is explicitly provided, use it
+        if (HelperText != null)
+            return HelperText;
+
+        // If PropertyExpression is provided, use FormAttributeHelper to extract description
+        if (PropertyExpression != null)
+        {
+            try
+            {
+                return FormAttributeHelper.GetDescription(PropertyExpression);
+            }
+            catch
+            {
+                // If extraction fails, return null
+                return null;
+            }
+        }
+
+        return null;
+    }
 }
+
