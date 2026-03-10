@@ -7,15 +7,16 @@ window.initializeMap = function (mapId, lat, lng, zoom) {
         // Create the map
         const map = L.map(mapId).setView([lat, lng], zoom);
 
-        // Add OpenStreetMap tiles
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        // Add OpenStreetMap tiles as default base layer
+        const baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             maxZoom: 19
         }).addTo(map);
 
-        // Store the map instance
+        // Store the map instance and base layer
         window.leafletMaps[mapId] = {
             map: map,
+            baseLayer: baseLayer,
             layers: {}
         };
 
@@ -191,6 +192,135 @@ window.invalidateMapSize = function (mapId) {
         return true;
     } catch (error) {
         console.error('Error invalidating map size:', error);
+        return false;
+    }
+};
+
+// Base Map Definitions
+window.baseMaps = {
+    streets: {
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19
+    },
+    satellite: {
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+        maxZoom: 19
+    },
+    topographic: {
+        url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+        attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)',
+        maxZoom: 17
+    },
+    terrain: {
+        url: 'https://stamen-tiles-{s}.a.ssl.fastly.net/terrain/{z}/{x}/{y}.png',
+        attribution: 'Map tiles by <a href="http://stamen.com">Stamen Design</a>, <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> &mdash; Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 18
+    },
+    dark: {
+        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        maxZoom: 19
+    },
+    light: {
+        url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        maxZoom: 19
+    }
+};
+
+window.changeBaseMap = function (mapId, baseMapType) {
+    try {
+        const mapData = window.leafletMaps[mapId];
+        if (!mapData) {
+            console.error('Map not found:', mapId);
+            return false;
+        }
+
+        const baseMapConfig = window.baseMaps[baseMapType];
+        if (!baseMapConfig) {
+            console.error('Base map type not found:', baseMapType);
+            return false;
+        }
+
+        // Remove existing base layer
+        if (mapData.baseLayer) {
+            mapData.map.removeLayer(mapData.baseLayer);
+        }
+
+        // Add new base layer
+        mapData.baseLayer = L.tileLayer(baseMapConfig.url, {
+            attribution: baseMapConfig.attribution,
+            maxZoom: baseMapConfig.maxZoom
+        }).addTo(mapData.map);
+
+        return true;
+    } catch (error) {
+        console.error('Error changing base map:', error);
+        return false;
+    }
+};
+
+window.showLayer = function (mapId, layerName) {
+    try {
+        const mapData = window.leafletMaps[mapId];
+        if (!mapData) {
+            console.error('Map not found:', mapId);
+            return false;
+        }
+
+        const layer = mapData.layers[layerName];
+        if (layer && !mapData.map.hasLayer(layer)) {
+            mapData.map.addLayer(layer);
+        }
+
+        return true;
+    } catch (error) {
+        console.error('Error showing layer:', error);
+        return false;
+    }
+};
+
+window.hideLayer = function (mapId, layerName) {
+    try {
+        const mapData = window.leafletMaps[mapId];
+        if (!mapData) {
+            console.error('Map not found:', mapId);
+            return false;
+        }
+
+        const layer = mapData.layers[layerName];
+        if (layer && mapData.map.hasLayer(layer)) {
+            mapData.map.removeLayer(layer);
+        }
+
+        return true;
+    } catch (error) {
+        console.error('Error hiding layer:', error);
+        return false;
+    }
+};
+
+window.setLayerOpacity = function (mapId, layerName, opacity) {
+    try {
+        const mapData = window.leafletMaps[mapId];
+        if (!mapData) {
+            console.error('Map not found:', mapId);
+            return false;
+        }
+
+        const layer = mapData.layers[layerName];
+        if (layer) {
+            layer.setStyle({
+                opacity: opacity,
+                fillOpacity: opacity * 0.5 // Fill is half the line opacity
+            });
+        }
+
+        return true;
+    } catch (error) {
+        console.error('Error setting layer opacity:', error);
         return false;
     }
 };

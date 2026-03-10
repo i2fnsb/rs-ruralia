@@ -1,0 +1,102 @@
+@typeparam TValue
+@typeparam TModel
+@using rs_ruralia.Web.Helpers
+
+<MudCard Outlined="true" Class="@($"pa-3 {Class}")" Style="@Style">
+    <MudCardContent>
+        <MudStack Spacing="1">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">
+                    @Label
+                </MudText>
+                @if (!string.IsNullOrEmpty(Icon))
+                {
+                    <MudIcon Icon="@Icon" Size="Size.Small" Color="Color.Secondary" />
+                }
+            </MudStack>
+            <MudText Typo="@ValueTypo" Style="@ValueStyle">
+                @if (ValueContent != null)
+                {
+                    @ValueContent
+                }
+                else
+                {
+                    @(Value?.ToString() ?? EmptyText)
+                }
+            </MudText>
+            @if (!string.IsNullOrEmpty(GetHelperText()))
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @GetHelperText()
+                </MudText>
+            }
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter]
+    public string Label { get; set; } = string.Empty;
+
+    [Parameter]
+    public TValue? Value { get; set; }
+
+    [Parameter]
+    public RenderFragment? ValueContent { get; set; }
+
+    [Parameter]
+    public string EmptyText { get; set; } = "—";
+
+    [Parameter]
+    public string? Icon { get; set; }
+
+    [Parameter]
+    public Typo ValueTypo { get; set; } = Typo.body1;
+
+    [Parameter]
+    public string? ValueStyle { get; set; } = "font-weight: 500;";
+
+    /// <summary>
+    /// Explicit helper text to display. If null and PropertyExpression is provided, 
+    /// description will be extracted from the Display attribute.
+    /// </summary>
+    [Parameter]
+    public string? HelperText { get; set; }
+
+    /// <summary>
+    /// Property expression for the model (e.g., x => x.Name). 
+    /// Used to automatically extract description from Display attribute.
+    /// </summary>
+    [Parameter]
+    public Expression<Func<TModel, object>>? PropertyExpression { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    [Parameter]
+    public string? Style { get; set; }
+
+    private string? GetHelperText()
+    {
+        // If HelperText is explicitly provided, use it
+        if (HelperText != null)
+            return HelperText;
+
+        // If PropertyExpression is provided, use FormAttributeHelper to extract description
+        if (PropertyExpression != null)
+        {
+            try
+            {
+                return FormAttributeHelper.GetDescription(PropertyExpression);
+            }
+            catch
+            {
+                // If extraction fails, return null
+                return null;
+            }
+        }
+
+        return null;
+    }
+}
+

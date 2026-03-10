@@ -1,0 +1,194 @@
+@typeparam TEntity where TEntity : class, new()
+@using MudBlazor
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @if (!string.IsNullOrEmpty(Description))
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true">
+                    <MudText Typo="Typo.body2">@Description</MudText>
+                </MudAlert>
+            }
+
+            @if (editContext != null && entity != null)
+            {
+                <EditForm EditContext="@editContext" OnValidSubmit="HandleSubmit">
+                    <DataAnnotationsValidator />
+                    
+                    <MudGrid Spacing="2">
+                        @if (!string.IsNullOrEmpty(errorMessage))
+                        {
+                            <MudItem xs="12">
+                                <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
+                                    <MudText>@errorMessage</MudText>
+                                    @if (errorDetails != null && errorDetails.Length > 0)
+                                    {
+                                        <MudList T="string" Dense="true">
+                                            @foreach (var detail in errorDetails)
+                                            {
+                                                <MudListItem>@detail</MudListItem>
+                                            }
+                                        </MudList>
+                                    }
+                                </MudAlert>
+                            </MudItem>
+                        }
+
+                        @if (FormContent != null)
+                        {
+                            @FormContent(entity)
+                        }
+                        else
+                        {
+                            <MudItem xs="12">
+                                <MudText Color="Color.Error">FormContent is required. Please provide a RenderFragment to define the form fields.</MudText>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </EditForm>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" 
+                   Variant="Variant.Text" 
+                   Color="Color.Default"
+                   Disabled="@isSaving">
+            Cancel
+        </MudButton>
+        <MudButton OnClick="HandleSubmit" 
+                   Variant="Variant.Filled" 
+                   Color="Color.Primary"
+                   Disabled="@(isSaving || (editContext != null && !editContext.Validate()))"
+                   StartIcon="@Icons.Material.Filled.Add">
+            @if (isSaving)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <MudText Class="ms-2">Creating...</MudText>
+            }
+            else
+            {
+                <MudText>Create @EntityDisplayName</MudText>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] 
+    IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public string EntityDisplayName { get; set; } = "Entity";
+
+    [Parameter]
+    public string? Description { get; set; }
+
+    [Parameter, EditorRequired]
+    public RenderFragment<TEntity> FormContent { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public Func<TEntity, Task<(bool Success, string? ErrorMessage, string[]? ErrorDetails)>> OnCreate { get; set; } = null!;
+
+    [Parameter]
+    public bool AutoSetModifiedBy { get; set; } = true;
+
+    [Parameter]
+    public Action<TEntity>? OnEntityCreated { get; set; }
+
+    [Parameter]
+    public bool PromptForNote { get; set; } = false;
+
+    private TEntity? entity;
+    private EditContext? editContext;
+    private bool isSaving = false;
+    private string? errorMessage;
+    private string[]? errorDetails;
+
+    protected override async Task OnInitializedAsync()
+    {
+        entity = new TEntity();
+        
+        // Auto-set ModifiedBy if the entity has that property
+        if (AutoSetModifiedBy)
+        {
+            await SetModifiedBy();
+        }
+
+        editContext = new EditContext(entity);
+    }
+
+    private async Task SetModifiedBy()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userEmail = user.Identity?.Name ?? user.Claims.FirstOrDefault(c => c.Type.Contains("email"))?.Value;
+
+            if (!string.IsNullOrEmpty(userEmail) && entity != null)
+            {
+                var modifiedByProperty = typeof(TEntity).GetProperty("ModifiedBy");
+                if (modifiedByProperty != null && modifiedByProperty.CanWrite)
+                {
+                    modifiedByProperty.SetValue(entity, userEmail);
+                }
+            }
+        }
+        catch
+        {
+            // Silently fail if we can't set ModifiedBy
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (entity == null || editContext == null) return;
+
+        // Validate the form
+        if (!editContext.Validate())
+        {
+            errorMessage = "Please correct the validation errors before submitting.";
+            return;
+        }
+
+        isSaving = true;
+        errorMessage = null;
+        errorDetails = null;
+
+        try
+        {
+            // Call the create function
+            var (success, error, details) = await OnCreate(entity);
+
+            if (success)
+            {
+                // Invoke the callback if provided
+                OnEntityCreated?.Invoke(entity);
+
+                // Close the dialog with the created entity
+                MudDialog.Close(DialogResult.Ok(entity));
+            }
+            else
+            {
+                errorMessage = error ?? "Failed to create entity";
+                errorDetails = details;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error creating entity: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}

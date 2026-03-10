@@ -1,0 +1,80 @@
+@using rs_ruralia.Shared.Enums
+@inject ViewModeService ViewModeService
+@implements IDisposable
+
+@if (IsVisible)
+{
+    <MudExpansionPanel Text="@Title" 
+                       Icon="@Icon"
+                       Expanded="@Expanded"
+                       Disabled="@Disabled">
+        <TitleContent>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="width: 100%;">
+                <MudIcon Icon="@Icon" Size="Size.Medium" />
+                <MudText Typo="Typo.h6" Style="flex-grow: 1;">@Title</MudText>
+                @if (ShowCount && Count.HasValue)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="@CountColor" Variant="Variant.Filled">
+                        @Count.Value
+                    </MudChip>
+                }
+                @if (HeaderActions != null)
+                {
+                    @HeaderActions
+                }
+            </MudStack>
+        </TitleContent>
+        <ChildContent>
+            <MudPaper Elevation="0" Class="pa-3">
+                @if (ChildContent != null)
+                {
+                    @ChildContent
+                }
+            </MudPaper>
+        </ChildContent>
+    </MudExpansionPanel>
+}
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string Icon { get; set; } = Icons.Material.Filled.Info;
+
+    [Parameter]
+    public bool Expanded { get; set; } = false;
+
+    [Parameter]
+    public bool Disabled { get; set; } = false;
+
+    [Parameter]
+    public ViewMode MinimumViewMode { get; set; } = ViewMode.Public;
+
+    [Parameter]
+    public bool ShowCount { get; set; } = false;
+
+    [Parameter]
+    public int? Count { get; set; }
+
+    [Parameter]
+    public Color CountColor { get; set; } = Color.Primary;
+
+    [Parameter]
+    public RenderFragment? HeaderActions { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    private bool IsVisible => ViewModeService.IsAtLeast(MinimumViewMode);
+
+    protected override void OnInitialized()
+    {
+        ViewModeService.OnViewModeChanged += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        ViewModeService.OnViewModeChanged -= StateHasChanged;
+    }
+}
