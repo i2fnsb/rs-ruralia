@@ -131,6 +131,7 @@
                                  Virtualize="true"
                                  Dense="true"
                                  Hover="true"
+                                 QuickFilter="@_quickFilter"
                                  RowClick="@((args) => OnItemClicked.InvokeAsync(args.Item))"
                                  SelectedItem="@SelectedItem">
                             <Columns>
@@ -487,4 +488,23 @@
             ViewModeService.OnViewModeChanged -= HandleViewModeChanged;
         }
     }
+
+    // Quick filter function for DataGrid search
+    private Func<TEntity, bool> _quickFilter => entity =>
+    {
+        if (string.IsNullOrWhiteSpace(SearchString))
+            return true;
+
+        // Get display text for the entity
+        var displayText = GetItemDisplayText?.Invoke(entity) ?? string.Empty;
+
+        // Search in display text
+        if (displayText.Contains(SearchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // You can add more search fields here if needed
+        // For example, search in additional properties
+
+        return false;
+    };
 }

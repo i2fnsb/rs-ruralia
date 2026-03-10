@@ -1,4 +1,6 @@
 @typeparam TEntity
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <MudPaper Elevation="0" Class="pa-4 mb-4" Style="background: linear-gradient(135deg, var(--mud-palette-primary) 0%, var(--mud-palette-primary-darken) 100%);">
     <MudGrid>
@@ -26,7 +28,7 @@
                 }
             </MudStack>
         </MudItem>
-        @if (ShowViewModeSelector)
+        @if (ShowViewModeSelector && _isAuthenticated)
         {
             <MudItem xs="12" md="4">
                 <MudStack AlignItems="AlignItems.End" Justify="Justify.Center" Style="height: 100%;">
@@ -52,4 +54,12 @@
 
     [Parameter]
     public RenderFragment? ActionContent { get; set; }
+
+    private bool _isAuthenticated = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _isAuthenticated = authState.User.Identity?.IsAuthenticated ?? false;
+    }
 }
