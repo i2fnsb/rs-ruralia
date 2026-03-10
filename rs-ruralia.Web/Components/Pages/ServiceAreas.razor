@@ -59,8 +59,16 @@
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                         <MudIcon Icon="@Icons.Material.Filled.List" Color="Color.Surface" Size="Size.Large" />
                         <MudText Typo="Typo.h6" Style="color: white; font-weight: 600;">Service Areas</MudText>
+                        @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Add" 
+                                          Color="Color.Primary" 
+                                          Size="Size.Medium"
+                                          OnClick="@OpenCreateDialog"
+                                          Style="margin-left: auto; background: white; border-radius: 8px; border: 2px solid var(--mud-palette-primary);" />
+                        }
                     </MudStack>
-                    <MudTextField @bind-Value="_searchString" 
+                    <MudTextField @bind-Value="_searchString"
                                   Placeholder="Search areas..." 
                                   Adornment="Adornment.Start" 
                                   Immediate="true"
@@ -2087,6 +2095,189 @@
         catch (Exception)
         {
             // Silently fail - note creation is optional
+        }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var parameters = new DialogParameters<CreateEntityDialog<ServiceArea>>
+        {
+            { x => x.EntityDisplayName, "Service Area" },
+            { x => x.Description, "Create a new service area record. All fields marked with * are required." },
+            { x => x.OnCreate, new Func<ServiceArea, Task<(bool, string?, string[]?)>>(CreateServiceArea) },
+            { x => x.AutoSetModifiedBy, true },
+            { x => x.FormContent, GetServiceAreaFormContent() }
+        };
+
+        var options = new DialogOptions 
+        { 
+            CloseButton = true, 
+            MaxWidth = MaxWidth.Large, 
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await DialogService.ShowAsync<CreateEntityDialog<ServiceArea>>("Create New Service Area", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is ServiceArea createdServiceArea)
+        {
+            // Reload service areas to include the new one
+            await LoadServiceAreas();
+
+            // Select the newly created service area
+            selectedServiceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == createdServiceArea.Id);
+            if (selectedServiceArea != null)
+            {
+                await LoadAllVersions();
+
+                // Update URL
+                var uri = NavigationManager.GetUriWithQueryParameter("id", selectedServiceArea.Id);
+                NavigationManager.NavigateTo(uri, replace: true);
+            }
+
+            successMessage = $"Service area '{createdServiceArea.Name}' created successfully!";
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private RenderFragment<ServiceArea> GetServiceAreaFormContent() => entity => __builder =>
+    {
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.Name" 
+                       TModel="ServiceArea" 
+                       TValue="string" 
+                       TLookup="object"
+                       Property="@(x => x.Name)"
+                       For="@(() => entity.Name)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.FeatureObjectId" 
+                       TModel="ServiceArea" 
+                       TValue="string" 
+                       TLookup="object"
+                       Property="@(x => x.FeatureObjectId)"
+                       For="@(() => entity.FeatureObjectId)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.OrgKey" 
+                       TModel="ServiceArea" 
+                       TValue="int?" 
+                       TLookup="object"
+                       Property="@(x => x.OrgKey)"
+                       For="@(() => entity.OrgKey)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.CurrentMileage" 
+                       TModel="ServiceArea" 
+                       TValue="decimal?" 
+                       TLookup="object"
+                       Property="@(x => x.CurrentMileage)"
+                       Format="N3"
+                       For="@(() => entity.CurrentMileage)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.AbolishMergeYear" 
+                       TModel="ServiceArea" 
+                       TValue="int?" 
+                       TLookup="object"
+                       Property="@(x => x.AbolishMergeYear)"
+                       For="@(() => entity.AbolishMergeYear)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.MaximumMillRate" 
+                       TModel="ServiceArea" 
+                       TValue="decimal?" 
+                       TLookup="object"
+                       Property="@(x => x.MaximumMillRate)"
+                       Format="N3"
+                       For="@(() => entity.MaximumMillRate)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.CurrentMillRate" 
+                       TModel="ServiceArea" 
+                       TValue="decimal?" 
+                       TLookup="object"
+                       Property="@(x => x.CurrentMillRate)"
+                       Format="N3"
+                       For="@(() => entity.CurrentMillRate)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.FireMillRate" 
+                       TModel="ServiceArea" 
+                       TValue="decimal?" 
+                       TLookup="object"
+                       Property="@(x => x.FireMillRate)"
+                       Format="N3"
+                       For="@(() => entity.FireMillRate)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.MillLevy" 
+                       TModel="ServiceArea" 
+                       TValue="decimal?" 
+                       TLookup="object"
+                       Property="@(x => x.MillLevy)"
+                       Format="N13"
+                       For="@(() => entity.MillLevy)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.TaxAuthorityCode" 
+                       TModel="ServiceArea" 
+                       TValue="string" 
+                       TLookup="object"
+                       Property="@(x => x.TaxAuthorityCode)"
+                       For="@(() => entity.TaxAuthorityCode)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.InitialTaxYear" 
+                       TModel="ServiceArea" 
+                       TValue="int?" 
+                       TLookup="object"
+                       Property="@(x => x.InitialTaxYear)"
+                       For="@(() => entity.InitialTaxYear)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.MatchFeatureLayer" 
+                       TModel="ServiceArea" 
+                       TValue="bool?" 
+                       TLookup="object"
+                       Property="@(x => x.MatchFeatureLayer)"
+                       For="@(() => entity.MatchFeatureLayer)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.ServiceAreaCodeId" 
+                       TModel="ServiceArea" 
+                       TValue="int?"
+                       TLookup="ServiceAreaCode"
+                       Property="@(x => x.ServiceAreaCodeId)"
+                       LookupItems="@serviceAreaCodes"
+                       LookupTextSelector="@(item => $"{((ServiceAreaCode)item).Code} - {((ServiceAreaCode)item).Description}")"
+                       For="@(() => entity.ServiceAreaCodeId)" />
+        </MudItem>
+    };
+
+    private async Task<(bool Success, string? ErrorMessage, string[]? ErrorDetails)> CreateServiceArea(ServiceArea entity)
+    {
+        try
+        {
+            var result = await ServiceAreasApi.CreateServiceAreaAsync(entity);
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                // Update the entity with the returned data (which includes the ID)
+                entity.Id = result.Data.Id;
+                entity.ValidFrom = result.Data.ValidFrom;
+
+                return (true, null, null);
+            }
+            else
+            {
+                return (false, result?.ErrorMessage ?? "Failed to create service area", result?.Errors);
+            }
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Error creating service area: {ex.Message}", null);
         }
     }
 }
