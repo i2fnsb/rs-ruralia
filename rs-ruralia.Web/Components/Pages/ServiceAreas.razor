@@ -50,104 +50,19 @@
                        EnableEditPermissionCheck="true"
                        CanEditChanged="@(async (canEdit) => { this.canEdit = canEdit; await InvokeAsync(StateHasChanged); })"
                        IsEditorChanged="@(async (editor) => { this.isEditor = editor; await InvokeAsync(StateHasChanged); })"
-                       OnEditModeCancelled="@HandleEditModeCancelled">
-
-    <!-- Header Actions -->
-    <HeaderActions>
-        @if (selectedServiceArea != null)
-        {
-            <MudChip T="string" 
-                     Size="Size.Medium" 
-                     Color="Color.Surface" 
-                     Style="color: white; font-weight: 500;">
-                @selectedServiceArea.Name
-            </MudChip>
-        }
-    </HeaderActions>
-
-    <!-- List Header Actions (Create Button) -->
-    <ListHeaderActions>
-        @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
-        {
-            <MudIconButton Icon="@Icons.Material.Filled.Add" 
-                          Color="Color.Primary" 
-                          Size="Size.Medium"
-                          OnClick="@OpenCreateDialog"
-                          Style="margin-left: auto; background: white; border-radius: 8px; border: 2px solid var(--mud-palette-primary);" />
-        }
-    </ListHeaderActions>
-
-    <!-- List Content (DataGrid) -->
-    <ListContent>
-        @if (isLoading)
-        {
-            <MudStack Spacing="2" Class="pa-4" Style="flex: 1;">
-                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
-                <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary">
-                    Loading service areas...
-                </MudText>
-                @for (int i = 0; i < 5; i++)
-                {
-                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="50px" />
-                }
-            </MudStack>
-        }
-        else if (serviceAreas == null || !serviceAreas.Any())
-        {
-            <MudStack Spacing="3" Class="pa-4" AlignItems="AlignItems.Center" Justify="Justify.Center" Style="flex: 1;">
-                <MudIcon Icon="@Icons.Material.Filled.SearchOff" Color="Color.Secondary" Style="font-size: 3rem; opacity: 0.5;" />
-                <MudText Typo="Typo.body1" Color="Color.Secondary" Align="Align.Center">
-                    No service areas found
-                </MudText>
-                @if (!string.IsNullOrWhiteSpace(_searchString))
-                {
-                    <MudButton Variant="Variant.Text" 
-                              Color="Color.Primary" 
-                              StartIcon="@Icons.Material.Filled.Clear"
-                              OnClick="@(() => _searchString = string.Empty)">
-                        Clear Search
-                    </MudButton>
-                }
-            </MudStack>
-        }
-        else
-        {
-            <MudDataGrid T="ServiceArea"
-                     Items="@serviceAreas" 
-                     QuickFilter="@_quickFilter"
-                     Height="100%"
-                     FixedHeader="true"
-                     Virtualize="true"
-                     RowClick="RowClicked"
-                     SelectedItem="selectedServiceArea"
-                     Dense="true"
-                     Hover="true"
-                     RowStyleFunc="@RowStyleFunc"
-                     Style="flex: 1; overflow: auto;">
-                <Columns>
-                    <TemplateColumn Title="" CellStyle="width: 40px; padding: 8px;">
-                        <CellTemplate>
-                            @if (selectedServiceArea?.Id == context.Item.Id)
-                            {
-                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Primary" Size="Size.Small" />
-                            }
-                            else
-                            {
-                                <MudIcon Icon="@Icons.Material.Filled.Landscape" Color="Color.Default" Size="Size.Small" Style="opacity: 0.5;" />
-                            }
-                        </CellTemplate>
-                    </TemplateColumn>
-                    <TemplateColumn Title="Service Area">
-                        <CellTemplate>
-                            <MudText Typo="Typo.body2" Style="@(selectedServiceArea?.Id == context.Item.Id ? "font-weight: 600;" : "font-weight: 500;")">
-                                @context.Item.Name
-                            </MudText>
-                        </CellTemplate>
-                    </TemplateColumn>
-                </Columns>
-            </MudDataGrid>
-        }
-    </ListContent>
+                       OnEditModeCancelled="@HandleEditModeCancelled"
+                       SelectedItem="@selectedServiceArea"
+                       GetSelectedItemDisplayText="@(sa => sa.Name ?? "")"
+                       ShowSelectedItemChip="true"
+                       ShowCreateButton="true"
+                       CreateButtonTitle="Create New Service Area"
+                       OnCreateClicked="@OpenCreateDialog"
+                       UseBuiltInDataGrid="true"
+                       IsLoadingItems="@isLoading"
+                       Items="@serviceAreas"
+                       OnItemClicked="@(async (item) => await HandleItemClick(item))"
+                       GetItemIcon="@(sa => Icons.Material.Filled.Landscape)"
+                       GetItemDisplayText="@(sa => sa.Name ?? "")">
 
     <!-- Detail Content (Expandable Sections) -->
     <DetailContent>
@@ -628,8 +543,7 @@
                                                     <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
                                                                   Size="Size.Small" 
                                                                   Color="Color.Primary" 
-                                                                  OnClick="@(() => NavigateToCommissionSeat(seat))"
-                                                                  Title="View Commission Seat Details" />
+                                                                  OnClick="@(() => NavigateToCommissionSeat(seat))" />
                                                 </MudStack>
                                             </CardHeaderContent>
                                         </MudCardHeader>
@@ -696,8 +610,7 @@
                                                             <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
                                                                           Size="Size.Small" 
                                                                           Color="Color.Primary" 
-                                                                          OnClick="@(() => NavigationManager.NavigateTo($"/commissioners?id={context.Id}"))"
-                                                                          Title="View Details" />
+                                                                          OnClick="@(() => NavigationManager.NavigateTo($"/commissioners?id={context.Id}"))" />
                                                         </MudTd>
                                                     </RowTemplate>
                                                 </MudTable>
@@ -785,8 +698,7 @@
                                             <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
                                                           Size="Size.Small" 
                                                           Color="Color.Primary" 
-                                                          OnClick="@(() => NavigateToRfq(context))"
-                                                          Title="View RFQ Details" />
+                                                          OnClick="@(() => NavigateToRfq(context))" />
                                         </MudTd>
                                     </RowTemplate>
                                 </MudTable>
@@ -860,8 +772,7 @@
                                             <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
                                                           Size="Size.Small" 
                                                           Color="Color.Primary" 
-                                                          OnClick="@(() => NavigateToRoad(context))"
-                                                          Title="View Road Details" />
+                                                          OnClick="@(() => NavigateToRoad(context))" />
                                         </MudTd>
                                     </RowTemplate>
                                 </MudTable>
@@ -1325,9 +1236,9 @@
         return isEditMode && IsViewingCurrentVersion();
     }
 
-    private async Task RowClicked(DataGridRowClickEventArgs<ServiceArea> args)
+    private async Task HandleItemClick(ServiceArea item)
     {
-        selectedServiceArea = args.Item;
+        selectedServiceArea = item;
         isEditMode = false;
         ClearMessages();
         await LoadAllVersions();
@@ -1494,23 +1405,6 @@
         ModifiedBy = source.ModifiedBy
     };
 
-    private Func<ServiceArea, bool> _quickFilter => x =>
-    {
-        if (string.IsNullOrWhiteSpace(_searchString))
-            return true;
-
-        return x.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true;
-    };
-
-    private string RowStyleFunc(ServiceArea item, int index)
-    {
-        if (selectedServiceArea?.Id == item.Id)
-        {
-            return "background-color: var(--mud-palette-primary-lighten); cursor: pointer;";
-        }
-        return "cursor: pointer;";
-    }
-
     private async Task<bool> CreateServiceAreaCode(ServiceAreaCode entity)
     {
         var result = await ServiceAreaCodesApi.CreateServiceAreaCodeAsync(entity);
@@ -1553,94 +1447,6 @@
             { "outFields", "*" },
             { "returnGeometry", "true" }
         };
-    }
-
-    private async Task OpenLinkOrdinanceDialog()
-    {
-        if (selectedServiceArea == null) return;
-
-        // Get ALL ordinances (not just unlinked ones, since service_area_id is required)
-        var allOrdinancesResult = await OrdinancesApi.GetAllOrdinancesAsync();
-
-        if (allOrdinancesResult?.IsSuccess != true || allOrdinancesResult.Data == null)
-        {
-            errorMessage = "Failed to load available ordinances";
-            return;
-        }
-
-        // Exclude ordinances already linked to THIS service area
-        var availableOrdinances = allOrdinancesResult.Data
-            .Where(o => o.ServiceAreaId != selectedServiceArea.Id)
-            .ToList();
-
-        if (!availableOrdinances.Any())
-        {
-            errorMessage = "All ordinances are already linked to this service area";
-            return;
-        }
-
-        var parameters = new DialogParameters<LinkOrdinanceDialog>
-        {
-            { x => x.AvailableOrdinances, availableOrdinances },
-            { x => x.OrdinanceTypes, ordinanceTypes },
-            { x => x.AllServiceAreas, serviceAreas },
-            { x => x.TargetServiceAreaName, selectedServiceArea.Name }
-        };
-
-        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Large, FullWidth = true };
-        var dialog = await DialogService.ShowAsync<LinkOrdinanceDialog>("Link Ordinance to Service Area", parameters, options);
-        var result = await dialog.Result;
-
-        if (!result.Canceled && result.Data is Ordinance selectedOrdinance)
-        {
-            await LinkOrdinanceToServiceArea(selectedOrdinance);
-        }
-    }
-
-    private async Task LinkOrdinanceToServiceArea(Ordinance ordinance)
-    {
-        if (selectedServiceArea == null) return;
-
-        isSaving = true;
-        ClearMessages();
-
-        try
-        {
-            var oldServiceAreaId = ordinance.ServiceAreaId;
-            var oldServiceAreaName = serviceAreas?.FirstOrDefault(sa => sa.Id == oldServiceAreaId)?.Name ?? "Unknown";
-
-            // Update the ordinance to link it to this service area
-            ordinance.ServiceAreaId = selectedServiceArea.Id;
-            var result = await OrdinancesApi.UpdateOrdinanceAsync(ordinance.Id, ordinance);
-
-            if (result?.IsSuccess == true)
-            {
-                if (oldServiceAreaId.HasValue && oldServiceAreaId != selectedServiceArea.Id)
-                {
-                    successMessage = $"Successfully transferred ordinance '{ordinance.OrdinanceName}' from {oldServiceAreaName} to {selectedServiceArea.Name}";
-                }
-                else
-                {
-                    successMessage = $"Successfully linked ordinance '{ordinance.OrdinanceName}' to {selectedServiceArea.Name}";
-                }
-
-                await LoadServiceAreaOrdinances();
-                await InvokeAsync(StateHasChanged);
-            }
-            else
-            {
-                errorMessage = result?.ErrorMessage ?? "Failed to link ordinance";
-                errorDetails = result?.Errors;
-            }
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Error linking ordinance: {ex.Message}";
-        }
-        finally
-        {
-            isSaving = false;
-        }
     }
 
     private void NavigateToOrdinance(Ordinance ordinance)

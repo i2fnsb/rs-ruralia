@@ -30,100 +30,23 @@
                        EnableViewModeManagement="true"
                        EnableEditPermissionCheck="true"
                        CanEditChanged="@(async (canEdit) => { this.canEdit = canEdit; await InvokeAsync(StateHasChanged); })"
-                       OnEditModeCancelled="@HandleEditModeCancelled">
+                       OnEditModeCancelled="@HandleEditModeCancelled"
+                       SelectedItem="@selectedOrdinance"
+                       GetSelectedItemDisplayText="@(o => $"{o.OrdinanceName} ({o.OrdinanceYear})")"
+                       ShowSelectedItemChip="true"
+                       ShowCreateButton="true"
+                       CreateButtonTitle="Create New Ordinance"
+                       OnCreateClicked="@OpenCreateDialog"
+                       UseBuiltInDataGrid="true"
+                       IsLoadingItems="@isLoading"
+                       Items="@ordinances"
+                       OnItemClicked="@(async (item) => await HandleItemClick(item))"
+                       GetItemIcon="@(o => Icons.Material.Filled.Gavel)"
+                       GetItemDisplayText="@(o => o.OrdinanceName ?? "")">
 
-    <!-- Header Actions -->
-    <HeaderActions>
-        @if (selectedOrdinance != null)
-        {
-            <MudChip T="string" 
-                     Size="Size.Medium" 
-                     Color="Color.Surface" 
-                     Style="color: white; font-weight: 500;">
-                @selectedOrdinance.OrdinanceName (@selectedOrdinance.OrdinanceYear)
-            </MudChip>
-        }
-    </HeaderActions>
-
-    <!-- List Header Actions (Create Button) -->
-    <ListHeaderActions>
-        @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
-        {
-            <MudIconButton Icon="@Icons.Material.Filled.Add" 
-                          Color="Color.Primary" 
-                          Size="Size.Medium"
-                          OnClick="@OpenCreateDialog"
-                          Title="Create New Ordinance"
-                          Style="margin-left: auto; background: white; border-radius: 8px; border: 2px solid var(--mud-palette-primary);" />
-        }
-    </ListHeaderActions>
-
-    <!-- List Content (DataGrid) -->
-    <ListContent>
-        @if (isLoading)
-        {
-            <MudStack Spacing="2" Class="pa-4" Style="flex: 1;">
-                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
-                <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary">
-                    Loading ordinances...
-                </MudText>
-                @for (int i = 0; i < 5; i++)
-                {
-                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="50px" />
-                }
-            </MudStack>
-        }
-        else if (ordinances == null || !ordinances.Any())
-        {
-            <MudStack Spacing="3" Class="pa-4" AlignItems="AlignItems.Center" Justify="Justify.Center" Style="flex: 1;">
-                <MudIcon Icon="@Icons.Material.Filled.SearchOff" Color="Color.Secondary" Style="font-size: 3rem; opacity: 0.5;" />
-                <MudText Typo="Typo.body1" Color="Color.Secondary" Align="Align.Center">
-                    No ordinances found
-                </MudText>
-                @if (!string.IsNullOrWhiteSpace(_searchString))
-                {
-                    <MudButton Variant="Variant.Text" 
-                              Color="Color.Primary" 
-                              StartIcon="@Icons.Material.Filled.Clear"
-                              OnClick="@(() => _searchString = string.Empty)">
-                        Clear Search
-                    </MudButton>
-                }
-            </MudStack>
-        }
-        else
-        {
-            <MudDataGrid T="Ordinance"
-                     Items="@ordinances" 
-                     QuickFilter="@_quickFilter"
-                     Height="100%"
-                     FixedHeader="true"
-                     Virtualize="true"
-                     RowClick="RowClicked"
-                     SelectedItem="selectedOrdinance"
-                     Dense="true"
-                     Hover="true"
-                     RowStyleFunc="@RowStyleFunc"
-                     Style="flex: 1; overflow: auto;">
-                <Columns>
-                    <TemplateColumn Title="" CellStyle="width: 40px; padding: 8px;">
-                        <CellTemplate>
-                            @if (selectedOrdinance?.Id == context.Item.Id)
-                            {
-                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Primary" Size="Size.Small" />
-                            }
-                            else
-                            {
-                                <MudIcon Icon="@Icons.Material.Filled.Gavel" Color="Color.Default" Size="Size.Small" Style="opacity: 0.5;" />
-                            }
-                        </CellTemplate>
-                    </TemplateColumn>
-                    <PropertyColumn Property="x => x.OrdinanceName" Title="Ordinance" />
-                    <PropertyColumn Property="x => x.OrdinanceYear" Title="Year" />
-                </Columns>
-            </MudDataGrid>
-        }
-    </ListContent>
+    <AdditionalItemColumns>
+        <PropertyColumn T="Ordinance" TProperty="int?" Property="@(x => x.OrdinanceYear)" Title="Year" />
+    </AdditionalItemColumns>
 
     <!-- Detail Content (Expandable Sections) -->
     <DetailContent>
@@ -625,9 +548,9 @@
         return isEditMode && IsViewingCurrentVersion();
     }
 
-    private async Task RowClicked(DataGridRowClickEventArgs<Ordinance> args)
+    private async Task HandleItemClick(Ordinance item)
     {
-        selectedOrdinance = args.Item;
+        selectedOrdinance = item;
         isEditMode = false;
         ClearMessages();
         await LoadAllVersions();
@@ -779,24 +702,6 @@
         ValidTo = source.ValidTo,
         ModifiedBy = source.ModifiedBy
     };
-
-    private Func<Ordinance, bool> _quickFilter => x =>
-    {
-        if (string.IsNullOrWhiteSpace(_searchString))
-            return true;
-
-        return x.OrdinanceName?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true ||
-               x.OrdinanceYear?.ToString().Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true;
-    };
-
-    private string RowStyleFunc(Ordinance item, int index)
-    {
-        if (selectedOrdinance?.Id == item.Id)
-        {
-            return "background-color: var(--mud-palette-primary-lighten); cursor: pointer;";
-        }
-        return "cursor: pointer;";
-    }
 
     private async Task<bool> CreateOrdinanceType(OrdinanceType entity)
     {

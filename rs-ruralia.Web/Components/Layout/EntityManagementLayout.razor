@@ -17,6 +17,15 @@
         {
             @HeaderActions
         }
+        else if (ShowSelectedItemChip && SelectedItem != null && GetSelectedItemDisplayText != null)
+        {
+            <MudChip T="string" 
+                     Size="Size.Medium" 
+                     Color="Color.Surface" 
+                     Style="color: white; font-weight: 500;">
+                @GetSelectedItemDisplayText(SelectedItem)
+            </MudChip>
+        }
     </ActionContent>
 </EntityHeader>
 
@@ -34,6 +43,15 @@
                         @if (ListHeaderActions != null)
                         {
                             @ListHeaderActions
+                        }
+                        else if (ShowCreateButton && _canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Add" 
+                                          Color="Color.Primary" 
+                                          Size="Size.Medium"
+                                          OnClick="@(async () => await OnCreateClicked.InvokeAsync())"
+                                          Title="@CreateButtonTitle"
+                                          Style="margin-left: auto; background: white; border-radius: 8px; border: 2px solid var(--mud-palette-primary);" />
                         }
                     </MudStack>
                     
@@ -69,6 +87,89 @@
                 @if (ListContent != null)
                 {
                     @ListContent
+                }
+                else if (UseBuiltInDataGrid)
+                {
+                    @if (IsLoadingItems)
+                    {
+                        <MudStack Spacing="2" Class="pa-4" Style="flex: 1;">
+                            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                            <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary">
+                                Loading @EntityPluralName...
+                            </MudText>
+                            @for (int i = 0; i < 5; i++)
+                            {
+                                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="50px" />
+                            }
+                        </MudStack>
+                    }
+                    else if (Items == null || !Items.Any())
+                    {
+                        <MudStack Spacing="3" Class="pa-4" AlignItems="AlignItems.Center" Justify="Justify.Center" Style="flex: 1;">
+                            <MudIcon Icon="@Icons.Material.Filled.SearchOff" Color="Color.Secondary" Style="font-size: 3rem; opacity: 0.5;" />
+                            <MudText Typo="Typo.body1" Color="Color.Secondary" Align="Align.Center">
+                                No @EntityPluralName found
+                            </MudText>
+                            @if (!string.IsNullOrWhiteSpace(SearchString))
+                            {
+                                <MudButton Variant="Variant.Text" 
+                                          Color="Color.Primary" 
+                                          StartIcon="@Icons.Material.Filled.Clear"
+                                          OnClick="@(() => SearchString = string.Empty)">
+                                    Clear Search
+                                </MudButton>
+                            }
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudDataGrid T="TEntity"
+                                 Items="@Items" 
+                                 Height="100%"
+                                 FixedHeader="true"
+                                 Virtualize="true"
+                                 Dense="true"
+                                 Hover="true"
+                                 RowClick="@((args) => OnItemClicked.InvokeAsync(args.Item))"
+                                 SelectedItem="@SelectedItem">
+                            <Columns>
+                                <TemplateColumn Title="" CellStyle="width: 40px; padding: 8px;">
+                                    <CellTemplate>
+                                        @if (SelectedItem != null && EqualityComparer<TEntity>.Default.Equals(SelectedItem, context.Item))
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Primary" Size="Size.Small" />
+                                        }
+                                        else
+                                        {
+                                            @if (GetItemIcon != null)
+                                            {
+                                                <MudIcon Icon="@GetItemIcon(context.Item)" Color="Color.Default" Size="Size.Small" Style="opacity: 0.5;" />
+                                            }
+                                            else
+                                            {
+                                                <MudIcon Icon="@Icon" Color="Color.Default" Size="Size.Small" Style="opacity: 0.5;" />
+                                            }
+                                        }
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                <TemplateColumn Title="@EntitySingularName">
+                                    <CellTemplate>
+                                        @if (GetItemDisplayText != null)
+                                        {
+                                            var isSelected = SelectedItem != null && EqualityComparer<TEntity>.Default.Equals(SelectedItem, context.Item);
+                                            <MudText Typo="Typo.body2" Style="@(isSelected ? "font-weight: 600;" : "font-weight: 500;")">
+                                                @GetItemDisplayText(context.Item)
+                                            </MudText>
+                                        }
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                @if (AdditionalItemColumns != null)
+                                {
+                                    @AdditionalItemColumns
+                                }
+                            </Columns>
+                        </MudDataGrid>
+                    }
                 }
                 else
                 {
@@ -155,6 +256,15 @@
     [Parameter]
     public RenderFragment? HeaderActions { get; set; }
 
+    [Parameter]
+    public TEntity? SelectedItem { get; set; }
+
+    [Parameter]
+    public Func<TEntity, string>? GetSelectedItemDisplayText { get; set; }
+
+    [Parameter]
+    public bool ShowSelectedItemChip { get; set; } = true;
+
     #endregion
 
     #region List/DataGrid Parameters
@@ -169,7 +279,37 @@
     public RenderFragment? ListHeaderActions { get; set; }
 
     [Parameter]
+    public bool ShowCreateButton { get; set; } = false;
+
+    [Parameter]
+    public string CreateButtonTitle { get; set; } = "Create New";
+
+    [Parameter]
+    public EventCallback OnCreateClicked { get; set; }
+
+    [Parameter]
     public RenderFragment? ListContent { get; set; }
+
+    [Parameter]
+    public bool UseBuiltInDataGrid { get; set; } = false;
+
+    [Parameter]
+    public bool IsLoadingItems { get; set; } = false;
+
+    [Parameter]
+    public IEnumerable<TEntity>? Items { get; set; }
+
+    [Parameter]
+    public EventCallback<TEntity> OnItemClicked { get; set; }
+
+    [Parameter]
+    public Func<TEntity, string>? GetItemIcon { get; set; }
+
+    [Parameter]
+    public Func<TEntity, string>? GetItemDisplayText { get; set; }
+
+    [Parameter]
+    public RenderFragment? AdditionalItemColumns { get; set; }
 
     [Parameter]
     public bool ShowSearch { get; set; } = true;
