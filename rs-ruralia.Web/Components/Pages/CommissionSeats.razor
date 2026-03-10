@@ -1,0 +1,973 @@
+@page "/commission-seats"
+@rendermode InteractiveServer 
+@using rs_ruralia.Shared.Enums
+@using rs_ruralia.Web.Components.Dialogs
+@using rs_ruralia.Web.Helpers
+@inject CommissionSeatsApiClient CommissionSeatsApi
+@inject CommissionSeatTypesApiClient CommissionSeatTypesApi
+@inject CommissionSeatClassesApiClient CommissionSeatClassesApi
+@inject CommissionSeatStatusesApiClient CommissionSeatStatusesApi
+@inject ServiceAreasApiClient ServiceAreasApi
+@inject CommissionerProfilesApiClient CommissionerProfilesApi
+@inject CommissionerStatusesApiClient CommissionerStatusesApi
+@inject PersonProfilesApiClient PersonProfilesApi
+@inject PersonHonorificsApiClient PersonHonorificsApi
+@inject PersonSuffixesApiClient PersonSuffixesApi
+@inject NotesApiClient NotesApi
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IDialogService DialogService
+@inject ViewModeService ViewModeService
+
+<EntityManagementLayout TEntity="CommissionSeat"
+                       Title="Commission Seats"
+                       Subtitle="Manage commission seat assignments and commissioners"
+                       Icon="@Icons.Material.Filled.EventSeat"
+                       ShowViewModeSelector="true"
+                       ListTitle="Commission Seats"
+                       ListIcon="@Icons.Material.Filled.EventSeat"
+                       SearchPlaceholder="Search seats..."
+                       ShowSearch="true"
+                       SearchString="@_searchString"
+                       ShowTotalCount="true"
+                       TotalCount="@(commissionSeats?.Count())"
+                       CountIcon="@Icons.Material.Filled.EventSeat"
+                       HasSelection="@(selectedSeat != null)"
+                       EntitySingularName="a Commission Seat"
+                       EntityPluralName="commission seats"
+                       EnableViewModeManagement="true"
+                       EnableEditPermissionCheck="true"
+                       CanEditChanged="@(async (canEdit) => { this.canEdit = canEdit; await InvokeAsync(StateHasChanged); })"
+                       IsEditorChanged="@(async (editor) => { this.isEditor = editor; await InvokeAsync(StateHasChanged); })"
+                       OnEditModeCancelled="@HandleEditModeCancelled"
+                       SelectedItem="@selectedSeat"
+                       GetSelectedItemDisplayText="@GetSeatDisplayText"
+                       ShowSelectedItemChip="true"
+                       ShowCreateButton="true"
+                       CreateButtonTitle="Create New Commission Seat"
+                       OnCreateClicked="@OpenCreateDialog"
+                       UseBuiltInDataGrid="true"
+                       IsLoadingItems="@isLoading"
+                       Items="@commissionSeats"
+                       OnItemClicked="@(async (item) => await HandleItemClick(item))"
+                       GetItemIcon="@(s => Icons.Material.Filled.EventSeat)"
+                       GetItemDisplayText="@GetSeatDisplayText">
+
+    <AdditionalItemColumns>
+        <TemplateColumn T="CommissionSeat" Title="Service Area">
+            <CellTemplate>
+                @{
+                    var serviceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == context.Item.ServiceAreaId);
+                    @(serviceArea?.Name ?? "—")
+                }
+            </CellTemplate>
+        </TemplateColumn>
+    </AdditionalItemColumns>
+
+    <!-- Detail Content (Expandable Sections) -->
+    <DetailContent>
+        <MudExpansionPanels MultiExpansion="true">
+            <!-- Details Section -->
+            <SectionPanel Title="Details" 
+                         Icon="@Icons.Material.Filled.Info" 
+                         Expanded="true"
+                         MinimumViewMode="ViewMode.Public">
+                <VersionedDetailsPanel TEntity="CommissionSeat"
+                   AllVersions="@allVersions"
+                   CurrentVersion="@currentViewVersion"
+                   CurrentVersionChanged="@OnCurrentVersionChanged"
+                   GetValidFrom="@(x => x.ValidFrom)"
+                   GetValidTo="@(x => x.ValidTo)"
+                   GetModifiedBy="@(x => x.ModifiedBy)"
+                   GetDisplayText="@GetSeatDisplayText"
+                   CanEdit="@(canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))"
+                   IsEditMode="@isEditMode"
+                   OnEditClicked="@EnableEdit"
+                   IsLoading="@(isLoading || isLoadingHistory)"
+                   ErrorMessage="@(errorMessage ?? historyErrorMessage)"
+                   OnRestore="@HandleRestore">
+                    
+                    <!-- Edit Mode Content -->
+                    <DetailsContent Context="version">
+                        @if (editContext != null && editModel != null)
+                        {
+                            <EditForm EditContext="@editContext" OnValidSubmit="SaveEdit">
+                                <DataAnnotationsValidator />
+                                <MudGrid>
+                                    <MudItem xs="12">
+                                        @if (canEdit && IsViewingCurrentVersion() && ViewModeService.IsAtLeast(ViewMode.Admin))
+                                        {
+                                            @if (isEditMode)
+                                            {
+                                                <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
+                                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@isSaving">
+                                                        @if (isSaving)
+                                                        {
+                                                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                                                            <MudText Class="ms-2">Saving...</MudText>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudIcon Icon="@Icons.Material.Filled.Save" Class="me-1" /> <MudText>Save</MudText>
+                                                        }
+                                                    </MudButton>
+                                                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="CancelEdit" Disabled="@isSaving">
+                                                        Cancel
+                                                    </MudButton>
+                                                </MudStack>
+                                            }
+                                        }
+                                    </MudItem>
+
+                                    @if (!string.IsNullOrEmpty(successMessage))
+                                    {
+                                        <MudItem xs="12">
+                                            <MudAlert Severity="Severity.Success" Variant="Variant.Filled">@successMessage</MudAlert>
+                                        </MudItem>
+                                    }
+
+                                    @if (!string.IsNullOrEmpty(errorMessage))
+                                    {
+                                        <MudItem xs="12">
+                                            <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
+                                                <MudText>@errorMessage</MudText>
+                                                @if (errorDetails != null && errorDetails.Length > 0)
+                                                {
+                                                    <MudList T="string" Dense="true">
+                                                        @foreach (var detail in errorDetails)
+                                                        {
+                                                            <MudListItem>@detail</MudListItem>
+                                                        }
+                                                    </MudList>
+                                                }
+                                            </MudAlert>
+                                        </MudItem>
+                                    }
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.CommissionSeatTypeId" 
+                                                   TModel="CommissionSeat" 
+                                                   TValue="int"
+                                                   TLookup="CommissionSeatType"
+                                                   Property="@(x => x.CommissionSeatTypeId)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   LookupItems="@commissionSeatTypes"
+                                                   LookupTextSelector="@(item => ((CommissionSeatType)item).Type ?? string.Empty)"
+                                                   For="@(() => editModel.CommissionSeatTypeId)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.CommissionSeatClassId" 
+                                                   TModel="CommissionSeat" 
+                                                   TValue="int"
+                                                   TLookup="CommissionSeatClass"
+                                                   Property="@(x => x.CommissionSeatClassId)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   LookupItems="@commissionSeatClasses"
+                                                   LookupTextSelector="@(item => ((CommissionSeatClass)item).Class ?? string.Empty)"
+                                                   For="@(() => editModel.CommissionSeatClassId)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.CommissionSeatStatusId" 
+                                                   TModel="CommissionSeat" 
+                                                   TValue="int"
+                                                   TLookup="CommissionSeatStatus"
+                                                   Property="@(x => x.CommissionSeatStatusId)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   LookupItems="@commissionSeatStatuses"
+                                                   LookupTextSelector="@(item => ((CommissionSeatStatus)item).Status ?? string.Empty)"
+                                                   For="@(() => editModel.CommissionSeatStatusId)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.ServiceAreaId" 
+                                                   TModel="CommissionSeat" 
+                                                   TValue="int"
+                                                   TLookup="ServiceArea"
+                                                   Property="@(x => x.ServiceAreaId)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   LookupItems="@serviceAreas"
+                                                   LookupTextSelector="@(item => ((ServiceArea)item).Name ?? "")"
+                                                   For="@(() => editModel.ServiceAreaId)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.TermStartDate" 
+                                                   TModel="CommissionSeat" 
+                                                   TValue="DateTime?" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.TermStartDate)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   For="@(() => editModel.TermStartDate)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.TermEndDate" 
+                                                   TModel="CommissionSeat" 
+                                                   TValue="DateTime?" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.TermEndDate)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   For="@(() => editModel.TermEndDate)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField Value="editModel.ValidFrom" 
+                                                   TModel="CommissionSeat" 
+                                                   TValue="DateTime?" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.ValidFrom)"
+                                                   ReadOnly="true" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.ModifiedBy" 
+                                                   TModel="CommissionSeat" 
+                                                   TValue="string" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.ModifiedBy)"
+                                                   ReadOnly="true" />
+                                    </MudItem>
+                                </MudGrid>
+                            </EditForm>
+                        }
+                    </DetailsContent>
+
+                    <!-- View Mode Content -->
+                    <ViewModeContent Context="version">
+                        <MudGrid Spacing="3">
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string" TModel="CommissionSeat"
+                                         Label="Seat Type" 
+                                         Icon="@Icons.Material.Filled.Category"
+                                         ValueStyle="font-weight: 600; font-size: 1.1rem;"
+                                         PropertyExpression="@(x => x.CommissionSeatTypeId)">
+                                    <ValueContent>
+                                        @{
+                                            var seatType = commissionSeatTypes?.FirstOrDefault(t => t.Id == version.CommissionSeatTypeId);
+                                            <MudText Typo="Typo.body1" Style="font-weight: 600; font-size: 1.1rem;">
+                                                @(seatType?.Type ?? "—")
+                                            </MudText>
+                                        }
+                                    </ValueContent>
+                                </InfoCard>
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string" TModel="CommissionSeat"
+                                         Label="Seat Class" 
+                                         Icon="@Icons.Material.Filled.Class"
+                                         PropertyExpression="@(x => x.CommissionSeatClassId)">
+                                    <ValueContent>
+                                        @{
+                                            var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == version.CommissionSeatClassId);
+                                            <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                                                @(seatClass?.Class ?? "—")
+                                            </MudText>
+                                        }
+                                    </ValueContent>
+                                </InfoCard>
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string" TModel="CommissionSeat"
+                                         Label="Status" 
+                                         Icon="@Icons.Material.Filled.Circle"
+                                         PropertyExpression="@(x => x.CommissionSeatStatusId)">
+                                    <ValueContent>
+                                        @{
+                                            var status = commissionSeatStatuses?.FirstOrDefault(s => s.Id == version.CommissionSeatStatusId);
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Info">
+                                                @(status?.Status ?? "—")
+                                            </MudChip>
+                                        }
+                                    </ValueContent>
+                                </InfoCard>
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string" TModel="CommissionSeat"
+                                         Label="Service Area" 
+                                         Icon="@Icons.Material.Filled.Landscape"
+                                         PropertyExpression="@(x => x.ServiceAreaId)">
+                                    <ValueContent>
+                                        @{
+                                            var serviceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == version.ServiceAreaId);
+                                            if (serviceArea != null)
+                                            {
+                                                <MudButton Variant="Variant.Text" 
+                                                          Color="Color.Primary" 
+                                                          Size="Size.Small"
+                                                          StartIcon="@Icons.Material.Filled.OpenInNew"
+                                                          OnClick="@(() => NavigationManager.NavigateTo($"/service-areas?id={serviceArea.Id}"))">
+                                                    @serviceArea.Name
+                                                </MudButton>
+                                            }
+                                            else
+                                            {
+                                                <MudText>—</MudText>
+                                            }
+                                        }
+                                    </ValueContent>
+                                </InfoCard>
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string" TModel="CommissionSeat"
+                                         Label="Term Start Date" 
+                                         Value="@(version.TermStartDate?.ToString("MMM d, yyyy"))"
+                                         Icon="@Icons.Material.Filled.CalendarToday"
+                                         PropertyExpression="@(x => x.TermStartDate)" />
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string" TModel="CommissionSeat"
+                                         Label="Term End Date" 
+                                         Value="@(version.TermEndDate?.ToString("MMM d, yyyy"))"
+                                         Icon="@Icons.Material.Filled.Event"
+                                         PropertyExpression="@(x => x.TermEndDate)" />
+                            </MudItem>
+                        </MudGrid>
+                    </ViewModeContent>
+                </VersionedDetailsPanel>
+            </SectionPanel>
+
+            <!-- Commissioners Section -->
+            <SectionPanel Title="Commissioners" 
+                         Icon="@Icons.Material.Filled.Groups"
+                         MinimumViewMode="ViewMode.Public"
+                         ShowCount="true"
+                         Count="@(GetFilteredCommissioners()?.Count() ?? 0)"
+                         CountColor="Color.Secondary">
+                @if (selectedSeat != null)
+                {
+                    <MudStack Spacing="2">
+                        @if (isLoadingCommissioners)
+                        {
+                            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                        }
+                        else
+                        {
+                            var commissioners = GetFilteredCommissioners();
+                            if (commissioners != null && commissioners.Any())
+                            {
+                                <MudTable T="CommissionerProfile" Items="@commissioners" Hover="true" Striped="true" Dense="true">
+                                    <HeaderContent>
+                                        <MudTh>Person</MudTh>
+                                        <MudTh>Status</MudTh>
+                                        <MudTh>Appointed</MudTh>
+                                        <MudTh>End Date</MudTh>
+                                        <MudTh>Oath</MudTh>
+                                        <MudTh Style="width: 150px;">Actions</MudTh>
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd DataLabel="Person">
+                                            @if (isEditor)
+                                            {
+                                                <MudButton Variant="Variant.Text" 
+                                                          Color="Color.Primary" 
+                                                          Size="Size.Small"
+                                                          StartIcon="@Icons.Material.Filled.Person"
+                                                          OnClick="@(() => NavigationManager.NavigateTo($"/persons?id={context.PersonProfileId}"))">
+                                                    @GetPersonName(context.PersonProfileId)
+                                                </MudButton>
+                                            }
+                                            else
+                                            {
+                                                @GetPersonName(context.PersonProfileId)
+                                            }
+                                        </MudTd>
+                                        <MudTd DataLabel="Status">
+                                            @{
+                                                var status = commissionerStatuses?.FirstOrDefault(s => s.Id == context.CommissionerStatusId);
+                                                <MudChip T="string" 
+                                                        Size="Size.Small" 
+                                                        Color="@(status?.Active == true ? Color.Success : Color.Default)">
+                                                    @(status?.Status ?? "—")
+                                                </MudChip>
+                                            }
+                                        </MudTd>
+                                        <MudTd DataLabel="Appointed">@(context.AppointedDate?.ToString("MMM d, yyyy") ?? "—")</MudTd>
+                                        <MudTd DataLabel="End Date">@(context.EndDate?.ToString("MMM d, yyyy") ?? "—")</MudTd>
+                                        <MudTd DataLabel="Oath">
+                                            @if (context.Oath == true)
+                                            {
+                                                <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Color="Color.Success" />
+                                            }
+                                            else
+                                            {
+                                                <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" />
+                                            }
+                                        </MudTd>
+                                        <MudTd DataLabel="Actions">
+                                            <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
+                                                          Size="Size.Small" 
+                                                          Color="Color.Primary" 
+                                                          Title="View Commissioner Profile"
+                                                          OnClick="@(() => NavigationManager.NavigateTo($"/commissioners?id={context.Id}"))" />
+                                        </MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Align="Align.Center" Class="my-4">No commissioners assigned to this seat.</MudText>
+                            }
+                        }
+                    </MudStack>
+                }
+            </SectionPanel>
+
+            <!-- Notes Section -->
+            @if (canEdit)
+            {
+                <SectionPanel Title="Notes"
+                             Icon="@Icons.Material.Filled.Notes"
+                             MinimumViewMode="ViewMode.Admin"
+                             ShowCount="true"
+                             Count="@notesCount"
+                             CountColor="Color.Dark">
+                    <NotesPanel EntityType="commission_seat" 
+                               EntityId="@selectedSeat.Id"
+                               HighlightedNoteDate="@(currentViewVersion?.ValidFrom)"
+                               ShowHistory="true"
+                               NotesCountChanged="@OnNotesCountChanged" />
+                </SectionPanel>
+            }
+
+            <!-- Report Builder Section -->
+            @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
+            {
+                <SectionPanel Title="Report Builder"
+                             Icon="@Icons.Material.Filled.Assessment"
+                             MinimumViewMode="ViewMode.Admin">
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Text">
+                        Report Builder functionality will be implemented here.
+                    </MudAlert>
+                </SectionPanel>
+            }
+        </MudExpansionPanels>
+    </DetailContent>
+</EntityManagementLayout>
+
+@code {
+    [SupplyParameterFromQuery(Name = "id")]
+    public int? SeatId { get; set; }
+
+    private IEnumerable<CommissionSeat>? commissionSeats;
+    private IEnumerable<CommissionSeatType>? commissionSeatTypes;
+    private IEnumerable<CommissionSeatClass>? commissionSeatClasses;
+    private IEnumerable<CommissionSeatStatus>? commissionSeatStatuses;
+    private IEnumerable<ServiceArea>? serviceAreas;
+    private IEnumerable<CommissionerProfile>? commissionerProfiles;
+    private IEnumerable<CommissionerStatus>? commissionerStatuses;
+    private IEnumerable<PersonProfile>? personProfiles;
+    private IEnumerable<PersonHonorific>? personHonorifics;
+    private IEnumerable<PersonSuffix>? personSuffixes;
+    
+    private CommissionSeat? selectedSeat;
+    private bool isLoading = false;
+    private bool isSaving = false;
+    private bool isEditMode = false;
+    private bool canEdit = false;
+    private bool isEditor = false;
+    private string? errorMessage;
+    private string[]? errorDetails;
+    private string? successMessage;
+    private CommissionSeat? editModel;
+    private string _searchString = string.Empty;
+    private EditContext? editContext;
+
+    // Version navigation fields
+    private IEnumerable<CommissionSeat>? allVersions;
+    private CommissionSeat? currentViewVersion;
+    private bool isLoadingHistory = false;
+    private string? historyErrorMessage;
+
+    // Notes management field
+    private int notesCount = 0;
+
+    // Commissioners loading
+    private bool isLoadingCommissioners = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAllData();
+        SelectSeatFromParameters();
+    }
+
+    protected override void OnParametersSet()
+    {
+        SelectSeatFromParameters();
+    }
+
+    private async Task LoadAllData()
+    {
+        isLoading = true;
+        
+        var tasks = new List<Task>
+        {
+            LoadCommissionSeats(),
+            LoadCommissionSeatTypes(),
+            LoadCommissionSeatClasses(),
+            LoadCommissionSeatStatuses(),
+            LoadServiceAreas(),
+            LoadCommissionerProfiles(),
+            LoadCommissionerStatuses(),
+            LoadPersonProfiles(),
+            LoadPersonHonorifics(),
+            LoadPersonSuffixes()
+        };
+
+        await Task.WhenAll(tasks);
+        isLoading = false;
+    }
+
+    private void HandleEditModeCancelled()
+    {
+        if (isEditMode)
+        {
+            CancelEdit();
+        }
+    }
+
+    private void SelectSeatFromParameters()
+    {
+        if (commissionSeats == null || !commissionSeats.Any() || !SeatId.HasValue)
+            return;
+
+        var target = commissionSeats.FirstOrDefault(s => s.Id == SeatId.Value);
+
+        if (target != null && selectedSeat?.Id != target.Id)
+        {
+            selectedSeat = target;
+            isEditMode = false;
+            ClearMessages();
+            _ = LoadAllVersions();
+        }
+    }
+
+    private async Task LoadCommissionSeats()
+    {
+        try
+        {
+            var result = await CommissionSeatsApi.GetAllCommissionSeatsAsync();
+            commissionSeats = result?.Data ?? Array.Empty<CommissionSeat>();
+        }
+        catch (Exception)
+        {
+            commissionSeats = Array.Empty<CommissionSeat>();
+        }
+    }
+
+    private async Task LoadCommissionSeatTypes()
+    {
+        try
+        {
+            var result = await CommissionSeatTypesApi.GetAllCommissionSeatTypesAsync();
+            commissionSeatTypes = result?.Data ?? Array.Empty<CommissionSeatType>();
+        }
+        catch (Exception)
+        {
+            commissionSeatTypes = Array.Empty<CommissionSeatType>();
+        }
+    }
+
+    private async Task LoadCommissionSeatClasses()
+    {
+        try
+        {
+            var result = await CommissionSeatClassesApi.GetAllCommissionSeatClassesAsync();
+            commissionSeatClasses = result?.Data ?? Array.Empty<CommissionSeatClass>();
+        }
+        catch (Exception)
+        {
+            commissionSeatClasses = Array.Empty<CommissionSeatClass>();
+        }
+    }
+
+    private async Task LoadCommissionSeatStatuses()
+    {
+        try
+        {
+            var result = await CommissionSeatStatusesApi.GetAllCommissionSeatStatusesAsync();
+            commissionSeatStatuses = result?.Data ?? Array.Empty<CommissionSeatStatus>();
+        }
+        catch (Exception)
+        {
+            commissionSeatStatuses = Array.Empty<CommissionSeatStatus>();
+        }
+    }
+
+    private async Task LoadServiceAreas()
+    {
+        try
+        {
+            var result = await ServiceAreasApi.GetAllServiceAreasAsync();
+            serviceAreas = result?.Data ?? Array.Empty<ServiceArea>();
+        }
+        catch (Exception)
+        {
+            serviceAreas = Array.Empty<ServiceArea>();
+        }
+    }
+
+    private async Task LoadCommissionerProfiles()
+    {
+        try
+        {
+            var result = await CommissionerProfilesApi.GetAllCommissionerProfilesAsync();
+            commissionerProfiles = result?.Data ?? Array.Empty<CommissionerProfile>();
+        }
+        catch (Exception)
+        {
+            commissionerProfiles = Array.Empty<CommissionerProfile>();
+        }
+    }
+
+    private async Task LoadCommissionerStatuses()
+    {
+        try
+        {
+            var result = await CommissionerStatusesApi.GetAllCommissionerStatusesAsync();
+            commissionerStatuses = result?.Data ?? Array.Empty<CommissionerStatus>();
+        }
+        catch (Exception)
+        {
+            commissionerStatuses = Array.Empty<CommissionerStatus>();
+        }
+    }
+
+    private async Task LoadPersonProfiles()
+    {
+        try
+        {
+            var result = await PersonProfilesApi.GetAllPersonProfilesAsync();
+            personProfiles = result?.Data ?? Array.Empty<PersonProfile>();
+        }
+        catch (Exception)
+        {
+            personProfiles = Array.Empty<PersonProfile>();
+        }
+    }
+
+    private async Task LoadPersonHonorifics()
+    {
+        try
+        {
+            var result = await PersonHonorificsApi.GetAllPersonHonorificsAsync();
+            personHonorifics = result?.Data ?? Array.Empty<PersonHonorific>();
+        }
+        catch (Exception)
+        {
+            personHonorifics = Array.Empty<PersonHonorific>();
+        }
+    }
+
+    private async Task LoadPersonSuffixes()
+    {
+        try
+        {
+            var result = await PersonSuffixesApi.GetAllPersonSuffixesAsync();
+            personSuffixes = result?.Data ?? Array.Empty<PersonSuffix>();
+        }
+        catch (Exception)
+        {
+            personSuffixes = Array.Empty<PersonSuffix>();
+        }
+    }
+
+    private IEnumerable<CommissionerProfile>? GetFilteredCommissioners()
+    {
+        if (selectedSeat == null || commissionerProfiles == null) return null;
+
+        var filtered = commissionerProfiles.Where(cp => cp.CommissionSeatId == selectedSeat.Id);
+
+        // Filter by active status if not editor
+        if (!isEditor)
+        {
+            filtered = filtered.Where(cp => 
+            {
+                var status = commissionerStatuses?.FirstOrDefault(s => s.Id == cp.CommissionerStatusId);
+                return status?.Active == true;
+            });
+        }
+
+        return filtered.OrderByDescending(cp => cp.AppointedDate).ToList();
+    }
+
+    private async Task LoadAllVersions()
+    {
+        if (selectedSeat == null) return;
+
+        isLoadingHistory = true;
+        historyErrorMessage = null;
+
+        try
+        {
+            var historyResult = await CommissionSeatsApi.GetCommissionSeatHistoryAsync(selectedSeat.Id);
+            var historyRecords = new List<CommissionSeat>();
+
+            if (historyResult?.IsSuccess == true && historyResult.Data != null)
+            {
+                historyRecords.AddRange(historyResult.Data);
+            }
+
+            var versions = new List<CommissionSeat> { selectedSeat };
+            versions.AddRange(historyRecords.Where(h => h.ValidFrom != selectedSeat.ValidFrom));
+            
+            allVersions = versions;
+            currentViewVersion = selectedSeat;
+            UpdateEditModel(currentViewVersion);
+        }
+        catch (Exception ex)
+        {
+            historyErrorMessage = $"Error loading versions: {ex.Message}";
+            allVersions = new List<CommissionSeat> { selectedSeat };
+            currentViewVersion = selectedSeat;
+            UpdateEditModel(currentViewVersion);
+        }
+        finally
+        {
+            isLoadingHistory = false;
+        }
+    }
+
+    private async Task OnCurrentVersionChanged(CommissionSeat newVersion)
+    {
+        currentViewVersion = newVersion;
+        UpdateEditModel(newVersion);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnNotesCountChanged(int count)
+    {
+        notesCount = count;
+        StateHasChanged();
+    }
+
+    private void UpdateEditModel(CommissionSeat version)
+    {
+        editModel = CloneSeat(version);
+        editContext = new EditContext(editModel);
+        
+        if (!IsViewingCurrentVersion())
+        {
+            isEditMode = false;
+        }
+    }
+
+    private bool IsViewingCurrentVersion()
+    {
+        if (currentViewVersion == null || selectedSeat == null)
+            return true;
+
+        return currentViewVersion.ValidFrom == selectedSeat.ValidFrom;
+    }
+
+    private bool CanEditFields()
+    {
+        return isEditMode && IsViewingCurrentVersion();
+    }
+
+    private async Task HandleItemClick(CommissionSeat item)
+    {
+        selectedSeat = item;
+        isEditMode = false;
+        ClearMessages();
+        await LoadAllVersions();
+        await InvokeAsync(StateHasChanged);
+
+        var uri = NavigationManager.GetUriWithQueryParameter("id", selectedSeat.Id);
+        NavigationManager.NavigateTo(uri, replace: true);
+    }
+
+    private async Task HandleRestore(CommissionSeat historicalRecord)
+    {
+        if (selectedSeat == null) return;
+
+        isSaving = true;
+        ClearMessages();
+
+        try
+        {
+            var restoredData = CloneSeat(historicalRecord);
+            restoredData.Id = selectedSeat.Id;
+
+            var result = await CommissionSeatsApi.UpdateCommissionSeatAsync(restoredData.Id, restoredData);
+
+            if (result?.IsSuccess == true)
+            {
+                successMessage = $"Successfully restored version from {historicalRecord.ValidFrom:g}";
+                
+                await LoadCommissionSeats();
+                
+                selectedSeat = commissionSeats?.FirstOrDefault(s => s.Id == selectedSeat.Id);
+                if (selectedSeat != null)
+                {
+                    await LoadAllVersions();
+                }
+                
+                isEditMode = false;
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to restore historical version";
+                errorDetails = result?.Errors;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error restoring historical version: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void EnableEdit()
+    {
+        if (!IsViewingCurrentVersion())
+        {
+            if (selectedSeat != null)
+            {
+                currentViewVersion = selectedSeat;
+                UpdateEditModel(currentViewVersion);
+            }
+        }
+        
+        isEditMode = true;
+        ClearMessages();
+    }
+
+    private async Task SaveEdit()
+    {
+        if (editModel == null) return;
+
+        isSaving = true;
+        ClearMessages();
+
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userEmail = user.Identity?.Name ?? user.Claims.FirstOrDefault(c => c.Type.Contains("email"))?.Value;
+
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                editModel.ModifiedBy = userEmail;
+            }
+
+            var result = await CommissionSeatsApi.UpdateCommissionSeatAsync(editModel.Id, editModel);
+
+            if (result?.IsSuccess == true)
+            {
+                successMessage = "Commission seat updated successfully!";
+                isEditMode = false;
+
+                await LoadCommissionSeats();
+                selectedSeat = commissionSeats?.FirstOrDefault(s => s.Id == editModel.Id);
+
+                if (selectedSeat != null)
+                {
+                    await LoadAllVersions();
+                }
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to update commission seat";
+                errorDetails = result?.Errors;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error updating commission seat: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void CancelEdit()
+    {
+        if (currentViewVersion != null)
+        {
+            editModel = CloneSeat(currentViewVersion);
+            editContext = new EditContext(editModel);
+        }
+        isEditMode = false;
+        ClearMessages();
+    }
+
+    private void ClearMessages()
+    {
+        errorMessage = null;
+        errorDetails = null;
+        successMessage = null;
+    }
+
+    private CommissionSeat CloneSeat(CommissionSeat source) => new()
+    {
+        Id = source.Id,
+        CommissionSeatTypeId = source.CommissionSeatTypeId,
+        CommissionSeatClassId = source.CommissionSeatClassId,
+        CommissionSeatStatusId = source.CommissionSeatStatusId,
+        ServiceAreaId = source.ServiceAreaId,
+        TermStartDate = source.TermStartDate,
+        TermEndDate = source.TermEndDate,
+        ValidFrom = source.ValidFrom,
+        ValidTo = source.ValidTo,
+        ModifiedBy = source.ModifiedBy
+    };
+
+    private string GetPersonName(int personProfileId)
+    {
+        var person = personProfiles?.FirstOrDefault(p => p.Id == personProfileId);
+        if (person == null) return $"Person ID: {personProfileId}";
+
+        var nameParts = new List<string>();
+
+        if (person.PersonHonorificId.HasValue)
+        {
+            var honorific = personHonorifics?.FirstOrDefault(h => h.Id == person.PersonHonorificId);
+            if (!string.IsNullOrEmpty(honorific?.Honorific))
+                nameParts.Add(honorific.Honorific);
+        }
+
+        if (!string.IsNullOrEmpty(person.FirstName))
+            nameParts.Add(person.FirstName);
+
+        if (!string.IsNullOrEmpty(person.PreferredName))
+            nameParts.Add($"\"{person.PreferredName}\"");
+
+        if (!string.IsNullOrEmpty(person.LastName))
+            nameParts.Add(person.LastName);
+
+        if (person.PersonSuffixId.HasValue)
+        {
+            var suffix = personSuffixes?.FirstOrDefault(s => s.Id == person.PersonSuffixId);
+            if (!string.IsNullOrEmpty(suffix?.Suffix))
+                nameParts.Add(suffix.Suffix);
+        }
+
+        return nameParts.Any() ? string.Join(" ", nameParts) : $"Person ID: {personProfileId}";
+    }
+
+    private string GetSeatDisplayText(CommissionSeat seat)
+    {
+        var seatType = commissionSeatTypes?.FirstOrDefault(t => t.Id == seat.CommissionSeatTypeId);
+        var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == seat.CommissionSeatClassId);
+        var serviceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == seat.ServiceAreaId);
+        
+        return $"{seatType?.Type ?? "Unknown"} - {seatClass?.Class ?? "Unknown"} ({serviceArea?.Name ?? "Unknown Area"})";
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        // TODO: Implement create dialog
+        await Task.CompletedTask;
+    }
+}

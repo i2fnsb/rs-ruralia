@@ -1,0 +1,1008 @@
+@page "/rfqs"
+@rendermode InteractiveServer 
+@using rs_ruralia.Shared.Enums
+@using rs_ruralia.Web.Components.Dialogs
+@using rs_ruralia.Web.Helpers
+@inject RfqsApiClient RfqsApi
+@inject RfqIfbTypesApiClient RfqIfbTypesApi
+@inject RfqProjectScopesApiClient RfqProjectScopesApi
+@inject ServiceAreasApiClient ServiceAreasApi
+@inject VendorProfilesApiClient VendorProfilesApi
+@inject PersonProfilesApiClient PersonProfilesApi
+@inject PersonHonorificsApiClient PersonHonorificsApi
+@inject PersonSuffixesApiClient PersonSuffixesApi
+@inject NotesApiClient NotesApi
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IDialogService DialogService
+@inject ViewModeService ViewModeService
+
+<EntityManagementLayout TEntity="Rfq"
+                       Title="Request For Quotes"
+                       Subtitle="Manage RFQs, bids, vendors, and project scopes"
+                       Icon="@Icons.Material.Filled.RequestQuote"
+                       ShowViewModeSelector="true"
+                       ListTitle="RFQs"
+                       ListIcon="@Icons.Material.Filled.RequestQuote"
+                       SearchPlaceholder="Search RFQs..."
+                       ShowSearch="true"
+                       SearchString="@_searchString"
+                       ShowTotalCount="true"
+                       TotalCount="@(rfqs?.Count())"
+                       CountIcon="@Icons.Material.Filled.RequestQuote"
+                       HasSelection="@(selectedRfq != null)"
+                       EntitySingularName="an RFQ"
+                       EntityPluralName="RFQs"
+                       EnableViewModeManagement="true"
+                       EnableEditPermissionCheck="true"
+                       CanEditChanged="@(async (canEdit) => { this.canEdit = canEdit; await InvokeAsync(StateHasChanged); })"
+                       IsEditorChanged="@(async (editor) => { this.isEditor = editor; await InvokeAsync(StateHasChanged); })"
+                       OnEditModeCancelled="@HandleEditModeCancelled"
+                       SelectedItem="@selectedRfq"
+                       GetSelectedItemDisplayText="@GetRfqDisplayText"
+                       ShowSelectedItemChip="true"
+                       ShowCreateButton="true"
+                       CreateButtonTitle="Create New RFQ"
+                       OnCreateClicked="@OpenCreateDialog"
+                       UseBuiltInDataGrid="true"
+                       IsLoadingItems="@isLoading"
+                       Items="@rfqs"
+                       OnItemClicked="@(async (item) => await HandleItemClick(item))"
+                       GetItemIcon="@(r => Icons.Material.Filled.RequestQuote)"
+                       GetItemDisplayText="@GetRfqDisplayText">
+
+    <AdditionalItemColumns>
+        <TemplateColumn T="Rfq" Title="Service Area">
+            <CellTemplate>
+                @{
+                    var serviceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == context.Item.ServiceAreaId);
+                    @(serviceArea?.Name ?? "—")
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="Rfq" Title="Status">
+            <CellTemplate>
+                @if (context.Item.Completed == true)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Completed</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">Open</MudChip>
+                }
+            </CellTemplate>
+        </TemplateColumn>
+    </AdditionalItemColumns>
+
+    <!-- Detail Content (Expandable Sections) -->
+    <DetailContent>
+        <MudExpansionPanels MultiExpansion="true">
+            <!-- Details Section -->
+            <SectionPanel Title="Details" 
+                         Icon="@Icons.Material.Filled.Info" 
+                         Expanded="true"
+                         MinimumViewMode="ViewMode.Public">
+                <VersionedDetailsPanel TEntity="Rfq"
+                   AllVersions="@allVersions"
+                   CurrentVersion="@currentViewVersion"
+                   CurrentVersionChanged="@OnCurrentVersionChanged"
+                   GetValidFrom="@(x => x.ValidFrom)"
+                   GetValidTo="@(x => x.ValidTo)"
+                   GetModifiedBy="@(x => x.ModifiedBy)"
+                   GetDisplayText="@GetRfqDisplayText"
+                   CanEdit="@(canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))"
+                   IsEditMode="@isEditMode"
+                   OnEditClicked="@EnableEdit"
+                   IsLoading="@(isLoading || isLoadingHistory)"
+                   ErrorMessage="@(errorMessage ?? historyErrorMessage)"
+                   OnRestore="@HandleRestore">
+                    
+                    <!-- Edit Mode Content -->
+                    <DetailsContent Context="version">
+                        @if (editContext != null && editModel != null)
+                        {
+                            <EditForm EditContext="@editContext" OnValidSubmit="SaveEdit">
+                                <DataAnnotationsValidator />
+                                <MudGrid>
+                                    <MudItem xs="12">
+                                        @if (canEdit && IsViewingCurrentVersion() && ViewModeService.IsAtLeast(ViewMode.Admin))
+                                        {
+                                            @if (isEditMode)
+                                            {
+                                                <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
+                                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@isSaving">
+                                                        @if (isSaving)
+                                                        {
+                                                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                                                            <MudText Class="ms-2">Saving...</MudText>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudIcon Icon="@Icons.Material.Filled.Save" Class="me-1" /> <MudText>Save</MudText>
+                                                        }
+                                                    </MudButton>
+                                                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="CancelEdit" Disabled="@isSaving">
+                                                        Cancel
+                                                    </MudButton>
+                                                </MudStack>
+                                            }
+                                        }
+                                    </MudItem>
+
+                                    @if (!string.IsNullOrEmpty(successMessage))
+                                    {
+                                        <MudItem xs="12">
+                                            <MudAlert Severity="Severity.Success" Variant="Variant.Filled">@successMessage</MudAlert>
+                                        </MudItem>
+                                    }
+
+                                    @if (!string.IsNullOrEmpty(errorMessage))
+                                    {
+                                        <MudItem xs="12">
+                                            <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
+                                                <MudText>@errorMessage</MudText>
+                                                @if (errorDetails != null && errorDetails.Length > 0)
+                                                {
+                                                    <MudList T="string" Dense="true">
+                                                        @foreach (var detail in errorDetails)
+                                                        {
+                                                            <MudListItem>@detail</MudListItem>
+                                                        }
+                                                    </MudList>
+                                                }
+                                            </MudAlert>
+                                        </MudItem>
+                                    }
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.RfqNumber" 
+                                                   TModel="Rfq" 
+                                                   TValue="string" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.RfqNumber)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   For="@(() => editModel.RfqNumber)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.RfqIfbTypeId" 
+                                                   TModel="Rfq" 
+                                                   TValue="int"
+                                                   TLookup="RfqIfbType"
+                                                   Property="@(x => x.RfqIfbTypeId)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   LookupItems="@rfqIfbTypes"
+                                                   LookupTextSelector="@(item => ((RfqIfbType)item).Type ?? string.Empty)"
+                                                   For="@(() => editModel.RfqIfbTypeId)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.RfqProjectScopeId" 
+                                                   TModel="Rfq" 
+                                                   TValue="int"
+                                                   TLookup="RfqProjectScope"
+                                                   Property="@(x => x.RfqProjectScopeId)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   LookupItems="@rfqProjectScopes"
+                                                   LookupTextSelector="@(item => ((RfqProjectScope)item).Scope ?? string.Empty)"
+                                                   For="@(() => editModel.RfqProjectScopeId)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.CustomProjectScope" 
+                                                   TModel="Rfq" 
+                                                   TValue="string" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.CustomProjectScope)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   For="@(() => editModel.CustomProjectScope)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.ServiceAreaId" 
+                                                   TModel="Rfq" 
+                                                   TValue="int"
+                                                   TLookup="ServiceArea"
+                                                   Property="@(x => x.ServiceAreaId)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   LookupItems="@serviceAreas"
+                                                   LookupTextSelector="@(item => ((ServiceArea)item).Name ?? string.Empty)"
+                                                   For="@(() => editModel.ServiceAreaId)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.IssueDate" 
+                                                   TModel="Rfq" 
+                                                   TValue="DateTime?" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.IssueDate)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   For="@(() => editModel.IssueDate)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.OpeningDate" 
+                                                   TModel="Rfq" 
+                                                   TValue="DateTime?" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.OpeningDate)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   For="@(() => editModel.OpeningDate)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.Completed" 
+                                                   TModel="Rfq" 
+                                                   TValue="bool?" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.Completed)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   For="@(() => editModel.Completed)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField Value="editModel.ValidFrom" 
+                                                   TModel="Rfq" 
+                                                   TValue="DateTime?" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.ValidFrom)"
+                                                   ReadOnly="true" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.ModifiedBy" 
+                                                   TModel="Rfq" 
+                                                   TValue="string" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.ModifiedBy)"
+                                                   ReadOnly="true" />
+                                    </MudItem>
+                                </MudGrid>
+                            </EditForm>
+                        }
+                    </DetailsContent>
+
+                    <!-- View Mode Content -->
+                    <ViewModeContent Context="version">
+                        <MudGrid Spacing="3">
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string" TModel="Rfq"
+                                         Label="RFQ Number" 
+                                         Value="@version.RfqNumber"
+                                         Icon="@Icons.Material.Filled.Numbers"
+                                         ValueStyle="font-weight: 600; font-size: 1.1rem;"
+                                         PropertyExpression="@(x => x.RfqNumber)" />
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string" TModel="Rfq"
+                                         Label="Type" 
+                                         Icon="@Icons.Material.Filled.Category"
+                                         PropertyExpression="@(x => x.RfqIfbTypeId)">
+                                    <ValueContent>
+                                        @{
+                                            var ifbType = rfqIfbTypes?.FirstOrDefault(t => t.Id == version.RfqIfbTypeId);
+                                            <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                                                @(ifbType?.Type ?? "—")
+                                            </MudText>
+                                        }
+                                    </ValueContent>
+                                </InfoCard>
+                            </MudItem>
+
+                            <MudItem xs="12">
+                                <InfoCard TValue="string" TModel="Rfq"
+                                         Label="Project Scope" 
+                                         Icon="@Icons.Material.Filled.Description"
+                                         PropertyExpression="@(x => x.RfqProjectScopeId)">
+                                    <ValueContent>
+                                        @{
+                                            var scope = rfqProjectScopes?.FirstOrDefault(s => s.Id == version.RfqProjectScopeId);
+                                            var displayScope = scope?.Scope ?? version.CustomProjectScope ?? "—";
+                                            <MudText Typo="Typo.body1">@displayScope</MudText>
+                                        }
+                                    </ValueContent>
+                                </InfoCard>
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string" TModel="Rfq"
+                                         Label="Service Area" 
+                                         Icon="@Icons.Material.Filled.Landscape"
+                                         PropertyExpression="@(x => x.ServiceAreaId)">
+                                    <ValueContent>
+                                        @{
+                                            var serviceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == version.ServiceAreaId);
+                                            if (serviceArea != null)
+                                            {
+                                                <MudButton Variant="Variant.Text" 
+                                                          Color="Color.Primary" 
+                                                          Size="Size.Small"
+                                                          StartIcon="@Icons.Material.Filled.OpenInNew"
+                                                          OnClick="@(() => NavigationManager.NavigateTo($"/service-areas?id={serviceArea.Id}"))">
+                                                    @serviceArea.Name
+                                                </MudButton>
+                                            }
+                                            else
+                                            {
+                                                <MudText>—</MudText>
+                                            }
+                                        }
+                                    </ValueContent>
+                                </InfoCard>
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="bool?" TModel="Rfq"
+                                         Label="Status" 
+                                         Icon="@Icons.Material.Filled.Assignment"
+                                         PropertyExpression="@(x => x.Completed)">
+                                    <ValueContent>
+                                        @if (version.Completed == true)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle">Completed</MudChip>
+                                        }
+                                        else if (version.Completed == false)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.HourglassEmpty">Open</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudText>—</MudText>
+                                        }
+                                    </ValueContent>
+                                </InfoCard>
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string" TModel="Rfq"
+                                         Label="Issue Date" 
+                                         Value="@(version.IssueDate?.ToString("MMM d, yyyy"))"
+                                         Icon="@Icons.Material.Filled.CalendarToday"
+                                         PropertyExpression="@(x => x.IssueDate)" />
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string" TModel="Rfq"
+                                         Label="Opening Date" 
+                                         Value="@(version.OpeningDate?.ToString("MMM d, yyyy"))"
+                                         Icon="@Icons.Material.Filled.Event"
+                                         PropertyExpression="@(x => x.OpeningDate)" />
+                            </MudItem>
+                        </MudGrid>
+                    </ViewModeContent>
+                </VersionedDetailsPanel>
+            </SectionPanel>
+
+            <!-- Vendors Section -->
+            <SectionPanel Title="Vendors" 
+                         Icon="@Icons.Material.Filled.Store"
+                         MinimumViewMode="ViewMode.Public"
+                         ShowCount="true"
+                         Count="@(rfqVendors?.Count() ?? 0)"
+                         CountColor="Color.Info">
+                @if (selectedRfq != null)
+                {
+                    <MudStack Spacing="2">
+                        @if (isLoadingVendors)
+                        {
+                            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                        }
+                        else if (rfqVendors != null && rfqVendors.Any())
+                        {
+                            <MudTable T="VendorProfile" Items="@rfqVendors" Hover="true" Striped="true" Dense="true">
+                                <HeaderContent>
+                                    <MudTh>Vendor Name</MudTh>
+                                    <MudTh>Vendor ID</MudTh>
+                                    <MudTh>Active</MudTh>
+                                    <MudTh Style="width: 100px;">Actions</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="Vendor Name">@GetVendorDisplayText(context)</MudTd>
+                                    <MudTd DataLabel="Vendor ID">@(context.VendorId ?? "—")</MudTd>
+                                    <MudTd DataLabel="Active">
+                                        @if (context.Active == true)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Active</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Default">Inactive</MudChip>
+                                        }
+                                    </MudTd>
+                                    <MudTd DataLabel="Actions">
+                                        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
+                                                      Size="Size.Small" 
+                                                      Color="Color.Primary" 
+                                                      OnClick="@(() => NavigationManager.NavigateTo($"/vendors?id={context.Id}"))" />
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Align="Align.Center" Class="my-4">No vendors associated with this RFQ.</MudText>
+                        }
+                    </MudStack>
+                }
+            </SectionPanel>
+
+            <!-- Bids Section (Admin Only) -->
+            @if (isEditor)
+            {
+                <SectionPanel Title="Bids" 
+                             Icon="@Icons.Material.Filled.Gavel"
+                             MinimumViewMode="ViewMode.Admin"
+                             ShowCount="true"
+                             Count="0"
+                             CountColor="Color.Secondary">
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Text">
+                        Bid management functionality will be implemented here.
+                        <br/>This will show all bids submitted for this RFQ.
+                    </MudAlert>
+                </SectionPanel>
+            }
+
+            <!-- Bid Quantities Section -->
+            <SectionPanel Title="Bid Quantities" 
+                         Icon="@Icons.Material.Filled.FormatListNumbered"
+                         MinimumViewMode="ViewMode.Public"
+                         ShowCount="true"
+                         Count="0"
+                         CountColor="Color.Tertiary">
+                <MudAlert Severity="Severity.Info" Variant="Variant.Text">
+                    Bid quantity tracking functionality will be implemented here.
+                    <br/>This will show quantity information for bid items.
+                </MudAlert>
+            </SectionPanel>
+
+            <!-- Pay Items Section (Admin Only) -->
+            @if (isEditor)
+            {
+                <SectionPanel Title="Pay Items" 
+                             Icon="@Icons.Material.Filled.AttachMoney"
+                             MinimumViewMode="ViewMode.Admin"
+                             ShowCount="true"
+                             Count="0"
+                             CountColor="Color.Success">
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Text">
+                        Pay items management functionality will be implemented here.
+                        <br/>This will show payment line items for the RFQ.
+                    </MudAlert>
+                </SectionPanel>
+            }
+
+            <!-- Notes Section -->
+            @if (canEdit)
+            {
+                <SectionPanel Title="Notes"
+                             Icon="@Icons.Material.Filled.Notes"
+                             MinimumViewMode="ViewMode.Admin"
+                             ShowCount="true"
+                             Count="@notesCount"
+                             CountColor="Color.Dark">
+                    <NotesPanel EntityType="rfq" 
+                               EntityId="@selectedRfq.Id"
+                               HighlightedNoteDate="@(currentViewVersion?.ValidFrom)"
+                               ShowHistory="true"
+                               NotesCountChanged="@OnNotesCountChanged" />
+                </SectionPanel>
+            }
+
+            <!-- Report Builder Section -->
+            @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
+            {
+                <SectionPanel Title="Report Builder"
+                             Icon="@Icons.Material.Filled.Assessment"
+                             MinimumViewMode="ViewMode.Admin">
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Text">
+                        Report Builder functionality will be implemented here.
+                    </MudAlert>
+                </SectionPanel>
+            }
+        </MudExpansionPanels>
+    </DetailContent>
+</EntityManagementLayout>
+
+@code {
+    [SupplyParameterFromQuery(Name = "id")]
+    public int? RfqId { get; set; }
+
+    private IEnumerable<Rfq>? rfqs;
+    private IEnumerable<RfqIfbType>? rfqIfbTypes;
+    private IEnumerable<RfqProjectScope>? rfqProjectScopes;
+    private IEnumerable<ServiceArea>? serviceAreas;
+    private IEnumerable<VendorProfile>? vendorProfiles;
+    private IEnumerable<VendorProfile>? rfqVendors;
+    private IEnumerable<PersonProfile>? personProfiles;
+    private IEnumerable<PersonHonorific>? personHonorifics;
+    private IEnumerable<PersonSuffix>? personSuffixes;
+    
+    private Rfq? selectedRfq;
+    private bool isLoading = false;
+    private bool isSaving = false;
+    private bool isEditMode = false;
+    private bool canEdit = false;
+    private bool isEditor = false;
+    private string? errorMessage;
+    private string[]? errorDetails;
+    private string? successMessage;
+    private Rfq? editModel;
+    private string _searchString = string.Empty;
+    private EditContext? editContext;
+
+    // Version navigation fields
+    private IEnumerable<Rfq>? allVersions;
+    private Rfq? currentViewVersion;
+    private bool isLoadingHistory = false;
+    private string? historyErrorMessage;
+
+    // Notes management field
+    private int notesCount = 0;
+
+    // Vendors loading
+    private bool isLoadingVendors = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAllData();
+        SelectRfqFromParameters();
+    }
+
+    protected override void OnParametersSet()
+    {
+        SelectRfqFromParameters();
+    }
+
+    private async Task LoadAllData()
+    {
+        isLoading = true;
+        
+        var tasks = new List<Task>
+        {
+            LoadRfqs(),
+            LoadRfqIfbTypes(),
+            LoadRfqProjectScopes(),
+            LoadServiceAreas(),
+            LoadVendorProfiles(),
+            LoadPersonProfiles(),
+            LoadPersonHonorifics(),
+            LoadPersonSuffixes()
+        };
+
+        await Task.WhenAll(tasks);
+        isLoading = false;
+    }
+
+    private void HandleEditModeCancelled()
+    {
+        if (isEditMode)
+        {
+            CancelEdit();
+        }
+    }
+
+    private void SelectRfqFromParameters()
+    {
+        if (rfqs == null || !rfqs.Any() || !RfqId.HasValue)
+            return;
+
+        var target = rfqs.FirstOrDefault(r => r.Id == RfqId.Value);
+
+        if (target != null && selectedRfq?.Id != target.Id)
+        {
+            selectedRfq = target;
+            isEditMode = false;
+            ClearMessages();
+            _ = LoadAllVersions();
+        }
+    }
+
+    private async Task LoadRfqs()
+    {
+        try
+        {
+            var result = await RfqsApi.GetAllRfqsAsync();
+            rfqs = result?.Data ?? Array.Empty<Rfq>();
+        }
+        catch (Exception)
+        {
+            rfqs = Array.Empty<Rfq>();
+        }
+    }
+
+    private async Task LoadRfqIfbTypes()
+    {
+        try
+        {
+            var result = await RfqIfbTypesApi.GetAllRfqIfbTypesAsync();
+            rfqIfbTypes = result?.Data ?? Array.Empty<RfqIfbType>();
+        }
+        catch (Exception)
+        {
+            rfqIfbTypes = Array.Empty<RfqIfbType>();
+        }
+    }
+
+    private async Task LoadRfqProjectScopes()
+    {
+        try
+        {
+            var result = await RfqProjectScopesApi.GetAllRfqProjectScopesAsync();
+            rfqProjectScopes = result?.Data ?? Array.Empty<RfqProjectScope>();
+        }
+        catch (Exception)
+        {
+            rfqProjectScopes = Array.Empty<RfqProjectScope>();
+        }
+    }
+
+    private async Task LoadServiceAreas()
+    {
+        try
+        {
+            var result = await ServiceAreasApi.GetAllServiceAreasAsync();
+            serviceAreas = result?.Data ?? Array.Empty<ServiceArea>();
+        }
+        catch (Exception)
+        {
+            serviceAreas = Array.Empty<ServiceArea>();
+        }
+    }
+
+    private async Task LoadVendorProfiles()
+    {
+        try
+        {
+            var result = await VendorProfilesApi.GetAllVendorProfilesAsync();
+            vendorProfiles = result?.Data ?? Array.Empty<VendorProfile>();
+        }
+        catch (Exception)
+        {
+            vendorProfiles = Array.Empty<VendorProfile>();
+        }
+    }
+
+    private async Task LoadPersonProfiles()
+    {
+        try
+        {
+            var result = await PersonProfilesApi.GetAllPersonProfilesAsync();
+            personProfiles = result?.Data ?? Array.Empty<PersonProfile>();
+        }
+        catch (Exception)
+        {
+            personProfiles = Array.Empty<PersonProfile>();
+        }
+    }
+
+    private async Task LoadPersonHonorifics()
+    {
+        try
+        {
+            var result = await PersonHonorificsApi.GetAllPersonHonorificsAsync();
+            personHonorifics = result?.Data ?? Array.Empty<PersonHonorific>();
+        }
+        catch (Exception)
+        {
+            personHonorifics = Array.Empty<PersonHonorific>();
+        }
+    }
+
+    private async Task LoadPersonSuffixes()
+    {
+        try
+        {
+            var result = await PersonSuffixesApi.GetAllPersonSuffixesAsync();
+            personSuffixes = result?.Data ?? Array.Empty<PersonSuffix>();
+        }
+        catch (Exception)
+        {
+            personSuffixes = Array.Empty<PersonSuffix>();
+        }
+    }
+
+    private async Task LoadRfqVendors()
+    {
+        if (selectedRfq == null) return;
+
+        isLoadingVendors = true;
+
+        try
+        {
+            // TODO: Filter vendors that are associated with this RFQ
+            // The relationship between RFQ and Vendors needs to be determined
+            // It might be through Bids or another junction table
+            // For now, return empty list
+            rfqVendors = Array.Empty<VendorProfile>();
+        }
+        catch (Exception)
+        {
+            rfqVendors = Array.Empty<VendorProfile>();
+        }
+        finally
+        {
+            isLoadingVendors = false;
+        }
+    }
+
+    private async Task LoadAllVersions()
+    {
+        if (selectedRfq == null) return;
+
+        isLoadingHistory = true;
+        historyErrorMessage = null;
+
+        try
+        {
+            var historyResult = await RfqsApi.GetRfqHistoryAsync(selectedRfq.Id);
+            var historyRecords = new List<Rfq>();
+
+            if (historyResult?.IsSuccess == true && historyResult.Data != null)
+            {
+                historyRecords.AddRange(historyResult.Data);
+            }
+
+            var versions = new List<Rfq> { selectedRfq };
+            versions.AddRange(historyRecords.Where(h => h.ValidFrom != selectedRfq.ValidFrom));
+            
+            allVersions = versions;
+            currentViewVersion = selectedRfq;
+            UpdateEditModel(currentViewVersion);
+
+            // Load related data
+            await LoadRfqVendors();
+        }
+        catch (Exception ex)
+        {
+            historyErrorMessage = $"Error loading versions: {ex.Message}";
+            allVersions = new List<Rfq> { selectedRfq };
+            currentViewVersion = selectedRfq;
+            UpdateEditModel(currentViewVersion);
+        }
+        finally
+        {
+            isLoadingHistory = false;
+        }
+    }
+
+    private async Task OnCurrentVersionChanged(Rfq newVersion)
+    {
+        currentViewVersion = newVersion;
+        UpdateEditModel(newVersion);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnNotesCountChanged(int count)
+    {
+        notesCount = count;
+        StateHasChanged();
+    }
+
+    private void UpdateEditModel(Rfq version)
+    {
+        editModel = CloneRfq(version);
+        editContext = new EditContext(editModel);
+        
+        if (!IsViewingCurrentVersion())
+        {
+            isEditMode = false;
+        }
+    }
+
+    private bool IsViewingCurrentVersion()
+    {
+        if (currentViewVersion == null || selectedRfq == null)
+            return true;
+
+        return currentViewVersion.ValidFrom == selectedRfq.ValidFrom;
+    }
+
+    private bool CanEditFields()
+    {
+        return isEditMode && IsViewingCurrentVersion();
+    }
+
+    private async Task HandleItemClick(Rfq item)
+    {
+        selectedRfq = item;
+        isEditMode = false;
+        ClearMessages();
+        await LoadAllVersions();
+        await InvokeAsync(StateHasChanged);
+
+        var uri = NavigationManager.GetUriWithQueryParameter("id", selectedRfq.Id);
+        NavigationManager.NavigateTo(uri, replace: true);
+    }
+
+    private async Task HandleRestore(Rfq historicalRecord)
+    {
+        if (selectedRfq == null) return;
+
+        isSaving = true;
+        ClearMessages();
+
+        try
+        {
+            var restoredData = CloneRfq(historicalRecord);
+            restoredData.Id = selectedRfq.Id;
+
+            var result = await RfqsApi.UpdateRfqAsync(restoredData.Id, restoredData);
+
+            if (result?.IsSuccess == true)
+            {
+                successMessage = $"Successfully restored version from {historicalRecord.ValidFrom:g}";
+                
+                await LoadRfqs();
+                
+                selectedRfq = rfqs?.FirstOrDefault(r => r.Id == selectedRfq.Id);
+                if (selectedRfq != null)
+                {
+                    await LoadAllVersions();
+                }
+                
+                isEditMode = false;
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to restore historical version";
+                errorDetails = result?.Errors;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error restoring historical version: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void EnableEdit()
+    {
+        if (!IsViewingCurrentVersion())
+        {
+            if (selectedRfq != null)
+            {
+                currentViewVersion = selectedRfq;
+                UpdateEditModel(currentViewVersion);
+            }
+        }
+        
+        isEditMode = true;
+        ClearMessages();
+    }
+
+    private async Task SaveEdit()
+    {
+        if (editModel == null) return;
+
+        isSaving = true;
+        ClearMessages();
+
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userEmail = user.Identity?.Name ?? user.Claims.FirstOrDefault(c => c.Type.Contains("email"))?.Value;
+
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                editModel.ModifiedBy = userEmail;
+            }
+
+            var result = await RfqsApi.UpdateRfqAsync(editModel.Id, editModel);
+
+            if (result?.IsSuccess == true)
+            {
+                successMessage = "RFQ updated successfully!";
+                isEditMode = false;
+
+                await LoadRfqs();
+                selectedRfq = rfqs?.FirstOrDefault(r => r.Id == editModel.Id);
+
+                if (selectedRfq != null)
+                {
+                    await LoadAllVersions();
+                }
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to update RFQ";
+                errorDetails = result?.Errors;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error updating RFQ: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void CancelEdit()
+    {
+        if (currentViewVersion != null)
+        {
+            editModel = CloneRfq(currentViewVersion);
+            editContext = new EditContext(editModel);
+        }
+        isEditMode = false;
+        ClearMessages();
+    }
+
+    private void ClearMessages()
+    {
+        errorMessage = null;
+        errorDetails = null;
+        successMessage = null;
+    }
+
+    private Rfq CloneRfq(Rfq source) => new()
+    {
+        Id = source.Id,
+        RfqNumber = source.RfqNumber,
+        RfqIfbTypeId = source.RfqIfbTypeId,
+        RfqProjectScopeId = source.RfqProjectScopeId,
+        CustomProjectScope = source.CustomProjectScope,
+        ServiceAreaId = source.ServiceAreaId,
+        IssueDate = source.IssueDate,
+        OpeningDate = source.OpeningDate,
+        Completed = source.Completed,
+        ValidFrom = source.ValidFrom,
+        ValidTo = source.ValidTo,
+        ModifiedBy = source.ModifiedBy
+    };
+
+    private string GetPersonName(int personProfileId)
+    {
+        var person = personProfiles?.FirstOrDefault(p => p.Id == personProfileId);
+        if (person == null) return $"Person ID: {personProfileId}";
+
+        var nameParts = new List<string>();
+
+        if (person.PersonHonorificId.HasValue)
+        {
+            var honorific = personHonorifics?.FirstOrDefault(h => h.Id == person.PersonHonorificId);
+            if (!string.IsNullOrEmpty(honorific?.Honorific))
+                nameParts.Add(honorific.Honorific);
+        }
+
+        if (!string.IsNullOrEmpty(person.FirstName))
+            nameParts.Add(person.FirstName);
+
+        if (!string.IsNullOrEmpty(person.PreferredName))
+            nameParts.Add($"\"{person.PreferredName}\"");
+
+        if (!string.IsNullOrEmpty(person.LastName))
+            nameParts.Add(person.LastName);
+
+        if (person.PersonSuffixId.HasValue)
+        {
+            var suffix = personSuffixes?.FirstOrDefault(s => s.Id == person.PersonSuffixId);
+            if (!string.IsNullOrEmpty(suffix?.Suffix))
+                nameParts.Add(suffix.Suffix);
+        }
+
+        return nameParts.Any() ? string.Join(" ", nameParts) : $"Person ID: {personProfileId}";
+    }
+
+    private string GetVendorDisplayText(VendorProfile vendor)
+    {
+        return vendor.Name ?? "Unnamed Vendor";
+    }
+
+    private string GetRfqDisplayText(Rfq rfq)
+    {
+        return $"{rfq.RfqNumber ?? "Unknown"}";
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        // TODO: Implement create dialog
+        await Task.CompletedTask;
+    }
+}

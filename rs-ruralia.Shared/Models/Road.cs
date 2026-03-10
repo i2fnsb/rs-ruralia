@@ -71,7 +71,11 @@ public class Road
   [Display(Name = "Service Area")]
   public int ServiceAreaId { get; set; }
 
-  [Column("ModifiedBy")]
+    [Column("road_location_coordinates")]
+    [Display(Name = "Road Location")]
+    public string? RoadLocation { get; set; } // geography type stored as string
+
+    [Column("ModifiedBy")]
   [MaxLength(100)]
   [Display(Name = "Modified By")]
   [EmailAddress]

@@ -1,0 +1,967 @@
+@page "/vendors"
+@rendermode InteractiveServer 
+@using rs_ruralia.Shared.Enums
+@using rs_ruralia.Web.Components.Dialogs
+@using rs_ruralia.Web.Helpers
+@inject VendorProfilesApiClient VendorProfilesApi
+@inject PersonProfilesApiClient PersonProfilesApi
+@inject PersonHonorificsApiClient PersonHonorificsApi
+@inject PersonSuffixesApiClient PersonSuffixesApi
+@inject CorrespondenceProfilesApiClient CorrespondenceProfilesApi
+@inject CorrespondenceEmailsApiClient CorrespondenceEmailsApi
+@inject CorrespondencePhonesApiClient CorrespondencePhonesApi
+@inject RfqsApiClient RfqsApi
+@inject RfqIfbTypesApiClient RfqIfbTypesApi
+@inject RfqProjectScopesApiClient RfqProjectScopesApi
+@inject ServiceAreasApiClient ServiceAreasApi
+@inject NotesApiClient NotesApi
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IDialogService DialogService
+@inject ViewModeService ViewModeService
+
+<EntityManagementLayout TEntity="VendorProfile"
+                       Title="Vendors"
+                       Subtitle="Manage vendor profiles, contacts, and RFQs"
+                       Icon="@Icons.Material.Filled.Store"
+                       ShowViewModeSelector="true"
+                       ListTitle="Vendors"
+                       ListIcon="@Icons.Material.Filled.Store"
+                       SearchPlaceholder="Search vendors..."
+                       ShowSearch="true"
+                       SearchString="@_searchString"
+                       ShowTotalCount="true"
+                       TotalCount="@(vendorProfiles?.Count())"
+                       CountIcon="@Icons.Material.Filled.Store"
+                       HasSelection="@(selectedVendor != null)"
+                       EntitySingularName="a Vendor"
+                       EntityPluralName="vendors"
+                       EnableViewModeManagement="true"
+                       EnableEditPermissionCheck="true"
+                       CanEditChanged="@(async (canEdit) => { this.canEdit = canEdit; await InvokeAsync(StateHasChanged); })"
+                       IsEditorChanged="@(async (editor) => { this.isEditor = editor; await InvokeAsync(StateHasChanged); })"
+                       OnEditModeCancelled="@HandleEditModeCancelled"
+                       SelectedItem="@selectedVendor"
+                       GetSelectedItemDisplayText="@GetVendorDisplayText"
+                       ShowSelectedItemChip="true"
+                       ShowCreateButton="true"
+                       CreateButtonTitle="Create New Vendor"
+                       OnCreateClicked="@OpenCreateDialog"
+                       UseBuiltInDataGrid="true"
+                       IsLoadingItems="@isLoading"
+                       Items="@vendorProfiles"
+                       OnItemClicked="@(async (item) => await HandleItemClick(item))"
+                       GetItemIcon="@(v => Icons.Material.Filled.Store)"
+                       GetItemDisplayText="@GetVendorDisplayText">
+
+    <AdditionalItemColumns>
+        <TemplateColumn T="VendorProfile" Title="Contact">
+            <CellTemplate>
+                @{
+                    var primaryContact = GetPrimaryCorrespondence(context.Item.Id);
+                    @(primaryContact?.EmailAddress ?? primaryContact?.PhoneNumber ?? "—")
+                }
+            </CellTemplate>
+        </TemplateColumn>
+    </AdditionalItemColumns>
+
+    <!-- Detail Content (Expandable Sections) -->
+    <DetailContent>
+        <MudExpansionPanels MultiExpansion="true">
+            <!-- Details Section -->
+            <SectionPanel Title="Details" 
+                         Icon="@Icons.Material.Filled.Info" 
+                         Expanded="true"
+                         MinimumViewMode="ViewMode.Public">
+                <VersionedDetailsPanel TEntity="VendorProfile"
+                   AllVersions="@allVersions"
+                   CurrentVersion="@currentViewVersion"
+                   CurrentVersionChanged="@OnCurrentVersionChanged"
+                   GetValidFrom="@(x => x.ValidFrom)"
+                   GetValidTo="@(x => x.ValidTo)"
+                   GetModifiedBy="@(x => x.ModifiedBy)"
+                   GetDisplayText="@GetVendorDisplayText"
+                   CanEdit="@(canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))"
+                   IsEditMode="@isEditMode"
+                   OnEditClicked="@EnableEdit"
+                   IsLoading="@(isLoading || isLoadingHistory)"
+                   ErrorMessage="@(errorMessage ?? historyErrorMessage)"
+                   OnRestore="@HandleRestore">
+                    
+                    <!-- Edit Mode Content -->
+                    <DetailsContent Context="version">
+                        @if (editContext != null && editModel != null)
+                        {
+                            <EditForm EditContext="@editContext" OnValidSubmit="SaveEdit">
+                                <DataAnnotationsValidator />
+                                <MudGrid>
+                                    <MudItem xs="12">
+                                        @if (canEdit && IsViewingCurrentVersion() && ViewModeService.IsAtLeast(ViewMode.Admin))
+                                        {
+                                            @if (isEditMode)
+                                            {
+                                                <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
+                                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@isSaving">
+                                                        @if (isSaving)
+                                                        {
+                                                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                                                            <MudText Class="ms-2">Saving...</MudText>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudIcon Icon="@Icons.Material.Filled.Save" Class="me-1" /> <MudText>Save</MudText>
+                                                        }
+                                                    </MudButton>
+                                                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="CancelEdit" Disabled="@isSaving">
+                                                        Cancel
+                                                    </MudButton>
+                                                </MudStack>
+                                            }
+                                        }
+                                    </MudItem>
+
+                                    @if (!string.IsNullOrEmpty(successMessage))
+                                    {
+                                        <MudItem xs="12">
+                                            <MudAlert Severity="Severity.Success" Variant="Variant.Filled">@successMessage</MudAlert>
+                                        </MudItem>
+                                    }
+
+                                    @if (!string.IsNullOrEmpty(errorMessage))
+                                    {
+                                        <MudItem xs="12">
+                                            <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
+                                                <MudText>@errorMessage</MudText>
+                                                @if (errorDetails != null && errorDetails.Length > 0)
+                                                {
+                                                    <MudList T="string" Dense="true">
+                                                        @foreach (var detail in errorDetails)
+                                                        {
+                                                            <MudListItem>@detail</MudListItem>
+                                                        }
+                                                    </MudList>
+                                                }
+                                            </MudAlert>
+                                        </MudItem>
+                                    }
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.Name" 
+                                                   TModel="VendorProfile" 
+                                                   TValue="string" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.Name)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   For="@(() => editModel.Name)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.VendorId" 
+                                                   TModel="VendorProfile" 
+                                                   TValue="string" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.VendorId)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   For="@(() => editModel.VendorId)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField Value="editModel.ValidFrom" 
+                                                   TModel="VendorProfile" 
+                                                   TValue="DateTime?" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.ValidFrom)"
+                                                   ReadOnly="true" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.ModifiedBy" 
+                                                   TModel="VendorProfile" 
+                                                   TValue="string" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.ModifiedBy)"
+                                                   ReadOnly="true" />
+                                    </MudItem>
+                                </MudGrid>
+                            </EditForm>
+                        }
+                    </DetailsContent>
+
+                    <!-- View Mode Content -->
+                    <ViewModeContent Context="version">
+                        <MudGrid Spacing="3">
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string" TModel="VendorProfile"
+                                         Label="Vendor Name" 
+                                         Value="@version.Name"
+                                         Icon="@Icons.Material.Filled.Store"
+                                         ValueStyle="font-weight: 600; font-size: 1.1rem;"
+                                         PropertyExpression="@(x => x.Name)" />
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string" TModel="VendorProfile"
+                                         Label="Vendor ID" 
+                                         Value="@version.VendorId"
+                                         Icon="@Icons.Material.Filled.Tag"
+                                         PropertyExpression="@(x => x.VendorId)" />
+                            </MudItem>
+                        </MudGrid>
+                    </ViewModeContent>
+                </VersionedDetailsPanel>
+            </SectionPanel>
+
+            <!-- Correspondence Profiles (Admin Only) -->
+            @if (isEditor)
+            {
+                <SectionPanel Title="Correspondence Profiles" 
+                             Icon="@Icons.Material.Filled.ContactMail"
+                             MinimumViewMode="ViewMode.Admin"
+                             ShowCount="true"
+                             Count="@(GetCorrespondenceProfiles()?.Count() ?? 0)"
+                             CountColor="Color.Info">
+                    @if (selectedVendor != null)
+                    {
+                        <MudStack Spacing="2">
+                            @if (isLoadingCorrespondence)
+                            {
+                                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                            }
+                            else
+                            {
+                                var profiles = GetCorrespondenceProfiles();
+                                if (profiles != null && profiles.Any())
+                                {
+                                    @foreach (var profile in profiles)
+                                    {
+                                        var email = correspondenceEmails?.FirstOrDefault(e => e.Id == profile.CorrespondenceEmailId);
+                                        var phone = correspondencePhones?.FirstOrDefault(p => p.Id == profile.CorrespondencePhoneId);
+                                        
+                                        <MudCard Outlined="true">
+                                            <MudCardContent>
+                                                <MudStack Spacing="2">
+                                                    <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                                        <MudText Typo="Typo.h6">Correspondence Profile</MudText>
+                                                        @if (profile.PublicProfile == true)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Public">Public</MudChip>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Lock">Private</MudChip>
+                                                        }
+                                                    </MudStack>
+                                                    
+                                                    @if (profile.Email == true && email != null)
+                                                    {
+                                                        <MudText Typo="Typo.body2">
+                                                            <MudIcon Icon="@Icons.Material.Filled.Email" Size="Size.Small" /> @email.Email
+                                                        </MudText>
+                                                    }
+                                                    
+                                                    @if (profile.Phone == true && phone != null)
+                                                    {
+                                                        <MudText Typo="Typo.body2">
+                                                            <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" /> @phone.Number
+                                                        </MudText>
+                                                    }
+                                                </MudStack>
+                                            </MudCardContent>
+                                        </MudCard>
+                                    }
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2" Align="Align.Center" Class="my-4">No correspondence profiles found.</MudText>
+                                }
+                            }
+                        </MudStack>
+                    }
+                </SectionPanel>
+            }
+
+            <!-- Request For Quotes Section -->
+            <SectionPanel Title="Request For Quotes"
+                         Icon="@Icons.Material.Filled.RequestQuote"
+                         MinimumViewMode="ViewMode.Public"
+                         ShowCount="true"
+                         Count="@(vendorRfqs?.Count() ?? 0)"
+                         CountColor="Color.Warning">
+                @if (selectedVendor != null)
+                {
+                    <MudStack Spacing="2">
+                        @if (isLoadingRfqs)
+                        {
+                            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                        }
+                        else if (vendorRfqs != null && vendorRfqs.Any())
+                        {
+                            <MudTable T="Rfq" Items="@vendorRfqs" Hover="true" Striped="true" Dense="true">
+                                <HeaderContent>
+                                    <MudTh>RFQ Number</MudTh>
+                                    <MudTh>Type</MudTh>
+                                    <MudTh>Service Area</MudTh>
+                                    <MudTh>Issue Date</MudTh>
+                                    <MudTh>Opening Date</MudTh>
+                                    <MudTh>Completed</MudTh>
+                                    <MudTh Style="width: 100px;">Actions</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="RFQ Number">@context.RfqNumber</MudTd>
+                                    <MudTd DataLabel="Type">
+                                        @{
+                                            var ifbType = rfqIfbTypes?.FirstOrDefault(t => t.Id == context.RfqIfbTypeId);
+                                            @(ifbType?.Type ?? "—")
+                                        }
+                                    </MudTd>
+                                    <MudTd DataLabel="Service Area">
+                                        @{
+                                            var serviceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == context.ServiceAreaId);
+                                            @(serviceArea?.Name ?? "—")
+                                        }
+                                    </MudTd>
+                                    <MudTd DataLabel="Issue Date">@(context.IssueDate?.ToString("MMM d, yyyy") ?? "—")</MudTd>
+                                    <MudTd DataLabel="Opening Date">@(context.OpeningDate?.ToString("MMM d, yyyy") ?? "—")</MudTd>
+                                    <MudTd DataLabel="Completed">
+                                        @if (context.Completed == true)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
+                                        }
+                                        else if (context.Completed == false)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.HourglassEmpty">No</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudText>—</MudText>
+                                        }
+                                    </MudTd>
+                                    <MudTd DataLabel="Actions">
+                                        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
+                                                      Size="Size.Small" 
+                                                      Color="Color.Primary" 
+                                                      OnClick="@(() => NavigationManager.NavigateTo($"/rfqs?id={context.Id}"))" />
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Align="Align.Center" Class="my-4">No RFQs found for this vendor.</MudText>
+                        }
+                    </MudStack>
+                }
+            </SectionPanel>
+
+            <!-- Notes Section -->
+            @if (canEdit)
+            {
+                <SectionPanel Title="Notes"
+                             Icon="@Icons.Material.Filled.Notes"
+                             MinimumViewMode="ViewMode.Admin"
+                             ShowCount="true"
+                             Count="@notesCount"
+                             CountColor="Color.Dark">
+                    <NotesPanel EntityType="vendor_profile" 
+                               EntityId="@selectedVendor.Id"
+                               HighlightedNoteDate="@(currentViewVersion?.ValidFrom)"
+                               ShowHistory="true"
+                               NotesCountChanged="@OnNotesCountChanged" />
+                </SectionPanel>
+            }
+
+            <!-- Report Builder Section -->
+            @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
+            {
+                <SectionPanel Title="Report Builder"
+                             Icon="@Icons.Material.Filled.Assessment"
+                             MinimumViewMode="ViewMode.Admin">
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Text">
+                        Report Builder functionality will be implemented here.
+                    </MudAlert>
+                </SectionPanel>
+            }
+        </MudExpansionPanels>
+    </DetailContent>
+</EntityManagementLayout>
+
+@code {
+    [SupplyParameterFromQuery(Name = "id")]
+    public int? VendorId { get; set; }
+
+    private IEnumerable<VendorProfile>? vendorProfiles;
+    private IEnumerable<PersonProfile>? personProfiles;
+    private IEnumerable<PersonHonorific>? personHonorifics;
+    private IEnumerable<PersonSuffix>? personSuffixes;
+    private IEnumerable<CorrespondenceProfile>? correspondenceProfiles;
+    private IEnumerable<CorrespondenceEmail>? correspondenceEmails;
+    private IEnumerable<CorrespondencePhone>? correspondencePhones;
+    private IEnumerable<Rfq>? vendorRfqs;
+    private IEnumerable<RfqIfbType>? rfqIfbTypes;
+    private IEnumerable<RfqProjectScope>? rfqProjectScopes;
+    private IEnumerable<ServiceArea>? serviceAreas;
+    
+    private VendorProfile? selectedVendor;
+    private bool isLoading = false;
+    private bool isSaving = false;
+    private bool isEditMode = false;
+    private bool canEdit = false;
+    private bool isEditor = false;
+    private string? errorMessage;
+    private string[]? errorDetails;
+    private string? successMessage;
+    private VendorProfile? editModel;
+    private string _searchString = string.Empty;
+    private EditContext? editContext;
+
+    // Version navigation fields
+    private IEnumerable<VendorProfile>? allVersions;
+    private VendorProfile? currentViewVersion;
+    private bool isLoadingHistory = false;
+    private string? historyErrorMessage;
+
+    // Notes management field
+    private int notesCount = 0;
+
+    // Correspondence loading
+    private bool isLoadingCorrespondence = false;
+
+    // RFQs loading
+    private bool isLoadingRfqs = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAllData();
+        SelectVendorFromParameters();
+    }
+
+    protected override void OnParametersSet()
+    {
+        SelectVendorFromParameters();
+    }
+
+    private async Task LoadAllData()
+    {
+        isLoading = true;
+        
+        var tasks = new List<Task>
+        {
+            LoadVendorProfiles(),
+            LoadPersonProfiles(),
+            LoadPersonHonorifics(),
+            LoadPersonSuffixes(),
+            LoadCorrespondenceProfiles(),
+            LoadCorrespondenceEmails(),
+            LoadCorrespondencePhones(),
+            LoadRfqIfbTypes(),
+            LoadRfqProjectScopes(),
+            LoadServiceAreas()
+        };
+
+        await Task.WhenAll(tasks);
+        isLoading = false;
+    }
+
+    private void HandleEditModeCancelled()
+    {
+        if (isEditMode)
+        {
+            CancelEdit();
+        }
+    }
+
+    private void SelectVendorFromParameters()
+    {
+        if (vendorProfiles == null || !vendorProfiles.Any() || !VendorId.HasValue)
+            return;
+
+        var target = vendorProfiles.FirstOrDefault(v => v.Id == VendorId.Value);
+
+        if (target != null && selectedVendor?.Id != target.Id)
+        {
+            selectedVendor = target;
+            isEditMode = false;
+            ClearMessages();
+            _ = LoadAllVersions();
+        }
+    }
+
+    private async Task LoadVendorProfiles()
+    {
+        try
+        {
+            var result = await VendorProfilesApi.GetAllVendorProfilesAsync();
+            vendorProfiles = result?.Data ?? Array.Empty<VendorProfile>();
+        }
+        catch (Exception)
+        {
+            vendorProfiles = Array.Empty<VendorProfile>();
+        }
+    }
+
+    private async Task LoadPersonProfiles()
+    {
+        try
+        {
+            var result = await PersonProfilesApi.GetAllPersonProfilesAsync();
+            personProfiles = result?.Data ?? Array.Empty<PersonProfile>();
+        }
+        catch (Exception)
+        {
+            personProfiles = Array.Empty<PersonProfile>();
+        }
+    }
+
+    private async Task LoadPersonHonorifics()
+    {
+        try
+        {
+            var result = await PersonHonorificsApi.GetAllPersonHonorificsAsync();
+            personHonorifics = result?.Data ?? Array.Empty<PersonHonorific>();
+        }
+        catch (Exception)
+        {
+            personHonorifics = Array.Empty<PersonHonorific>();
+        }
+    }
+
+    private async Task LoadPersonSuffixes()
+    {
+        try
+        {
+            var result = await PersonSuffixesApi.GetAllPersonSuffixesAsync();
+            personSuffixes = result?.Data ?? Array.Empty<PersonSuffix>();
+        }
+        catch (Exception)
+        {
+            personSuffixes = Array.Empty<PersonSuffix>();
+        }
+    }
+
+    private async Task LoadCorrespondenceProfiles()
+    {
+        try
+        {
+            var result = await CorrespondenceProfilesApi.GetAllCorrespondenceProfilesAsync();
+            correspondenceProfiles = result?.Data ?? Array.Empty<CorrespondenceProfile>();
+        }
+        catch (Exception)
+        {
+            correspondenceProfiles = Array.Empty<CorrespondenceProfile>();
+        }
+    }
+
+    private async Task LoadCorrespondenceEmails()
+    {
+        try
+        {
+            var result = await CorrespondenceEmailsApi.GetAllCorrespondenceEmailsAsync();
+            correspondenceEmails = result?.Data ?? Array.Empty<CorrespondenceEmail>();
+        }
+        catch (Exception)
+        {
+            correspondenceEmails = Array.Empty<CorrespondenceEmail>();
+        }
+    }
+
+    private async Task LoadCorrespondencePhones()
+    {
+        try
+        {
+            var result = await CorrespondencePhonesApi.GetAllCorrespondencePhonesAsync();
+            correspondencePhones = result?.Data ?? Array.Empty<CorrespondencePhone>();
+        }
+        catch (Exception)
+        {
+            correspondencePhones = Array.Empty<CorrespondencePhone>();
+        }
+    }
+
+    private async Task LoadRfqIfbTypes()
+    {
+        try
+        {
+            var result = await RfqIfbTypesApi.GetAllRfqIfbTypesAsync();
+            rfqIfbTypes = result?.Data ?? Array.Empty<RfqIfbType>();
+        }
+        catch (Exception)
+        {
+            rfqIfbTypes = Array.Empty<RfqIfbType>();
+        }
+    }
+
+    private async Task LoadRfqProjectScopes()
+    {
+        try
+        {
+            var result = await RfqProjectScopesApi.GetAllRfqProjectScopesAsync();
+            rfqProjectScopes = result?.Data ?? Array.Empty<RfqProjectScope>();
+        }
+        catch (Exception)
+        {
+            rfqProjectScopes = Array.Empty<RfqProjectScope>();
+        }
+    }
+
+    private async Task LoadServiceAreas()
+    {
+        try
+        {
+            var result = await ServiceAreasApi.GetAllServiceAreasAsync();
+            serviceAreas = result?.Data ?? Array.Empty<ServiceArea>();
+        }
+        catch (Exception)
+        {
+            serviceAreas = Array.Empty<ServiceArea>();
+        }
+    }
+
+    private async Task LoadVendorRfqs()
+    {
+        if (selectedVendor == null) return;
+
+        isLoadingRfqs = true;
+
+        try
+        {
+            var result = await RfqsApi.GetAllRfqsAsync();
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                // TODO: Filter RFQs that are associated with this vendor
+                // The relationship between Vendor and RFQ needs to be determined
+                // It's likely through Bids or another junction table
+                // For now, return empty list
+                vendorRfqs = Array.Empty<Rfq>();
+            }
+            else
+            {
+                vendorRfqs = Array.Empty<Rfq>();
+            }
+        }
+        catch (Exception)
+        {
+            vendorRfqs = Array.Empty<Rfq>();
+        }
+        finally
+        {
+            isLoadingRfqs = false;
+        }
+    }
+
+    private IEnumerable<CorrespondenceProfile>? GetCorrespondenceProfiles()
+    {
+        if (selectedVendor == null) return null;
+
+        return correspondenceProfiles?
+            .Where(cp => cp.VendorProfileId == selectedVendor.Id)
+            .ToList();
+    }
+
+    private (string? PhoneNumber, string? EmailAddress)? GetPrimaryCorrespondence(int vendorProfileId)
+    {
+        var correspondence = correspondenceProfiles?
+            .FirstOrDefault(cp => cp.VendorProfileId == vendorProfileId);
+
+        if (correspondence == null)
+            return null;
+
+        string? phoneNumber = null;
+        if (correspondence.Phone == true && correspondence.CorrespondencePhoneId.HasValue)
+        {
+            var phone = correspondencePhones?.FirstOrDefault(p => p.Id == correspondence.CorrespondencePhoneId);
+            phoneNumber = phone?.Number;
+        }
+
+        string? emailAddress = null;
+        if (correspondence.Email == true && correspondence.CorrespondenceEmailId.HasValue)
+        {
+            var email = correspondenceEmails?.FirstOrDefault(e => e.Id == correspondence.CorrespondenceEmailId);
+            emailAddress = email?.Email;
+        }
+
+        if (!string.IsNullOrEmpty(phoneNumber) || !string.IsNullOrEmpty(emailAddress))
+        {
+            return (phoneNumber, emailAddress);
+        }
+
+        return null;
+    }
+
+    private async Task LoadAllVersions()
+    {
+        if (selectedVendor == null) return;
+
+        isLoadingHistory = true;
+        historyErrorMessage = null;
+
+        try
+        {
+            var historyResult = await VendorProfilesApi.GetVendorProfileHistoryAsync(selectedVendor.Id);
+            var historyRecords = new List<VendorProfile>();
+
+            if (historyResult?.IsSuccess == true && historyResult.Data != null)
+            {
+                historyRecords.AddRange(historyResult.Data);
+            }
+
+            var versions = new List<VendorProfile> { selectedVendor };
+            versions.AddRange(historyRecords.Where(h => h.ValidFrom != selectedVendor.ValidFrom));
+            
+            allVersions = versions;
+            currentViewVersion = selectedVendor;
+            UpdateEditModel(currentViewVersion);
+
+            // Load related data
+            await LoadVendorRfqs();
+        }
+        catch (Exception ex)
+        {
+            historyErrorMessage = $"Error loading versions: {ex.Message}";
+            allVersions = new List<VendorProfile> { selectedVendor };
+            currentViewVersion = selectedVendor;
+            UpdateEditModel(currentViewVersion);
+        }
+        finally
+        {
+            isLoadingHistory = false;
+        }
+    }
+
+    private async Task OnCurrentVersionChanged(VendorProfile newVersion)
+    {
+        currentViewVersion = newVersion;
+        UpdateEditModel(newVersion);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnNotesCountChanged(int count)
+    {
+        notesCount = count;
+        StateHasChanged();
+    }
+
+    private void UpdateEditModel(VendorProfile version)
+    {
+        editModel = CloneVendor(version);
+        editContext = new EditContext(editModel);
+        
+        if (!IsViewingCurrentVersion())
+        {
+            isEditMode = false;
+        }
+    }
+
+    private bool IsViewingCurrentVersion()
+    {
+        if (currentViewVersion == null || selectedVendor == null)
+            return true;
+
+        return currentViewVersion.ValidFrom == selectedVendor.ValidFrom;
+    }
+
+    private bool CanEditFields()
+    {
+        return isEditMode && IsViewingCurrentVersion();
+    }
+
+    private async Task HandleItemClick(VendorProfile item)
+    {
+        selectedVendor = item;
+        isEditMode = false;
+        ClearMessages();
+        await LoadAllVersions();
+        await InvokeAsync(StateHasChanged);
+
+        var uri = NavigationManager.GetUriWithQueryParameter("id", selectedVendor.Id);
+        NavigationManager.NavigateTo(uri, replace: true);
+    }
+
+    private async Task HandleRestore(VendorProfile historicalRecord)
+    {
+        if (selectedVendor == null) return;
+
+        isSaving = true;
+        ClearMessages();
+
+        try
+        {
+            var restoredData = CloneVendor(historicalRecord);
+            restoredData.Id = selectedVendor.Id;
+
+            var result = await VendorProfilesApi.UpdateVendorProfileAsync(restoredData.Id, restoredData);
+
+            if (result?.IsSuccess == true)
+            {
+                successMessage = $"Successfully restored version from {historicalRecord.ValidFrom:g}";
+                
+                await LoadVendorProfiles();
+                
+                selectedVendor = vendorProfiles?.FirstOrDefault(v => v.Id == selectedVendor.Id);
+                if (selectedVendor != null)
+                {
+                    await LoadAllVersions();
+                }
+                
+                isEditMode = false;
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to restore historical version";
+                errorDetails = result?.Errors;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error restoring historical version: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void EnableEdit()
+    {
+        if (!IsViewingCurrentVersion())
+        {
+            if (selectedVendor != null)
+            {
+                currentViewVersion = selectedVendor;
+                UpdateEditModel(currentViewVersion);
+            }
+        }
+        
+        isEditMode = true;
+        ClearMessages();
+    }
+
+    private async Task SaveEdit()
+    {
+        if (editModel == null) return;
+
+        isSaving = true;
+        ClearMessages();
+
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userEmail = user.Identity?.Name ?? user.Claims.FirstOrDefault(c => c.Type.Contains("email"))?.Value;
+
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                editModel.ModifiedBy = userEmail;
+            }
+
+            var result = await VendorProfilesApi.UpdateVendorProfileAsync(editModel.Id, editModel);
+
+            if (result?.IsSuccess == true)
+            {
+                successMessage = "Vendor profile updated successfully!";
+                isEditMode = false;
+
+                await LoadVendorProfiles();
+                selectedVendor = vendorProfiles?.FirstOrDefault(v => v.Id == editModel.Id);
+
+                if (selectedVendor != null)
+                {
+                    await LoadAllVersions();
+                }
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to update vendor profile";
+                errorDetails = result?.Errors;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error updating vendor profile: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void CancelEdit()
+    {
+        if (currentViewVersion != null)
+        {
+            editModel = CloneVendor(currentViewVersion);
+            editContext = new EditContext(editModel);
+        }
+        isEditMode = false;
+        ClearMessages();
+    }
+
+    private void ClearMessages()
+    {
+        errorMessage = null;
+        errorDetails = null;
+        successMessage = null;
+    }
+
+    private VendorProfile CloneVendor(VendorProfile source) => new()
+    {
+        Id = source.Id,
+        Active = source.Active,
+        Name = source.Name,
+        DoingBusinessAs = source.DoingBusinessAs,
+        VendorId = source.VendorId,
+        LicenseOnFile = source.LicenseOnFile,
+        LicenseExpirationDate = source.LicenseExpirationDate,
+        ContractorLicense = source.ContractorLicense,
+        ContractorLicenseExpirationDate = source.ContractorLicenseExpirationDate,
+        VendorTypeId = source.VendorTypeId,
+        VendorVinCodeId = source.VendorVinCodeId,
+        ValidFrom = source.ValidFrom,
+        ValidTo = source.ValidTo,
+        ModifiedBy = source.ModifiedBy
+    };
+
+    private string GetPersonName(int personProfileId)
+    {
+        var person = personProfiles?.FirstOrDefault(p => p.Id == personProfileId);
+        if (person == null) return $"Person ID: {personProfileId}";
+
+        var nameParts = new List<string>();
+
+        if (person.PersonHonorificId.HasValue)
+        {
+            var honorific = personHonorifics?.FirstOrDefault(h => h.Id == person.PersonHonorificId);
+            if (!string.IsNullOrEmpty(honorific?.Honorific))
+                nameParts.Add(honorific.Honorific);
+        }
+
+        if (!string.IsNullOrEmpty(person.FirstName))
+            nameParts.Add(person.FirstName);
+
+        if (!string.IsNullOrEmpty(person.PreferredName))
+            nameParts.Add($"\"{person.PreferredName}\"");
+
+        if (!string.IsNullOrEmpty(person.LastName))
+            nameParts.Add(person.LastName);
+
+        if (person.PersonSuffixId.HasValue)
+        {
+            var suffix = personSuffixes?.FirstOrDefault(s => s.Id == person.PersonSuffixId);
+            if (!string.IsNullOrEmpty(suffix?.Suffix))
+                nameParts.Add(suffix.Suffix);
+        }
+
+        return nameParts.Any() ? string.Join(" ", nameParts) : $"Person ID: {personProfileId}";
+    }
+
+    private string GetVendorDisplayText(VendorProfile vendor)
+    {
+        return vendor.Name ?? "Unnamed Vendor";
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        // TODO: Implement create dialog
+        await Task.CompletedTask;
+    }
+}

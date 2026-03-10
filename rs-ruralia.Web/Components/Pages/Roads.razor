@@ -1,0 +1,980 @@
+@page "/roads"
+@rendermode InteractiveServer 
+@using rs_ruralia.Shared.Enums
+@using rs_ruralia.Web.Components.Dialogs
+@using rs_ruralia.Web.Helpers
+@inject RoadsApiClient RoadsApi
+@inject RoadNamesApiClient RoadNamesApi
+@inject RoadSurfaceTypesApiClient RoadSurfaceTypesApi
+@inject RoadResponderCodesApiClient RoadResponderCodesApi
+@inject ServiceAreasApiClient ServiceAreasApi
+@inject NotesApiClient NotesApi
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IConfiguration Configuration
+@inject IDialogService DialogService
+@inject ViewModeService ViewModeService
+
+<EntityManagementLayout TEntity="Road"
+                       Title="Roads"
+                       Subtitle="Manage and view road details, maintenance status, and service areas"
+                       Icon="@Icons.Material.Filled.Route"
+                       ShowViewModeSelector="true"
+                       ListTitle="Roads"
+                       ListIcon="@Icons.Material.Filled.Route"
+                       SearchPlaceholder="Search roads..."
+                       ShowSearch="true"
+                       SearchString="@_searchString"
+                       ShowTotalCount="true"
+                       TotalCount="@(roads?.Count())"
+                       CountIcon="@Icons.Material.Filled.Route"
+                       HasSelection="@(selectedRoad != null)"
+                       EntitySingularName="a Road"
+                       EntityPluralName="roads"
+                       EnableViewModeManagement="true"
+                       EnableEditPermissionCheck="true"
+                       CanEditChanged="@(async (canEdit) => { this.canEdit = canEdit; await InvokeAsync(StateHasChanged); })"
+                       OnEditModeCancelled="@HandleEditModeCancelled"
+                       SelectedItem="@selectedRoad"
+                       GetSelectedItemDisplayText="@GetRoadDisplayText"
+                       ShowSelectedItemChip="true"
+                       ShowCreateButton="true"
+                       CreateButtonTitle="Create New Road"
+                       OnCreateClicked="@OpenCreateDialog"
+                       UseBuiltInDataGrid="true"
+                       IsLoadingItems="@isLoading"
+                       Items="@roads"
+                       OnItemClicked="@(async (item) => await HandleItemClick(item))"
+                       GetItemIcon="@(r => Icons.Material.Filled.Route)"
+                       GetItemDisplayText="@GetRoadDisplayText">
+
+    <AdditionalItemColumns>
+        <PropertyColumn T="Road" TProperty="int?" Property="@(x => x.Phase)" Title="Phase" />
+    </AdditionalItemColumns>
+
+    <!-- Detail Content (Expandable Sections) -->
+    <DetailContent>
+        <MudExpansionPanels MultiExpansion="true">
+            <!-- Details Section -->
+            <SectionPanel Title="Details" 
+                         Icon="@Icons.Material.Filled.Info" 
+                         Expanded="true"
+                         MinimumViewMode="ViewMode.Public">
+                <VersionedDetailsPanel TEntity="Road"
+                   AllVersions="@allVersions"
+                   CurrentVersion="@currentViewVersion"
+                   CurrentVersionChanged="@OnCurrentVersionChanged"
+                   GetValidFrom="@(x => x.ValidFrom)"
+                   GetValidTo="@(x => x.ValidTo)"
+                   GetModifiedBy="@(x => x.ModifiedBy)"
+                   GetDisplayText="@GetRoadDisplayText"
+                   CanEdit="@(canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))"
+                   IsEditMode="@isEditMode"
+                   OnEditClicked="@EnableEdit"
+                   IsLoading="@(isLoading || isLoadingHistory)"
+                   ErrorMessage="@(errorMessage ?? historyErrorMessage)"
+                   OnRestore="@HandleRestore">
+                    
+                    <!-- Edit Mode Content -->
+                    <DetailsContent Context="version">
+                        @if (editContext != null && editModel != null)
+                        {
+                            <EditForm EditContext="@editContext" OnValidSubmit="SaveEdit">
+                                <DataAnnotationsValidator />
+                                <MudGrid>
+                                    <MudItem xs="12">
+                                        @if (canEdit && IsViewingCurrentVersion() && ViewModeService.IsAtLeast(ViewMode.Admin))
+                                        {
+                                            @if (isEditMode)
+                                            {
+                                                <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
+                                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@isSaving">
+                                                        @if (isSaving)
+                                                        {
+                                                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                                                            <MudText Class="ms-2">Saving...</MudText>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudIcon Icon="@Icons.Material.Filled.Save" Class="me-1" /> <MudText>Save</MudText>
+                                                        }
+                                                    </MudButton>
+                                                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="CancelEdit" Disabled="@isSaving">
+                                                        Cancel
+                                                    </MudButton>
+                                                </MudStack>
+                                            }
+                                        }
+                                    </MudItem>
+
+                                    @if (!string.IsNullOrEmpty(successMessage))
+                                    {
+                                        <MudItem xs="12">
+                                            <MudAlert Severity="Severity.Success" Variant="Variant.Filled">@successMessage</MudAlert>
+                                        </MudItem>
+                                    }
+
+                                    @if (!string.IsNullOrEmpty(errorMessage))
+                                    {
+                                        <MudItem xs="12">
+                                            <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
+                                                <MudText>@errorMessage</MudText>
+                                                @if (errorDetails != null && errorDetails.Length > 0)
+                                                {
+                                                    <MudList T="string" Dense="true">
+                                                        @foreach (var detail in errorDetails)
+                                                        {
+                                                            <MudListItem>@detail</MudListItem>
+                                                        }
+                                                    </MudList>
+                                                }
+                                            </MudAlert>
+                                        </MudItem>
+                                    }
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.RoadNameId" 
+                                                   TModel="Road" 
+                                                   TValue="int?"
+                                                   TLookup="RoadName"
+                                                   Property="@(x => x.RoadNameId)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   LookupItems="@roadNames"
+                                                   LookupTextSelector="@(item => ((RoadName)item).Name ?? "")"
+                                                   For="@(() => editModel.RoadNameId)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.Phase" 
+                                                   TModel="Road" 
+                                                   TValue="int?" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.Phase)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   For="@(() => editModel.Phase)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.DistanceFeet" 
+                                                   TModel="Road" 
+                                                   TValue="double?" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.DistanceFeet)"
+                                                   Format="N2"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   For="@(() => editModel.DistanceFeet)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.ApprovedForMaintenance" 
+                                                   TModel="Road" 
+                                                   TValue="bool?" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.ApprovedForMaintenance)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   For="@(() => editModel.ApprovedForMaintenance)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12">
+                                        <AutoField @bind-Value="editModel.StartDescription" 
+                                                   TModel="Road" 
+                                                   TValue="string" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.StartDescription)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   For="@(() => editModel.StartDescription)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12">
+                                        <AutoField @bind-Value="editModel.EndDescription" 
+                                                   TModel="Road" 
+                                                   TValue="string" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.EndDescription)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   For="@(() => editModel.EndDescription)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.RoadSurfaceTypeId" 
+                                                   TModel="Road" 
+                                                   TValue="int?"
+                                                   TLookup="RoadSurfaceType"
+                                                   Property="@(x => x.RoadSurfaceTypeId)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   LookupItems="@roadSurfaceTypes"
+                                                   LookupTextSelector="@(item => ((RoadSurfaceType)item).Type ?? "")"
+                                                   For="@(() => editModel.RoadSurfaceTypeId)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.ResponderCodeId" 
+                                                   TModel="Road" 
+                                                   TValue="int?"
+                                                   TLookup="RoadResponderCode"
+                                                   Property="@(x => x.ResponderCodeId)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   LookupItems="@roadResponderCodes"
+                                                   LookupTextSelector="@(item => ((RoadResponderCode)item).Code ?? string.Empty)"
+                                                   For="@(() => editModel.ResponderCodeId)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.ServiceAreaId" 
+                                                   TModel="Road" 
+                                                   TValue="int"
+                                                   TLookup="ServiceArea"
+                                                   Property="@(x => x.ServiceAreaId)"
+                                                   ReadOnly="@(!CanEditFields())"
+                                                   LookupItems="@serviceAreas"
+                                                   LookupTextSelector="@(item => ((ServiceArea)item).Name ?? "")"
+                                                   For="@(() => editModel.ServiceAreaId)" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField Value="editModel.ValidFrom" 
+                                                   TModel="Road" 
+                                                   TValue="DateTime?" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.ValidFrom)"
+                                                   ReadOnly="true" />
+                                    </MudItem>
+
+                                    <MudItem xs="12" md="6">
+                                        <AutoField @bind-Value="editModel.ModifiedBy" 
+                                                   TModel="Road" 
+                                                   TValue="string" 
+                                                   TLookup="object"
+                                                   Property="@(x => x.ModifiedBy)"
+                                                   ReadOnly="true" />
+                                    </MudItem>
+                                </MudGrid>
+                            </EditForm>
+                        }
+                    </DetailsContent>
+
+                    <!-- View Mode Content -->
+                    <ViewModeContent Context="version">
+                        <MudGrid Spacing="3">
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string" TModel="Road"
+                                         Label="Road Name" 
+                                         Icon="@Icons.Material.Filled.Route"
+                                         ValueStyle="font-weight: 600; font-size: 1.1rem;"
+                                         PropertyExpression="@(x => x.RoadNameId)">
+                                    <ValueContent>
+                                        @{
+                                            var roadName = roadNames?.FirstOrDefault(rn => rn.Id == version.RoadNameId);
+                                            <MudText Typo="Typo.body1" Style="font-weight: 600; font-size: 1.1rem;">
+                                                @(roadName?.Name ?? "—")
+                                            </MudText>
+                                        }
+                                    </ValueContent>
+                                </InfoCard>
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string" TModel="Road"
+                                         Label="Phase" 
+                                         Value="@(version.Phase?.ToString())"
+                                         Icon="@Icons.Material.Filled.Layers"
+                                         PropertyExpression="@(x => x.Phase)" />
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string" TModel="Road"
+                                         Label="Distance (Feet)" 
+                                         Value="@(version.DistanceFeet?.ToString("N2"))"
+                                         Icon="@Icons.Material.Filled.Straighten"
+                                         PropertyExpression="@(x => x.DistanceFeet)" />
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="bool?" TModel="Road"
+                                         Label="Approved for Maintenance" 
+                                         Icon="@Icons.Material.Filled.Build"
+                                         PropertyExpression="@(x => x.ApprovedForMaintenance)">
+                                    <ValueContent>
+                                        @if (version.ApprovedForMaintenance == true)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
+                                        }
+                                        else if (version.ApprovedForMaintenance == false)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudText>—</MudText>
+                                        }
+                                    </ValueContent>
+                                </InfoCard>
+                            </MudItem>
+
+                            <MudItem xs="12">
+                                <InfoCard TValue="string" TModel="Road"
+                                         Label="Start Description" 
+                                         Value="@version.StartDescription"
+                                         Icon="@Icons.Material.Filled.Flag"
+                                         PropertyExpression="@(x => x.StartDescription)" />
+                            </MudItem>
+
+                            <MudItem xs="12">
+                                <InfoCard TValue="string" TModel="Road"
+                                         Label="End Description" 
+                                         Value="@version.EndDescription"
+                                         Icon="@Icons.Material.Filled.FlagCircle"
+                                         PropertyExpression="@(x => x.EndDescription)" />
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string" TModel="Road"
+                                         Label="Surface Type" 
+                                         Icon="@Icons.Material.Filled.Texture"
+                                         PropertyExpression="@(x => x.RoadSurfaceTypeId)">
+                                    <ValueContent>
+                                        @{
+                                            var surfaceType = roadSurfaceTypes?.FirstOrDefault(st => st.Id == version.RoadSurfaceTypeId);
+                                            <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                                                @(surfaceType?.Type ?? "—")
+                                            </MudText>
+                                        }
+                                    </ValueContent>
+                                </InfoCard>
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string" TModel="Road"
+                                         Label="Responder Code" 
+                                         Icon="@Icons.Material.Filled.LocalPolice"
+                                         PropertyExpression="@(x => x.ResponderCodeId)">
+                                    <ValueContent>
+                                        @{
+                                            var responderCode = roadResponderCodes?.FirstOrDefault(rc => rc.Id == version.ResponderCodeId);
+                                            <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                                                @(responderCode?.Code ?? "—")
+                                            </MudText>
+                                        }
+                                    </ValueContent>
+                                </InfoCard>
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <InfoCard TValue="string" TModel="Road"
+                                         Label="Service Area" 
+                                         Icon="@Icons.Material.Filled.Landscape"
+                                         PropertyExpression="@(x => x.ServiceAreaId)">
+                                    <ValueContent>
+                                        @{
+                                            var serviceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == version.ServiceAreaId);
+                                            if (serviceArea != null)
+                                            {
+                                                <MudButton Variant="Variant.Text" 
+                                                          Color="Color.Primary" 
+                                                          Size="Size.Small"
+                                                          StartIcon="@Icons.Material.Filled.OpenInNew"
+                                                          OnClick="@(() => NavigationManager.NavigateTo($"/service-areas?id={serviceArea.Id}"))">
+                                                    @serviceArea.Name
+                                                </MudButton>
+                                            }
+                                            else
+                                            {
+                                                <MudText>—</MudText>
+                                            }
+                                        }
+                                    </ValueContent>
+                                </InfoCard>
+                            </MudItem>
+                        </MudGrid>
+                    </ViewModeContent>
+                </VersionedDetailsPanel>
+            </SectionPanel>
+
+            <!-- Notes Section -->
+            @if (canEdit)
+            {
+                <SectionPanel Title="Notes"
+                             Icon="@Icons.Material.Filled.Notes"
+                             MinimumViewMode="ViewMode.Admin"
+                             ShowCount="true"
+                             Count="@notesCount"
+                             CountColor="Color.Dark">
+                    <NotesPanel EntityType="road" 
+                               EntityId="@selectedRoad.Id"
+                               HighlightedNoteDate="@(currentViewVersion?.ValidFrom)"
+                               ShowHistory="true"
+                               NotesCountChanged="@OnNotesCountChanged" />
+                </SectionPanel>
+            }
+
+            <!-- Roads with Same Name Section -->
+            <SectionPanel Title="Roads with Same Name" 
+                         Icon="@Icons.Material.Filled.FormatListBulleted"
+                         MinimumViewMode="ViewMode.Public"
+                         ShowCount="true"
+                         Count="@(relatedRoads?.Count() ?? 0)"
+                         CountColor="Color.Info">
+                @if (selectedRoad != null)
+                {
+                    <MudStack Spacing="2">
+                        @if (isLoadingRelatedRoads)
+                        {
+                            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                        }
+                        else if (relatedRoads != null && relatedRoads.Any())
+                        {
+                            <MudTable T="Road" Items="@relatedRoads" Hover="true" Striped="true" Dense="true">
+                                <HeaderContent>
+                                    <MudTh>Phase</MudTh>
+                                    <MudTh>Distance (Feet)</MudTh>
+                                    <MudTh>Start Description</MudTh>
+                                    <MudTh>End Description</MudTh>
+                                    <MudTh>Approved</MudTh>
+                                    <MudTh Style="width: 100px;">Actions</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="Phase">@context.Phase</MudTd>
+                                    <MudTd DataLabel="Distance (Feet)">@(context.DistanceFeet?.ToString("N2") ?? "—")</MudTd>
+                                    <MudTd DataLabel="Start Description">@context.StartDescription</MudTd>
+                                    <MudTd DataLabel="End Description">@context.EndDescription</MudTd>
+                                    <MudTd DataLabel="Approved">
+                                        @if (context.ApprovedForMaintenance == true)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
+                                        }
+                                    </MudTd>
+                                    <MudTd DataLabel="Actions">
+                                        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
+                                                      Size="Size.Small" 
+                                                      Color="Color.Primary" 
+                                                      OnClick="@(() => NavigateToRoad(context))"
+                                                      Title="View Road Details" />
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Align="Align.Center" Class="my-4">No other roads with this name.</MudText>
+                        }
+                    </MudStack>
+                }
+            </SectionPanel>
+
+            <!-- Map Section -->
+            <SectionPanel Title="Map" 
+                         Icon="@Icons.Material.Filled.Map"
+                         MinimumViewMode="ViewMode.Public">
+                @if (selectedRoad != null)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Text" Class="mb-3">
+                        Map will display: Service Area boundary, Road (ESRI layer), and Road Location
+                    </MudAlert>
+                    
+                    @* TODO: Implement map component showing:
+                        - Service Area boundary
+                        - Road from ESRI layer
+                        - RoadLocation property visualization *@
+                    
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Map component to be implemented</MudText>
+                }
+            </SectionPanel>
+
+            <!-- Report Builder Section -->
+            @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
+            {
+                <SectionPanel Title="Report Builder"
+                             Icon="@Icons.Material.Filled.Assessment"
+                             MinimumViewMode="ViewMode.Admin">
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Text">
+                        Report Builder functionality will be implemented here.
+                    </MudAlert>
+                </SectionPanel>
+            }
+        </MudExpansionPanels>
+    </DetailContent>
+</EntityManagementLayout>
+
+@code {
+    [SupplyParameterFromQuery(Name = "id")]
+    public int? RoadId { get; set; }
+
+    private IEnumerable<Road>? roads;
+    private IEnumerable<RoadName>? roadNames;
+    private IEnumerable<RoadSurfaceType>? roadSurfaceTypes;
+    private IEnumerable<RoadResponderCode>? roadResponderCodes;
+    private IEnumerable<ServiceArea>? serviceAreas;
+    private Road? selectedRoad;
+    private bool isLoading = false;
+    private bool isSaving = false;
+    private bool isEditMode = false;
+    private bool canEdit = false;
+    private string? errorMessage;
+    private string[]? errorDetails;
+    private string? successMessage;
+    private Road? editModel;
+    private string _searchString = string.Empty;
+    private EditContext? editContext;
+
+    // Version navigation fields
+    private IEnumerable<Road>? allVersions;
+    private Road? currentViewVersion;
+    private bool isLoadingHistory = false;
+    private string? historyErrorMessage;
+
+    // Notes management field
+    private int notesCount = 0;
+
+    // Related roads fields
+    private IEnumerable<Road>? relatedRoads;
+    private bool isLoadingRelatedRoads = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRoads();
+        await LoadRoadNames();
+        await LoadRoadSurfaceTypes();
+        await LoadRoadResponderCodes();
+        await LoadServiceAreas();
+        SelectRoadFromParameters();
+    }
+
+    protected override void OnParametersSet()
+    {
+        SelectRoadFromParameters();
+    }
+
+    private void HandleEditModeCancelled()
+    {
+        if (isEditMode)
+        {
+            CancelEdit();
+        }
+    }
+
+    private void SelectRoadFromParameters()
+    {
+        if (roads == null || !roads.Any() || !RoadId.HasValue)
+            return;
+
+        var targetRoad = roads.FirstOrDefault(r => r.Id == RoadId.Value);
+
+        if (targetRoad != null && selectedRoad?.Id != targetRoad.Id)
+        {
+            selectedRoad = targetRoad;
+            isEditMode = false;
+            ClearMessages();
+            _ = LoadAllVersions();
+        }
+    }
+
+    private async Task LoadRoads()
+    {
+        isLoading = true;
+        errorMessage = null;
+        errorDetails = null;
+        successMessage = null;
+
+        try
+        {
+            var result = await RoadsApi.GetAllRoadsAsync();
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                roads = result.Data;
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to load roads";
+                errorDetails = result?.Errors;
+                roads = Array.Empty<Road>();
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = "Network error. Please check your connection and try again.";
+            roads = Array.Empty<Road>();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unexpected error: {ex.Message}";
+            roads = Array.Empty<Road>();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadRoadNames()
+    {
+        try
+        {
+            var result = await RoadNamesApi.GetAllRoadNamesAsync();
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                roadNames = result.Data;
+            }
+            else
+            {
+                roadNames = Array.Empty<RoadName>();
+            }
+        }
+        catch (Exception)
+        {
+            roadNames = Array.Empty<RoadName>();
+        }
+    }
+
+    private async Task LoadRoadSurfaceTypes()
+    {
+        try
+        {
+            var result = await RoadSurfaceTypesApi.GetAllRoadSurfaceTypesAsync();
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                roadSurfaceTypes = result.Data;
+            }
+            else
+            {
+                roadSurfaceTypes = Array.Empty<RoadSurfaceType>();
+            }
+        }
+        catch (Exception)
+        {
+            roadSurfaceTypes = Array.Empty<RoadSurfaceType>();
+        }
+    }
+
+    private async Task LoadRoadResponderCodes()
+    {
+        try
+        {
+            var result = await RoadResponderCodesApi.GetAllRoadResponderCodesAsync();
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                roadResponderCodes = result.Data;
+            }
+            else
+            {
+                roadResponderCodes = Array.Empty<RoadResponderCode>();
+            }
+        }
+        catch (Exception)
+        {
+            roadResponderCodes = Array.Empty<RoadResponderCode>();
+        }
+    }
+
+    private async Task LoadServiceAreas()
+    {
+        try
+        {
+            var result = await ServiceAreasApi.GetAllServiceAreasAsync();
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                serviceAreas = result.Data;
+            }
+            else
+            {
+                serviceAreas = Array.Empty<ServiceArea>();
+            }
+        }
+        catch (Exception)
+        {
+            serviceAreas = Array.Empty<ServiceArea>();
+        }
+    }
+
+    private async Task LoadRelatedRoads()
+    {
+        if (selectedRoad == null || !selectedRoad.RoadNameId.HasValue) return;
+
+        isLoadingRelatedRoads = true;
+
+        try
+        {
+            var result = await RoadsApi.GetAllRoadsAsync();
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                relatedRoads = result.Data
+                    .Where(r => r.RoadNameId == selectedRoad.RoadNameId && r.Id != selectedRoad.Id)
+                    .OrderBy(r => r.Phase)
+                    .ToList();
+            }
+            else
+            {
+                relatedRoads = Array.Empty<Road>();
+            }
+        }
+        catch (Exception)
+        {
+            relatedRoads = Array.Empty<Road>();
+        }
+        finally
+        {
+            isLoadingRelatedRoads = false;
+        }
+    }
+
+    private async Task LoadAllVersions()
+    {
+        if (selectedRoad == null) return;
+
+        isLoadingHistory = true;
+        historyErrorMessage = null;
+
+        try
+        {
+            var historyResult = await RoadsApi.GetRoadHistoryAsync(selectedRoad.Id);
+            var historyRecords = new List<Road>();
+
+            if (historyResult?.IsSuccess == true && historyResult.Data != null)
+            {
+                historyRecords.AddRange(historyResult.Data);
+            }
+
+            var versions = new List<Road> { selectedRoad };
+            versions.AddRange(historyRecords.Where(h => h.ValidFrom != selectedRoad.ValidFrom));
+            
+            allVersions = versions;
+            currentViewVersion = selectedRoad;
+            UpdateEditModel(currentViewVersion);
+
+            // Load related data
+            await LoadRelatedRoads();
+        }
+        catch (Exception ex)
+        {
+            historyErrorMessage = $"Error loading versions: {ex.Message}";
+            allVersions = new List<Road> { selectedRoad };
+            currentViewVersion = selectedRoad;
+            UpdateEditModel(currentViewVersion);
+        }
+        finally
+        {
+            isLoadingHistory = false;
+        }
+    }
+
+    private async Task OnCurrentVersionChanged(Road newVersion)
+    {
+        currentViewVersion = newVersion;
+        UpdateEditModel(newVersion);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnNotesCountChanged(int count)
+    {
+        notesCount = count;
+        StateHasChanged();
+    }
+
+    private void UpdateEditModel(Road version)
+    {
+        editModel = CloneRoad(version);
+        editContext = new EditContext(editModel);
+        
+        if (!IsViewingCurrentVersion())
+        {
+            isEditMode = false;
+        }
+    }
+
+    private bool IsViewingCurrentVersion()
+    {
+        if (currentViewVersion == null || selectedRoad == null)
+            return true;
+
+        return currentViewVersion.ValidFrom == selectedRoad.ValidFrom;
+    }
+
+    private bool CanEditFields()
+    {
+        return isEditMode && IsViewingCurrentVersion();
+    }
+
+    private async Task HandleItemClick(Road item)
+    {
+        selectedRoad = item;
+        isEditMode = false;
+        ClearMessages();
+        await LoadAllVersions();
+        await InvokeAsync(StateHasChanged);
+
+        var uri = NavigationManager.GetUriWithQueryParameter("id", selectedRoad.Id);
+        NavigationManager.NavigateTo(uri, replace: true);
+    }
+
+    private async Task HandleRestore(Road historicalRecord)
+    {
+        if (selectedRoad == null) return;
+
+        isSaving = true;
+        ClearMessages();
+
+        try
+        {
+            var restoredData = CloneRoad(historicalRecord);
+            restoredData.Id = selectedRoad.Id;
+
+            var result = await RoadsApi.UpdateRoadAsync(restoredData.Id, restoredData);
+
+            if (result?.IsSuccess == true)
+            {
+                successMessage = $"Successfully restored version from {historicalRecord.ValidFrom:g}";
+                
+                await LoadRoads();
+                
+                selectedRoad = roads?.FirstOrDefault(r => r.Id == selectedRoad.Id);
+                if (selectedRoad != null)
+                {
+                    await LoadAllVersions();
+                }
+                
+                isEditMode = false;
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to restore historical version";
+                errorDetails = result?.Errors;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error restoring historical version: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void EnableEdit()
+    {
+        if (!IsViewingCurrentVersion())
+        {
+            if (selectedRoad != null)
+            {
+                currentViewVersion = selectedRoad;
+                UpdateEditModel(currentViewVersion);
+            }
+        }
+        
+        isEditMode = true;
+        ClearMessages();
+    }
+
+    private async Task SaveEdit()
+    {
+        if (editModel == null) return;
+
+        isSaving = true;
+        ClearMessages();
+
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userEmail = user.Identity?.Name ?? user.Claims.FirstOrDefault(c => c.Type.Contains("email"))?.Value;
+
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                editModel.ModifiedBy = userEmail;
+            }
+
+            var result = await RoadsApi.UpdateRoadAsync(editModel.Id, editModel);
+
+            if (result?.IsSuccess == true)
+            {
+                successMessage = "Road updated successfully!";
+                isEditMode = false;
+
+                await LoadRoads();
+                selectedRoad = roads?.FirstOrDefault(r => r.Id == editModel.Id);
+
+                if (selectedRoad != null)
+                {
+                    await LoadAllVersions();
+                }
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to update road";
+                errorDetails = result?.Errors;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error updating road: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void CancelEdit()
+    {
+        if (currentViewVersion != null)
+        {
+            editModel = CloneRoad(currentViewVersion);
+            editContext = new EditContext(editModel);
+        }
+        isEditMode = false;
+        ClearMessages();
+    }
+
+    private void ClearMessages()
+    {
+        errorMessage = null;
+        errorDetails = null;
+        successMessage = null;
+    }
+
+    private Road CloneRoad(Road source) => new()
+    {
+        Id = source.Id,
+        RoadNameId = source.RoadNameId,
+        Phase = source.Phase,
+        DistanceFeet = source.DistanceFeet,
+        StartDescription = source.StartDescription,
+        EndDescription = source.EndDescription,
+        StartCoordinates = source.StartCoordinates,
+        EndCoordinates = source.EndCoordinates,
+        ApprovedForMaintenance = source.ApprovedForMaintenance,
+        Mpo = source.Mpo,
+        LegacySubdivisionName = source.LegacySubdivisionName,
+        RoadSurfaceTypeId = source.RoadSurfaceTypeId,
+        ResponderCodeId = source.ResponderCodeId,
+        ServiceAreaId = source.ServiceAreaId,
+        RoadLocation = source.RoadLocation,
+        ValidFrom = source.ValidFrom,
+        ValidTo = source.ValidTo,
+        ModifiedBy = source.ModifiedBy
+    };
+
+    private string GetRoadDisplayText(Road road)
+    {
+        var roadName = roadNames?.FirstOrDefault(rn => rn.Id == road.RoadNameId);
+        var name = roadName?.Name ?? "Unknown Road";
+        var phase = road.Phase.HasValue ? $" (Phase {road.Phase})" : "";
+        return $"{name}{phase}";
+    }
+
+    private void NavigateToRoad(Road road)
+    {
+        NavigationManager.NavigateTo($"/roads?id={road.Id}");
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        // TODO: Implement create dialog
+        await Task.CompletedTask;
+    }
+}
