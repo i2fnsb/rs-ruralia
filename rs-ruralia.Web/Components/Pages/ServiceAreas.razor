@@ -514,17 +514,13 @@
                              MinimumViewMode="ViewMode.Public">
                     @if (!string.IsNullOrEmpty(selectedServiceArea?.FeatureObjectId))
                     {
-                        <MudStack Spacing="2">
-                            <MudSwitch @bind-Value="showRoadsOnMap" Color="Color.Primary" Label="Show Roads" />
-
-                            <FeatureLayerMap @ref="_mapRef"
-                                            FeatureLayerUrl="@GetFeatureLayerUrl()"
-                                            QueryParameters="@GetMapQueryParameters()"
-                                            RoadsLayerUrl="@GetRoadsLayerUrl()"
-                                            ShowRoads="@showRoadsOnMap"
-                                            Height="600px"
-                                            Title="@selectedServiceArea.Name" />
-                        </MudStack>
+                        <FeatureLayerMap @ref="_mapRef"
+                                        FeatureLayerUrl="@GetFeatureLayerUrl()"
+                                        QueryParameters="@GetMapQueryParameters()"
+                                        RoadsLayerUrl="@GetRoadsLayerUrl()"
+                                        ShowRoads="@showRoadsOnMap"
+                                        Height="600px"
+                                        Title="@selectedServiceArea.Name" />
                     }
                     else
                     {
@@ -1067,10 +1063,18 @@
             }
 
             ViewModeService.SetAvailableViewModes(availableModes);
+
+            // Set the default view mode to the user's highest permission level
+            var highestMode = availableModes.LastOrDefault();
+            if (highestMode != default(ViewMode))
+            {
+                ViewModeService.SetViewMode(highestMode);
+            }
         }
         catch
         {
             ViewModeService.SetAvailableViewModes(new List<ViewMode> { ViewMode.Public });
+            ViewModeService.SetViewMode(ViewMode.Public);
         }
     }
 

@@ -1,6 +1,81 @@
 @inject IJSRuntime JSRuntime
 
-<div id="@_mapId" style="height: @Height; width: 100%;"></div>
+<div style="position: relative; height: @Height; width: 100%;">
+    <div id="@_mapId" style="height: 100%; width: 100%;"></div>
+
+    <!-- Map Controls Overlay -->
+    <div style="position: absolute; top: 10px; right: 10px; z-index: 1000; display: flex; flex-direction: column; gap: 8px;">
+        <!-- Base Map Selector -->
+        <MudPaper Elevation="3" Class="pa-2" Style="background: white; min-width: 180px;">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.caption" Style="font-weight: 600; color: var(--mud-palette-text-secondary);">
+                    <MudIcon Icon="@Icons.Material.Filled.Map" Size="Size.Small" Style="vertical-align: middle;" /> Base Map
+                </MudText>
+                <MudSelect T="string" 
+                          Value="@_selectedBaseMap" 
+                          ValueChanged="@OnBaseMapChanged"
+                          Variant="Variant.Outlined" 
+                          Dense="true"
+                          Margin="Margin.Dense">
+                    <MudSelectItem Value="@("streets")">Streets</MudSelectItem>
+                    <MudSelectItem Value="@("satellite")">Satellite</MudSelectItem>
+                    <MudSelectItem Value="@("topographic")">Topographic</MudSelectItem>
+                    <MudSelectItem Value="@("terrain")">Terrain</MudSelectItem>
+                    <MudSelectItem Value="@("dark")">Dark</MudSelectItem>
+                    <MudSelectItem Value="@("light")">Light</MudSelectItem>
+                </MudSelect>
+            </MudStack>
+        </MudPaper>
+
+        <!-- Layer Control -->
+        <MudPaper Elevation="3" Class="pa-2" Style="background: white; min-width: 180px;">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.caption" Style="font-weight: 600; color: var(--mud-palette-text-secondary);">
+                    <MudIcon Icon="@Icons.Material.Filled.Layers" Size="Size.Small" Style="vertical-align: middle;" /> Layers
+                </MudText>
+
+                <!-- Service Area Layer Toggle -->
+                <MudSwitch Value="@_showServiceAreaLayer" 
+                          ValueChanged="@OnServiceAreaLayerToggled"
+                          Color="Color.Primary" 
+                          Dense="true"
+                          Label="Service Area"
+                          LabelPosition="LabelPosition.End"
+                          T="bool"
+                          Style="margin: 0;" />
+
+                <!-- Roads Layer Toggle -->
+                @if (!string.IsNullOrEmpty(RoadsLayerUrl))
+                {
+                    <MudSwitch Value="@_showRoadsLayer" 
+                              ValueChanged="@OnRoadsLayerToggled"
+                              Color="Color.Primary" 
+                              Dense="true"
+                              Label="Roads"
+                              LabelPosition="LabelPosition.End"
+                              T="bool"
+                              Style="margin: 0;" />
+                }
+
+                <!-- Layer Opacity Control -->
+                @if (_showServiceAreaLayer || _showRoadsLayer)
+                {
+                    <MudDivider Class="my-1" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Opacity: @(_layerOpacity)%
+                    </MudText>
+                    <MudSlider Value="@_layerOpacity" 
+                              ValueChanged="@(async (int value) => await OnLayerOpacityChanged(value))"
+                              Min="10" 
+                              Max="100" 
+                              Step="10"
+                              Color="Color.Primary"
+                              Size="Size.Small" />
+                }
+            </MudStack>
+        </MudPaper>
+    </div>
+</div>
 
 @code {
     [Parameter]
@@ -35,6 +110,12 @@
     private DotNetObjectReference<FeatureLayerMap>? _objRef;
     private string? _serviceAreaGeometry;
     private string? _serviceAreaName;
+
+    // Layer control fields
+    private string _selectedBaseMap = "streets";
+    private bool _showServiceAreaLayer = true;
+    private bool _showRoadsLayer = true;
+    private int _layerOpacity = 70;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -429,5 +510,64 @@
     public void Dispose()
     {
         _objRef?.Dispose();
+    }
+
+    // Event handlers for map controls
+    private async Task OnBaseMapChanged(string baseMap)
+    {
+        _selectedBaseMap = baseMap;
+        if (_isInitialized)
+        {
+            await JSRuntime.InvokeVoidAsync("changeBaseMap", _mapId, baseMap);
+        }
+    }
+
+    private async Task OnServiceAreaLayerToggled(bool show)
+    {
+        _showServiceAreaLayer = show;
+        if (_isInitialized)
+        {
+            if (show)
+            {
+                await JSRuntime.InvokeVoidAsync("showLayer", _mapId, "serviceArea");
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("hideLayer", _mapId, "serviceArea");
+            }
+        }
+    }
+
+    private async Task OnRoadsLayerToggled(bool show)
+    {
+        _showRoadsLayer = show;
+        if (_isInitialized)
+        {
+            if (show && !string.IsNullOrEmpty(RoadsLayerUrl) && !string.IsNullOrEmpty(_serviceAreaGeometry))
+            {
+                await LoadRoadsLayer();
+            }
+            else if (!show)
+            {
+                await JSRuntime.InvokeVoidAsync("hideLayer", _mapId, "roads");
+            }
+        }
+    }
+
+    private async Task OnLayerOpacityChanged(int opacity)
+    {
+        _layerOpacity = opacity;
+        if (_isInitialized)
+        {
+            var opacityValue = opacity / 100.0;
+            if (_showServiceAreaLayer)
+            {
+                await JSRuntime.InvokeVoidAsync("setLayerOpacity", _mapId, "serviceArea", opacityValue);
+            }
+            if (_showRoadsLayer)
+            {
+                await JSRuntime.InvokeVoidAsync("setLayerOpacity", _mapId, "roads", opacityValue);
+            }
+        }
     }
 }
