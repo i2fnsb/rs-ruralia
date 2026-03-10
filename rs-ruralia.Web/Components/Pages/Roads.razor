@@ -963,6 +963,9 @@
                 {
                     await LoadAllVersions();
                 }
+
+                // Prompt user to add a note about the changes
+                await PromptForEditNote(editModel.Id, userEmail);
             }
             else
             {
@@ -1093,5 +1096,55 @@
     {
         var result = await RoadResponderCodesApi.DeleteRoadResponderCodeAsync(entity.Id);
         return result?.IsSuccess ?? false;
+    }
+
+    // Note creation for edit tracking
+    private async Task PromptForEditNote(int roadId, string? userEmail)
+    {
+        var parameters = new DialogParameters
+        {
+            { "RoadName", GetRoadDisplayText(selectedRoad!) }
+        };
+
+        var options = new DialogOptions 
+        { 
+            CloseButton = true, 
+            MaxWidth = MaxWidth.Medium, 
+            FullWidth = true 
+        };
+
+        var dialog = await DialogService.ShowAsync<AddEditNoteDialog>("Add Note About Changes", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is string noteText && !string.IsNullOrWhiteSpace(noteText))
+        {
+            await CreateEditNote(roadId, noteText, userEmail);
+        }
+    }
+
+    private async Task CreateEditNote(int roadId, string noteText, string? userEmail)
+    {
+        try
+        {
+            var note = new Note
+            {
+                NoteText = noteText,
+                RoadId = roadId,
+                ModifiedBy = userEmail ?? "Unknown User",
+                ValidFrom = DateTime.UtcNow
+            };
+
+            var result = await NotesApi.CreateNoteAsync(note);
+
+            if (result?.IsSuccess == true)
+            {
+                // Note created successfully - could show a toast notification here
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception)
+        {
+            // Silently fail - note creation is optional
+        }
     }
 }
