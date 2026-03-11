@@ -1,0 +1,157 @@
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+
+<div class="road-location-map-editor">
+    <MudPaper Elevation="2" Class="pa-3">
+        @if (ReadOnly)
+        {
+            <MudText Typo="Typo.subtitle2" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.Map" Size="Size.Small" /> Road Location (View Only)
+            </MudText>
+        }
+        else
+        {
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudText Typo="Typo.subtitle2">
+                    <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" /> Edit Road Location
+                </MudText>
+                <MudStack Row="true" Spacing="1">
+                    <MudTooltip Text="Draw new line">
+                        <MudIconButton Icon="@Icons.Material.Filled.Gesture" 
+                                      Size="Size.Small" 
+                                      Color="Color.Primary"
+                                      OnClick="StartDrawing"
+                                      Disabled="@isDrawing" />
+                    </MudTooltip>
+                    <MudTooltip Text="Clear line">
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                      Size="Size.Small" 
+                                      Color="Color.Error"
+                                      OnClick="ClearLine"
+                                      Disabled="@(string.IsNullOrEmpty(currentWkt))" />
+                    </MudTooltip>
+                </MudStack>
+            </MudStack>
+        }
+        
+        <div id="@mapId" style="height: 500px; width: 100%; border-radius: 4px;"></div>
+        
+        @if (!string.IsNullOrEmpty(currentWkt))
+        {
+            <MudText Typo="Typo.caption" Class="mt-2" Color="Color.Success">
+                <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" /> Line feature defined
+            </MudText>
+        }
+        else if (!ReadOnly)
+        {
+            <MudText Typo="Typo.caption" Class="mt-2" Color="Color.Secondary">
+                Click "Draw new line" to add a road location
+            </MudText>
+        }
+    </MudPaper>
+</div>
+
+@code {
+    [Parameter]
+    public string? RoadLocationWkt { get; set; }
+
+    [Parameter]
+    public EventCallback<string?> RoadLocationWktChanged { get; set; }
+
+    [Parameter]
+    public bool ReadOnly { get; set; }
+
+    [Parameter]
+    public double? Latitude { get; set; } = 64.8378; // Default to Fairbanks, AK
+
+    [Parameter]
+    public double? Longitude { get; set; } = -147.7164;
+
+    [Parameter]
+    public int ZoomLevel { get; set; } = 12;
+
+    private string mapId = $"roadmap_{Guid.NewGuid():N}";
+    private string? currentWkt;
+    private bool isDrawing;
+    private DotNetObjectReference<RoadLocationMapEditor>? dotNetRef;
+
+    protected override void OnInitialized()
+    {
+        currentWkt = RoadLocationWkt;
+        dotNetRef = DotNetObjectReference.Create(this);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InitializeMap();
+        }
+    }
+
+    private async Task InitializeMap()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("roadLocationMap.initialize", 
+                mapId, 
+                Latitude, 
+                Longitude, 
+                ZoomLevel, 
+                ReadOnly,
+                currentWkt,
+                dotNetRef);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error initializing map: {ex.Message}");
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnLineCreated(string wkt)
+    {
+        currentWkt = wkt;
+        isDrawing = false;
+        await RoadLocationWktChanged.InvokeAsync(wkt);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task OnLineEdited(string wkt)
+    {
+        currentWkt = wkt;
+        await RoadLocationWktChanged.InvokeAsync(wkt);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task StartDrawing()
+    {
+        isDrawing = true;
+        await JS.InvokeVoidAsync("roadLocationMap.startDrawing", mapId);
+    }
+
+    private async Task ClearLine()
+    {
+        currentWkt = null;
+        await JS.InvokeVoidAsync("roadLocationMap.clearLine", mapId);
+        await RoadLocationWktChanged.InvokeAsync(null);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(mapId))
+            {
+                await JS.InvokeVoidAsync("roadLocationMap.dispose", mapId);
+            }
+            dotNetRef?.Dispose();
+        }
+        catch
+        {
+            // Ignore disposal errors
+        }
+    }
+}

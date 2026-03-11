@@ -292,6 +292,18 @@
                                                    For="@(() => editModel.ServiceAreaId)" />
                                     </MudItem>
 
+                                    @if (isEditMode && CanEditFields())
+                                    {
+                                        <MudItem xs="12">
+                                            <RoadLocationMapEditor RoadLocationWkt="@editModel.RoadLocation"
+                                                                 RoadLocationWktChanged="@((wkt) => editModel.RoadLocation = wkt)"
+                                                                 ReadOnly="false"
+                                                                 Latitude="64.8378"
+                                                                 Longitude="-147.7164"
+                                                                 ZoomLevel="12" />
+                                        </MudItem>
+                                    }
+
                                     <MudItem xs="12" md="6">
                                         <AutoField Value="editModel.ValidFrom" 
                                                    TModel="Road" 
@@ -446,6 +458,17 @@
                                     </ValueContent>
                                 </InfoCard>
                             </MudItem>
+
+                            @if (!string.IsNullOrEmpty(version.RoadLocation))
+                            {
+                                <MudItem xs="12">
+                                    <RoadLocationMapEditor RoadLocationWkt="@version.RoadLocation"
+                                                         ReadOnly="true"
+                                                         Latitude="64.8378"
+                                                         Longitude="-147.7164"
+                                                         ZoomLevel="12" />
+                                </MudItem>
+                            }
                         </MudGrid>
                     </ViewModeContent>
                 </VersionedDetailsPanel>
