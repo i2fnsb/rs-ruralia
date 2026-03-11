@@ -250,6 +250,15 @@
                                                                    ReadOnly="false"
                                                                    For="@(() => editModel.RegisteredVoter)" />
                                                     </MudItem>
+                                                    <MudItem xs="12" md="6">
+                                                        <AutoField @bind-Value="editModel.ResidesInServiceArea" 
+                                                                   TModel="CommissionerProfile" 
+                                                                   TValue="bool?" 
+                                                                   TLookup="object"
+                                                                   Property="@(x => x.ResidesInServiceArea)"
+                                                                   ReadOnly="false"
+                                                                   For="@(() => editModel.ResidesInServiceArea)" />
+                                                    </MudItem>
 
                                                     <MudItem xs="12" md="6">
                                                         <AutoField @bind-Value="editModel.RecommendedForAppointment" 
@@ -491,6 +500,28 @@
                                                             <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
                                                         }
                                                         else if (displayVersion.RegisteredVoter == false)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText>—</MudText>
+                                                        }
+                                                    </ValueContent>
+                                                </InfoCard>
+                                            </MudItem>
+
+                                            <MudItem xs="12" md="6">
+                                                <InfoCard TValue="bool?" TModel="CommissionerProfile"
+                                                         Label="Resides In Service Area" 
+                                                         Icon="@Icons.Material.Filled.House"
+                                                         PropertyExpression="@(x => x.ResidesInServiceArea)">
+                                                    <ValueContent>
+                                                        @if (displayVersion.ResidesInServiceArea == true)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
+                                                        }
+                                                        else if (displayVersion.ResidesInServiceArea == false)
                                                         {
                                                             <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
                                                         }
@@ -789,6 +820,9 @@
 
     // Track which profile is being edited
     private int? editingProfileId = null;
+
+    // Track selected service area for filtering commission seats
+    private Dictionary<int, int?> selectedServiceAreaByProfile = new();
 
     // Cache for profile version history
     private Dictionary<int, IEnumerable<CommissionerProfile>> profileVersionCache = new();
