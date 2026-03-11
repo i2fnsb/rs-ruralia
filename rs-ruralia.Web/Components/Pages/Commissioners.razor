@@ -21,7 +21,7 @@
 @inject IDialogService DialogService
 @inject ViewModeService ViewModeService
 
-<EntityManagementLayout TEntity="CommissionerProfile"
+<EntityManagementLayout TEntity="PersonProfile"
                        Title="Commissioners"
                        Subtitle="Manage commissioner profiles, seats, and correspondence"
                        Icon="@Icons.Material.Filled.Groups"
@@ -32,9 +32,9 @@
                        ShowSearch="true"
                        SearchString="@_searchString"
                        ShowTotalCount="true"
-                       TotalCount="@(GetUniquePersonProfiles()?.Count())"
+                       TotalCount="@(GetPeopleWithCommissionerProfiles()?.Count())"
                        CountIcon="@Icons.Material.Filled.Groups"
-                       HasSelection="@(selectedCommissioner != null)"
+                       HasSelection="@(selectedPerson != null)"
                        EntitySingularName="Commissioner"
                        EntityPluralName="commissioners"
                        EnableViewModeManagement="true"
@@ -42,24 +42,25 @@
                        CanEditChanged="@(async (canEdit) => { this.canEdit = canEdit; await InvokeAsync(StateHasChanged); })"
                        IsEditorChanged="@(async (editor) => { this.isEditor = editor; await InvokeAsync(StateHasChanged); })"
                        OnEditModeCancelled="@HandleEditModeCancelled"
-                       SelectedItem="@selectedCommissioner"
-                       GetSelectedItemDisplayText="@GetCommissionerDisplayText"
+                       SelectedItem="@selectedPerson"
+                       GetSelectedItemDisplayText="@GetPersonDisplayText"
                        ShowSelectedItemChip="true"
                        ShowCreateButton="true"
                        CreateButtonTitle="Create New Commissioner Profile"
                        OnCreateClicked="@OpenCreateDialog"
                        UseBuiltInDataGrid="true"
                        IsLoadingItems="@isLoading"
-                       Items="@GetUniquePersonProfiles()"
+                       Items="@GetPeopleWithCommissionerProfiles()"
                        OnItemClicked="@(async (item) => await HandleItemClick(item))"
                        GetItemIcon="@(c => Icons.Material.Filled.Person)"
-                       GetItemDisplayText="@GetCommissionerDisplayText">
+                       GetItemDisplayText="@GetPersonDisplayText">
 
     <AdditionalItemColumns>
-        <TemplateColumn T="CommissionerProfile" Title="Commission Seat" Sortable="true">
+        <TemplateColumn T="PersonProfile" Title="Commission Seat" Sortable="true">
             <CellTemplate>
                 @{
-                    var seat = commissionSeats?.FirstOrDefault(s => s.Id == context.Item.CommissionSeatId);
+                    var personProfile = GetMostRecentCommissionerProfile(context.Item.Id);
+                    var seat = personProfile != null ? commissionSeats?.FirstOrDefault(s => s.Id == personProfile.CommissionSeatId) : null;
                     var seatType = seat != null ? commissionSeatTypes?.FirstOrDefault(t => t.Id == seat.CommissionSeatTypeId) : null;
                     var seatDisplay = seatType != null
                         ? $"{seatType.Type}" 
@@ -68,10 +69,10 @@
                 <MudText Typo="Typo.body2">@seatDisplay</MudText>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="CommissionerProfile" Title="Status" Sortable="true">
+        <TemplateColumn T="PersonProfile" Title="Status" Sortable="true">
             <CellTemplate>
                 @{
-                    var hasActiveProfile = HasActiveProfile(context.Item.PersonProfileId);
+                    var hasActiveProfile = HasActiveProfile(context.Item.Id);
                 }
                 @if (hasActiveProfile)
                 {
@@ -87,7 +88,7 @@
 
     <!-- Detail Content (Expandable Sections) -->
     <DetailContent>
-        @if (selectedCommissioner != null && allProfilesForPerson != null)
+        @if (selectedPerson != null && allProfilesForPerson != null)
         {
             <MudExpansionPanels MultiExpansion="true">
                 @foreach (var profile in allProfilesForPerson)
@@ -711,7 +712,7 @@
 
 @code {
     [SupplyParameterFromQuery(Name = "id")]
-    public int? CommissionerId { get; set; }
+    public int? PersonId { get; set; }
 
     private IEnumerable<CommissionerProfile>? commissionerProfiles;
     private IEnumerable<CommissionerStatus>? commissionerStatuses;
@@ -725,7 +726,8 @@
     private IEnumerable<CorrespondenceProfile>? correspondenceProfiles;
     private IEnumerable<CorrespondenceEmail>? correspondenceEmails;
     private IEnumerable<CorrespondencePhone>? correspondencePhones;
-    
+
+    private PersonProfile? selectedPerson;
     private CommissionerProfile? selectedCommissioner;
     private bool isLoading = false;
     private bool isSaving = false;
@@ -806,14 +808,15 @@
 
     private void SelectCommissionerFromParameters()
     {
-        if (commissionerProfiles == null || !commissionerProfiles.Any() || !CommissionerId.HasValue)
+        if (personProfiles == null || !personProfiles.Any() || !PersonId.HasValue)
             return;
 
-        var target = commissionerProfiles.FirstOrDefault(c => c.Id == CommissionerId.Value);
+        var target = personProfiles.FirstOrDefault(p => p.Id == PersonId.Value);
 
-        if (target != null && selectedCommissioner?.Id != target.Id)
+        if (target != null && selectedPerson?.Id != target.Id)
         {
-            selectedCommissioner = target;
+            selectedPerson = target;
+            selectedCommissioner = GetMostRecentCommissionerProfile(target.Id);
             isEditMode = false;
             ClearMessages();
             _ = LoadAllVersions();
@@ -985,14 +988,14 @@
 
     private async Task LoadOtherProfilesForPerson()
     {
-        if (selectedCommissioner == null) return;
+        if (selectedPerson == null) return;
 
         isLoadingOtherProfiles = true;
 
         try
         {
             otherProfilesForPerson = commissionerProfiles?
-                .Where(cp => cp.PersonProfileId == selectedCommissioner.PersonProfileId && cp.Id != selectedCommissioner.Id)
+                .Where(cp => cp.PersonProfileId == selectedPerson.Id && cp.Id != selectedCommissioner?.Id)
                 .OrderByDescending(cp => cp.AppointedDate)
                 .ToList();
         }
@@ -1004,6 +1007,45 @@
         {
             isLoadingOtherProfiles = false;
         }
+    }
+
+    private IEnumerable<PersonProfile>? GetPeopleWithCommissionerProfiles()
+    {
+        if (personProfiles == null || !personProfiles.Any() || commissionerProfiles == null)
+            return Array.Empty<PersonProfile>();
+
+        // Get unique PersonProfileIds from commissioner profiles
+        var personIdsWithProfiles = commissionerProfiles
+            .Select(cp => cp.PersonProfileId)
+            .Distinct()
+            .ToHashSet();
+
+        // Return person profiles that have commissioner profiles, ordered by name
+        return personProfiles
+            .Where(p => personIdsWithProfiles.Contains(p.Id))
+            .OrderBy(p => p.LastName ?? "")
+            .ThenBy(p => p.FirstName ?? "")
+            .ToList();
+    }
+
+    private CommissionerProfile? GetMostRecentCommissionerProfile(int personProfileId)
+    {
+        if (commissionerProfiles == null) return null;
+
+        // First try to get an active profile
+        var activeProfile = commissionerProfiles
+            .Where(cp => cp.PersonProfileId == personProfileId)
+            .FirstOrDefault(cp =>
+            {
+                var status = commissionerStatuses?.FirstOrDefault(s => s.Id == cp.CommissionerStatusId);
+                return status?.Active == true && cp.ValidTo == null;
+            });
+
+        // If no active profile, get the most recent one
+        return activeProfile ?? commissionerProfiles
+            .Where(cp => cp.PersonProfileId == personProfileId)
+            .OrderByDescending(cp => cp.ValidFrom)
+            .FirstOrDefault();
     }
 
     private IEnumerable<CommissionerProfile>? GetUniquePersonProfiles()
@@ -1054,11 +1096,11 @@
 
     private void LoadAllProfilesForPerson()
     {
-        if (selectedCommissioner == null) return;
+        if (selectedPerson == null) return;
 
         // Get all profiles for this person, ordered by most recent first
         allProfilesForPerson = commissionerProfiles?
-            .Where(cp => cp.PersonProfileId == selectedCommissioner.PersonProfileId)
+            .Where(cp => cp.PersonProfileId == selectedPerson.Id)
             .OrderByDescending(cp => cp.ValidFrom)
             .ThenByDescending(cp => cp.AppointedDate)
             .ToList();
@@ -1080,7 +1122,7 @@
 
     private async Task LoadAllVersions()
     {
-        if (selectedCommissioner == null) return;
+        if (selectedPerson == null) return;
 
         isLoadingHistory = true;
         historyErrorMessage = null;
@@ -1094,7 +1136,9 @@
         catch (Exception ex)
         {
             historyErrorMessage = $"Error loading profiles: {ex.Message}";
-            allProfilesForPerson = new List<CommissionerProfile> { selectedCommissioner };
+            allProfilesForPerson = selectedCommissioner != null 
+                ? new List<CommissionerProfile> { selectedCommissioner } 
+                : new List<CommissionerProfile>();
         }
         finally
         {
@@ -1139,21 +1183,22 @@
         return isEditMode && IsViewingCurrentVersion();
     }
 
-    private async Task HandleItemClick(CommissionerProfile item)
+    private async Task HandleItemClick(PersonProfile item)
     {
-        selectedCommissioner = item;
+        selectedPerson = item;
+        selectedCommissioner = GetMostRecentCommissionerProfile(item.Id);
         isEditMode = false;
         ClearMessages();
         await LoadAllVersions();
         await InvokeAsync(StateHasChanged);
 
-        var uri = NavigationManager.GetUriWithQueryParameter("id", selectedCommissioner.Id);
+        var uri = NavigationManager.GetUriWithQueryParameter("id", selectedPerson.Id);
         NavigationManager.NavigateTo(uri, replace: true);
     }
 
     private async Task HandleRestore(CommissionerProfile historicalRecord)
     {
-        if (selectedCommissioner == null) return;
+        if (selectedPerson == null) return;
 
         isSaving = true;
         ClearMessages();
@@ -1161,22 +1206,28 @@
         try
         {
             var restoredData = CloneCommissioner(historicalRecord);
-            restoredData.Id = selectedCommissioner.Id;
+            restoredData.Id = selectedCommissioner?.Id ?? 0;
+
+            if (restoredData.Id == 0)
+            {
+                errorMessage = "No commissioner profile selected to restore";
+                return;
+            }
 
             var result = await CommissionerProfilesApi.UpdateCommissionerProfileAsync(restoredData.Id, restoredData);
 
             if (result?.IsSuccess == true)
             {
                 successMessage = $"Successfully restored version from {historicalRecord.ValidFrom:g}";
-                
+
                 await LoadCommissionerProfiles();
-                
-                selectedCommissioner = commissionerProfiles?.FirstOrDefault(c => c.Id == selectedCommissioner.Id);
+
+                selectedCommissioner = commissionerProfiles?.FirstOrDefault(c => c.PersonProfileId == selectedPerson.Id);
                 if (selectedCommissioner != null)
                 {
                     await LoadAllVersions();
                 }
-                
+
                 isEditMode = false;
             }
             else
@@ -1431,8 +1482,13 @@
     private string GetCommissionerDisplayText(CommissionerProfile commissioner)
     {
         var personName = GetPersonName(commissioner.PersonProfileId);
-        
+
         return $"{personName}";
+    }
+
+    private string GetPersonDisplayText(PersonProfile person)
+    {
+        return GetPersonName(person.Id);
     }
 
     private async Task OpenCreateDialog()
