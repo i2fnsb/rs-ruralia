@@ -162,12 +162,14 @@ public class RoadService
 
             var sql = @"
                 INSERT INTO road (phase, distance_feet, start_description, end_description, start_coordinates, end_coordinates, road_location_coordinates, approved_for_maintenance, mpo, legacy_subdivision_name, road_name_id, road_surface_type_id, responder_code_id, service_area_id)
-                VALUES (@Phase @DistanceFeet @StartDescription @EndDescription @StartCoordinates @EndCoordinates @RoadLocation @ApprovedForMaintenance @Mpo @LegacySubdivisionName @RoadNameId @RoadSurfaceTypeId @ResponderCodeId @ServiceAreaId -join ', ');
+                VALUES (@Phase, @DistanceFeet, @StartDescription, @EndDescription, @StartCoordinates, @EndCoordinates, 
+                    CASE WHEN @RoadLocation IS NOT NULL THEN geography::STGeomFromText(@RoadLocation, 4326) ELSE NULL END,
+                    @ApprovedForMaintenance, @Mpo, @LegacySubdivisionName, @RoadNameId, @RoadSurfaceTypeId, @ResponderCodeId, @ServiceAreaId);
                 SELECT CAST(SCOPE_IDENTITY() as int)";
 
             entity.Id = await _db.ExecuteScalarAsync<int>(sql, entity);
             await InvalidateCacheAsync();
-            
+
             return Result<Road>.Success(entity);
         }
         catch (Exception ex)
@@ -188,12 +190,24 @@ public class RoadService
 
             var sql = @"
                 UPDATE road SET
-                    phase = @Phase,                     distance_feet = @DistanceFeet,                     start_description = @StartDescription,                     end_description = @EndDescription,                     start_coordinates = @StartCoordinates,                     end_coordinates = @EndCoordinates, road_location_coordinates = @RoadLocation,                     approved_for_maintenance = @ApprovedForMaintenance,                     mpo = @Mpo,                     legacy_subdivision_name = @LegacySubdivisionName,                     road_name_id = @RoadNameId,                     road_surface_type_id = @RoadSurfaceTypeId,                     responder_code_id = @ResponderCodeId,
+                    phase = @Phase,
+                    distance_feet = @DistanceFeet,
+                    start_description = @StartDescription,
+                    end_description = @EndDescription,
+                    start_coordinates = @StartCoordinates,
+                    end_coordinates = @EndCoordinates,
+                    road_location_coordinates = CASE WHEN @RoadLocation IS NOT NULL THEN geography::STGeomFromText(@RoadLocation, 4326) ELSE NULL END,
+                    approved_for_maintenance = @ApprovedForMaintenance,
+                    mpo = @Mpo,
+                    legacy_subdivision_name = @LegacySubdivisionName,
+                    road_name_id = @RoadNameId,
+                    road_surface_type_id = @RoadSurfaceTypeId,
+                    responder_code_id = @ResponderCodeId,
                     service_area_id = @ServiceAreaId
                 WHERE id = @Id";
 
             var affected = await _db.ExecuteAsync(sql, entity);
-            
+
             if (affected == 0)
                 return Result<Road>.Failure("Road not found or no changes made");
 

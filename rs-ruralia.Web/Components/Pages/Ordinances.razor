@@ -21,6 +21,7 @@
                        SearchPlaceholder="Search ordinances..."
                        ShowSearch="true"
                        SearchString="@_searchString"
+                       CustomQuickFilter="@OrdinancesQuickFilter"
                        ShowTotalCount="true"
                        TotalCount="@(ordinances?.Count())"
                        CountIcon="@Icons.Material.Filled.Description"
@@ -721,6 +722,22 @@
         ModifiedBy = source.ModifiedBy
     };
 
+    private bool OrdinancesQuickFilter(Ordinance ordinance, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+
+        // Search in Ordinance Name
+        if (ordinance.OrdinanceName?.Contains(searchString, StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+
+        // Search in Ordinance Year
+        if (ordinance.OrdinanceYear?.ToString().Contains(searchString, StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+
+        return false;
+    }
+
     private async Task<bool> CreateOrdinanceType(OrdinanceType entity)
     {
         var result = await OrdinanceTypesApi.CreateOrdinanceTypeAsync(entity);
@@ -743,7 +760,7 @@
     {
         var parameters = new DialogParameters
         {
-            { "ServiceAreaName", $"{selectedOrdinance?.OrdinanceName} ({selectedOrdinance?.OrdinanceYear})" }
+            { "EntityName", $"{selectedOrdinance?.OrdinanceName} ({selectedOrdinance?.OrdinanceYear})" }
         };
 
         var options = new DialogOptions 

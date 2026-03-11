@@ -178,6 +178,17 @@
                                                        Format="N3"
                                                        ReadOnly="@(!CanEditFields())"
                                                        For="@(() => editModel.CurrentMileage)" />
+                                            @if (CanEditFields() && serviceAreaRoads != null && serviceAreaRoads.Any())
+                                            {
+                                                <MudButton Size="Size.Small" 
+                                                          Variant="Variant.Outlined" 
+                                                          Color="Color.Info"
+                                                          StartIcon="@Icons.Material.Filled.Calculate"
+                                                          OnClick="CalculateCurrentMileage"
+                                                          Class="mt-2">
+                                                    Calculate from Roads (@serviceAreaRoads.Count() roads)
+                                                </MudButton>
+                                            }
                                         </MudItem>
 
                                         <MudItem xs="12" md="6">
@@ -1718,6 +1729,26 @@
         NavigationManager.NavigateTo($"/roads?id={road.Id}");
     }
 
+    private void CalculateCurrentMileage()
+    {
+        if (editModel == null || serviceAreaRoads == null || !serviceAreaRoads.Any())
+            return;
+
+        // Sum all DistanceFeet values from linked roads
+        var totalFeet = serviceAreaRoads
+            .Where(r => r.DistanceFeet.HasValue)
+            .Sum(r => r.DistanceFeet!.Value);
+
+        // Convert feet to miles (1 mile = 5280 feet)
+        var totalMiles = totalFeet / 5280.0m;
+
+        // Update the CurrentMileage field
+        editModel.CurrentMileage = Math.Round(totalMiles, 3);
+
+        // Trigger state change to update UI
+        StateHasChanged();
+    }
+
     private async Task LoadServiceAreaRfqs()
     {
         if (selectedServiceArea == null) return;
@@ -1788,7 +1819,7 @@
     {
         var parameters = new DialogParameters
         {
-            { "ServiceAreaName", selectedServiceArea?.Name ?? "Service Area" }
+            { "EntityName", selectedServiceArea?.Name ?? "Service Area" }
         };
 
         var options = new DialogOptions 

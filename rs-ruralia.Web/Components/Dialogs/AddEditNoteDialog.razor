@@ -6,7 +6,7 @@
         <MudStack Spacing="3">
             <MudAlert Severity="Severity.Info" Variant="Variant.Text">
                 <MudText Typo="Typo.body2">
-                    You've successfully updated <strong>@ServiceAreaName</strong>. 
+                    You've successfully updated <strong>@EntityName</strong>. 
                     Please provide a brief note describing the changes you made.
                 </MudText>
             </MudAlert>
@@ -15,7 +15,7 @@
                          Label="Change Note"
                          Variant="Variant.Outlined"
                          Lines="5"
-                         Placeholder="e.g., Updated mill rates for 2025, Corrected feature object ID, etc."
+                         Placeholder="@Placeholder"
                          HelperText="This note will be saved with the current timestamp for audit purposes"
                          AutoFocus="true"
                          Immediate="true" />
@@ -46,11 +46,29 @@
     [CascadingParameter] 
     IMudDialogInstance MudDialog { get; set; } = null!;
 
+    /// <summary>
+    /// The name of the entity being edited (e.g., "Service Area: Chena-Goldstream", "Road: Airport Way")
+    /// </summary>
     [Parameter]
-    public string ServiceAreaName { get; set; } = string.Empty;
+    public string EntityName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional custom placeholder text for the note field
+    /// </summary>
+    [Parameter]
+    public string? Placeholder { get; set; }
 
     private string noteText = string.Empty;
     private string? errorMessage;
+
+    protected override void OnParametersSet()
+    {
+        // Set default placeholder if not provided
+        if (string.IsNullOrEmpty(Placeholder))
+        {
+            Placeholder = "e.g., Updated rates, Corrected data entry error, Added new information, etc.";
+        }
+    }
 
     private void Cancel()
     {
