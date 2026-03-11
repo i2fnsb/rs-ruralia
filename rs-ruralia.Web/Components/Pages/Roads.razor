@@ -25,6 +25,7 @@
                        SearchPlaceholder="Search roads..."
                        ShowSearch="true"
                        SearchString="@_searchString"
+                       CustomQuickFilter="@RoadsQuickFilter"
                        ShowTotalCount="true"
                        TotalCount="@(roads?.Count())"
                        CountIcon="@Icons.Material.Filled.Route"
@@ -182,7 +183,7 @@
                                     <MudItem xs="12" md="6">
                                         <AutoField @bind-Value="editModel.DistanceFeet" 
                                                    TModel="Road" 
-                                                   TValue="double?" 
+                                                   TValue="decimal?" 
                                                    TLookup="object"
                                                    Property="@(x => x.DistanceFeet)"
                                                    Format="N2"
@@ -292,18 +293,6 @@
                                                    For="@(() => editModel.ServiceAreaId)" />
                                     </MudItem>
 
-                                    @if (isEditMode && CanEditFields())
-                                    {
-                                        <MudItem xs="12">
-                                            <RoadLocationMapEditor RoadLocationWkt="@editModel.RoadLocation"
-                                                                 RoadLocationWktChanged="@((wkt) => editModel.RoadLocation = wkt)"
-                                                                 ReadOnly="false"
-                                                                 Latitude="64.8378"
-                                                                 Longitude="-147.7164"
-                                                                 ZoomLevel="12" />
-                                        </MudItem>
-                                    }
-
                                     <MudItem xs="12" md="6">
                                         <AutoField Value="editModel.ValidFrom" 
                                                    TModel="Road" 
@@ -321,6 +310,23 @@
                                                    Property="@(x => x.ModifiedBy)"
                                                    ReadOnly="true" />
                                     </MudItem>
+
+                                    @if (isEditMode && CanEditFields())
+                                    {
+                                        <MudItem xs="12">
+                                            <RoadLocationMapEditor RoadLocationWkt="@editModel.RoadLocation"
+                                                                 RoadLocationWktChanged="@((wkt) => editModel.RoadLocation = wkt)"
+                                                                 CalculatedDistanceFeet="@calculatedDistanceFeet"
+                                                                 CalculatedDistanceFeetChanged="@OnCalculatedDistanceChanged"
+                                                                 OnApplyDistanceToField="@OnApplyDistanceToField"
+                                                                 ServiceAreaFeatureLayerUrl="@GetFeatureLayerUrl()"
+                                                                 ServiceAreaQueryParameters="@GetServiceAreaQueryParameters()"
+                                                                 ReadOnly="false"
+                                                                 Latitude="64.8378"
+                                                                 Longitude="-147.7164"
+                                                                 ZoomLevel="12" />
+                                        </MudItem>
+                                    }
                                 </MudGrid>
                             </EditForm>
                         }
@@ -463,6 +469,8 @@
                             {
                                 <MudItem xs="12">
                                     <RoadLocationMapEditor RoadLocationWkt="@version.RoadLocation"
+                                                         ServiceAreaFeatureLayerUrl="@GetFeatureLayerUrl()"
+                                                         ServiceAreaQueryParameters="@GetServiceAreaQueryParameters()"
                                                          ReadOnly="true"
                                                          Latitude="64.8378"
                                                          Longitude="-147.7164"
@@ -535,8 +543,7 @@
                                         <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
                                                       Size="Size.Small" 
                                                       Color="Color.Primary" 
-                                                      OnClick="@(() => NavigateToRoad(context))"
-                                                      Title="View Road Details" />
+                                                      OnClick="@(() => NavigateToRoad(context))" />
                                     </MudTd>
                                 </RowTemplate>
                             </MudTable>
@@ -546,25 +553,6 @@
                             <MudText Typo="Typo.body2" Align="Align.Center" Class="my-4">No other roads with this name.</MudText>
                         }
                     </MudStack>
-                }
-            </SectionPanel>
-
-            <!-- Map Section -->
-            <SectionPanel Title="Map" 
-                         Icon="@Icons.Material.Filled.Map"
-                         MinimumViewMode="ViewMode.Public">
-                @if (selectedRoad != null)
-                {
-                    <MudAlert Severity="Severity.Info" Variant="Variant.Text" Class="mb-3">
-                        Map will display: Service Area boundary, Road (ESRI layer), and Road Location
-                    </MudAlert>
-                    
-                    @* TODO: Implement map component showing:
-                        - Service Area boundary
-                        - Road from ESRI layer
-                        - RoadLocation property visualization *@
-                    
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Map component to be implemented</MudText>
                 }
             </SectionPanel>
 
@@ -616,6 +604,9 @@
     // Related roads fields
     private IEnumerable<Road>? relatedRoads;
     private bool isLoadingRelatedRoads = false;
+
+    // Map-related fields
+    private double? calculatedDistanceFeet;
 
     protected override async Task OnInitializedAsync()
     {
@@ -825,7 +816,7 @@
 
             var versions = new List<Road> { selectedRoad };
             versions.AddRange(historyRecords.Where(h => h.ValidFrom != selectedRoad.ValidFrom));
-            
+
             allVersions = versions;
             currentViewVersion = selectedRoad;
             UpdateEditModel(currentViewVersion);
@@ -843,6 +834,44 @@
         finally
         {
             isLoadingHistory = false;
+        }
+    }
+
+    private string? GetFeatureLayerUrl()
+    {
+        return Configuration.GetValue<string>("FeatureLayer:ServiceAreasUrl");
+    }
+
+    private Dictionary<string, string>? GetServiceAreaQueryParameters()
+    {
+        if (selectedRoad == null) return null;
+
+        var serviceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == selectedRoad.ServiceAreaId);
+        if (serviceArea?.FeatureObjectId == null)
+            return null;
+
+        return new Dictionary<string, string>
+        {
+            { "where", $"OBJECTID = {serviceArea.FeatureObjectId}" },
+            { "outFields", "*" },
+            { "returnGeometry", "true" }
+        };
+    }
+
+    private void OnCalculatedDistanceChanged(double? distance)
+    {
+        // Just store the calculated distance for display, don't auto-apply to field
+        calculatedDistanceFeet = distance;
+        StateHasChanged();
+    }
+
+    private void OnApplyDistanceToField(double distance)
+    {
+        // Only apply to DistanceFeet field when admin clicks the button
+        if (editModel != null)
+        {
+            editModel.DistanceFeet = (decimal)distance;
+            StateHasChanged();
         }
     }
 
@@ -1051,6 +1080,24 @@
         var roadName = roadNames?.FirstOrDefault(rn => rn.Id == road.RoadNameId);
         var name = roadName?.Name ?? "Unknown Road";
         return $"{name}";
+    }
+
+    private bool RoadsQuickFilter(Road road, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+
+        // Search in Road Name
+        var roadName = roadNames?.FirstOrDefault(rn => rn.Id == road.RoadNameId);
+        if (roadName?.Name?.Contains(searchString, StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+
+        // Search in Service Area
+        var serviceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == road.ServiceAreaId);
+        if (serviceArea?.Name?.Contains(searchString, StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+
+        return false;
     }
 
     private void NavigateToRoad(Road road)

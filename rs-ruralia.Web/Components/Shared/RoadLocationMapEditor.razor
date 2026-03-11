@@ -1,4 +1,5 @@
 @using Microsoft.JSInterop
+@using System.Text.Json
 @inject IJSRuntime JS
 
 <div class="road-location-map-editor">
@@ -33,14 +34,30 @@
                 </MudStack>
             </MudStack>
         }
-        
+
         <div id="@mapId" style="height: 500px; width: 100%; border-radius: 4px;"></div>
-        
+
         @if (!string.IsNullOrEmpty(currentWkt))
         {
-            <MudText Typo="Typo.caption" Class="mt-2" Color="Color.Success">
-                <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" /> Line feature defined
-            </MudText>
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mt-2">
+                <MudText Typo="Typo.caption" Color="Color.Success">
+                    <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" /> Line feature defined
+                    @if (calculatedDistance > 0)
+                    {
+                        <span> - Distance: @calculatedDistance.ToString("N2") feet</span>
+                    }
+                </MudText>
+                @if (!ReadOnly && calculatedDistance > 0 && ShowApplyDistanceButton)
+                {
+                    <MudButton Size="Size.Small" 
+                              Variant="Variant.Outlined" 
+                              Color="Color.Primary"
+                              StartIcon="@Icons.Material.Filled.SwapHoriz"
+                              OnClick="ApplyCalculatedDistance">
+                        Apply to Distance Field
+                    </MudButton>
+                }
+            </MudStack>
         }
         else if (!ReadOnly)
         {
@@ -59,7 +76,19 @@
     public EventCallback<string?> RoadLocationWktChanged { get; set; }
 
     [Parameter]
+    public double? CalculatedDistanceFeet { get; set; }
+
+    [Parameter]
+    public EventCallback<double?> CalculatedDistanceFeetChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<double> OnApplyDistanceToField { get; set; }
+
+    [Parameter]
     public bool ReadOnly { get; set; }
+
+    [Parameter]
+    public bool ShowApplyDistanceButton { get; set; } = true;
 
     [Parameter]
     public double? Latitude { get; set; } = 64.8378; // Default to Fairbanks, AK
@@ -70,8 +99,15 @@
     [Parameter]
     public int ZoomLevel { get; set; } = 12;
 
+    [Parameter]
+    public string? ServiceAreaFeatureLayerUrl { get; set; }
+
+    [Parameter]
+    public Dictionary<string, string>? ServiceAreaQueryParameters { get; set; }
+
     private string mapId = $"roadmap_{Guid.NewGuid():N}";
     private string? currentWkt;
+    private double calculatedDistance;
     private bool isDrawing;
     private DotNetObjectReference<RoadLocationMapEditor>? dotNetRef;
 
@@ -86,6 +122,12 @@
         if (firstRender)
         {
             await InitializeMap();
+
+            // Load service area if URL provided
+            if (!string.IsNullOrEmpty(ServiceAreaFeatureLayerUrl))
+            {
+                await LoadServiceAreaFromFeatureLayer();
+            }
         }
     }
 
@@ -108,20 +150,98 @@
         }
     }
 
+    private async Task LoadServiceAreaFromFeatureLayer()
+    {
+        try
+        {
+            var queryUrl = BuildFeatureLayerQueryUrl();
+            var geoJsonData = await FetchGeoJsonFromFeatureLayer(queryUrl);
+
+            if (!string.IsNullOrEmpty(geoJsonData))
+            {
+                await JS.InvokeVoidAsync("roadLocationMap.loadServiceArea", mapId, geoJsonData);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading service area: {ex.Message}");
+        }
+    }
+
+    private string BuildFeatureLayerQueryUrl()
+    {
+        var baseUrl = ServiceAreaFeatureLayerUrl?.TrimEnd('/');
+
+        if (!baseUrl?.Contains("/query") == true)
+        {
+            baseUrl += "/query";
+        }
+
+        var queryString = "?f=geojson&outFields=*";
+
+        // Add query parameters
+        if (ServiceAreaQueryParameters != null && ServiceAreaQueryParameters.Count > 0)
+        {
+            foreach (var param in ServiceAreaQueryParameters)
+            {
+                queryString += $"&{param.Key}={Uri.EscapeDataString(param.Value)}";
+            }
+        }
+        else
+        {
+            // Default query - get all features
+            queryString += "&where=1=1";
+        }
+
+        return baseUrl + queryString;
+    }
+
+    private async Task<string?> FetchGeoJsonFromFeatureLayer(string url)
+    {
+        try
+        {
+            using var httpClient = new HttpClient();
+            var response = await httpClient.GetAsync(url);
+
+            if (response.IsSuccessStatusCode)
+            {
+                return await response.Content.ReadAsStringAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching GeoJSON: {ex.Message}");
+        }
+
+        return null;
+    }
+
     [JSInvokable]
-    public async Task OnLineCreated(string wkt)
+    public async Task OnLineCreated(string wkt, double distanceFeet)
     {
         currentWkt = wkt;
+        calculatedDistance = distanceFeet;
         isDrawing = false;
         await RoadLocationWktChanged.InvokeAsync(wkt);
+        await CalculatedDistanceFeetChanged.InvokeAsync(distanceFeet);
         await InvokeAsync(StateHasChanged);
     }
 
     [JSInvokable]
-    public async Task OnLineEdited(string wkt)
+    public async Task OnLineEdited(string wkt, double distanceFeet)
     {
         currentWkt = wkt;
+        calculatedDistance = distanceFeet;
         await RoadLocationWktChanged.InvokeAsync(wkt);
+        await CalculatedDistanceFeetChanged.InvokeAsync(distanceFeet);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task OnExistingLineLoaded(double distanceFeet)
+    {
+        calculatedDistance = distanceFeet;
+        await CalculatedDistanceFeetChanged.InvokeAsync(distanceFeet);
         await InvokeAsync(StateHasChanged);
     }
 
@@ -134,9 +254,19 @@
     private async Task ClearLine()
     {
         currentWkt = null;
+        calculatedDistance = 0;
         await JS.InvokeVoidAsync("roadLocationMap.clearLine", mapId);
         await RoadLocationWktChanged.InvokeAsync(null);
+        await CalculatedDistanceFeetChanged.InvokeAsync(null);
         await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ApplyCalculatedDistance()
+    {
+        if (calculatedDistance > 0)
+        {
+            await OnApplyDistanceToField.InvokeAsync(calculatedDistance);
+        }
     }
 
     public async ValueTask DisposeAsync()

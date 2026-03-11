@@ -17,7 +17,7 @@ public class Road
 
   [Column("distance_feet")]
   [Display(Name = "Distance (Feet)", Description = "Distance used for calculating quotes.")]
-  public double? DistanceFeet { get; set; }
+  public decimal? DistanceFeet { get; set; }
 
   [Column("start_description")]
   [MaxLength(250)]

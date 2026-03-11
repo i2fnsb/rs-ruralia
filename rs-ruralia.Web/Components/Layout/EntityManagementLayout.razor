@@ -326,6 +326,9 @@
     public EventCallback<string> SearchStringChanged { get; set; }
 
     [Parameter]
+    public Func<TEntity, string, bool>? CustomQuickFilter { get; set; }
+
+    [Parameter]
     public bool ShowTotalCount { get; set; } = true;
 
     [Parameter]
@@ -495,16 +498,14 @@
         if (string.IsNullOrWhiteSpace(SearchString))
             return true;
 
-        // Get display text for the entity
+        // Use custom filter if provided
+        if (CustomQuickFilter != null)
+        {
+            return CustomQuickFilter(entity, SearchString);
+        }
+
+        // Default: search in display text
         var displayText = GetItemDisplayText?.Invoke(entity) ?? string.Empty;
-
-        // Search in display text
-        if (displayText.Contains(SearchString, StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        // You can add more search fields here if needed
-        // For example, search in additional properties
-
-        return false;
+        return displayText.Contains(SearchString, StringComparison.OrdinalIgnoreCase);
     };
 }
