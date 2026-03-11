@@ -219,7 +219,7 @@
                                                                    TLookup="CommissionSeat"
                                                                    Property="@(x => x.CommissionSeatId)"
                                                                    ReadOnly="false"
-                                                                   LookupItems="@commissionSeats"
+                                                                   LookupItems="@GetFilteredCommissionSeats(profile.CommissionSeatId)"
                                                                    LookupTextSelector="@(item => GetCommissionSeatDisplayText((CommissionSeat)item))"
                                                                    For="@(() => editModel.CommissionSeatId)" />
                                                     </MudItem>
@@ -624,7 +624,7 @@
                             </SectionPanel>
 
                             <!-- Correspondence Section -->
-                            <SectionPanel Title="@(isEditor ? "All Correspondence" : "Public Correspondence")"
+                            <SectionPanel Title="@(ViewModeService.IsAtLeast(ViewMode.Admin) ? "All Correspondence" : "Public Correspondence")"
                                          Icon="@Icons.Material.Filled.ContactMail"
                                          MinimumViewMode="ViewMode.Public"
                                          ShowCount="true"
@@ -679,7 +679,7 @@
                             </SectionPanel>
 
                             <!-- Notes Section -->
-                            @if (canEdit)
+                            @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
                             {
                                 <SectionPanel Title="Notes"
                                              Icon="@Icons.Material.Filled.Notes"
@@ -1069,9 +1069,9 @@
         var profiles = correspondenceProfiles?
             .Where(cp => cp.CommissionerProfileId == commissionerProfileId);
 
-        if (!isEditor)
+        if (!ViewModeService.IsAtLeast(ViewMode.Admin))
         {
-            // Only show public profiles for non-editors
+            // Only show public profiles for non-admins
             profiles = profiles?.Where(cp => cp.PublicProfile == true);
         }
 
@@ -1399,6 +1399,19 @@
         var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == seat.CommissionSeatClassId);
 
         return $"{seatType?.Type ?? "Unknown"} - {seatClass?.Class ?? "Unknown"}";
+    }
+
+    private IEnumerable<CommissionSeat>? GetFilteredCommissionSeats(int commissionSeatId)
+    {
+        if (commissionSeats == null) return Array.Empty<CommissionSeat>();
+
+        var currentSeat = commissionSeats.FirstOrDefault(s => s.Id == commissionSeatId);
+        if (currentSeat == null) return commissionSeats;
+
+        // Filter seats to only those in the same service area
+        return commissionSeats
+            .Where(s => s.ServiceAreaId == currentSeat.ServiceAreaId)
+            .ToList();
     }
 
     private string GetCommissionerStatusDisplayText(CommissionerStatus commissionerStatus)

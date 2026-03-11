@@ -131,8 +131,8 @@ public class CommissionerProfileService
             }
 
             var sql = @"
-                INSERT INTO commissioner_profile (oath, invoices, resides_in_service_area, registered_voter, recommended_for_appointment, do_not_appoint, do_not_appoint_details, appointed_date, assembly_meeting_date, effective_date, end_date, commissioner_status_id, commission_seat_id, person_profile_id)
-                VALUES (@Oath @Invoices @ResidesInServiceArea @RegisteredVoter @RecommendedForAppointment @DoNotAppoint @DoNotAppointDetails @AppointedDate @AssemblyMeetingDate @EffectiveDate @EndDate @CommissionerStatusId @CommissionSeatId @PersonProfileId -join ', ');
+                INSERT INTO commissioner_profile (oath, invoices, resides_in_service_area, registered_voter, recommended_for_appointment, do_not_appoint, do_not_appoint_details, appointed_date, assembly_meeting_date, effective_date, end_date, commissioner_status_id, commission_seat_id, person_profile_id, ModifiedBy)
+                VALUES (@Oath @Invoices @ResidesInServiceArea @RegisteredVoter @RecommendedForAppointment @DoNotAppoint @DoNotAppointDetails @AppointedDate @AssemblyMeetingDate @EffectiveDate @EndDate @CommissionerStatusId @CommissionSeatId @PersonProfileId @ModifiedBy -join ', ');
                 SELECT CAST(SCOPE_IDENTITY() as int)";
 
             entity.Id = await _db.ExecuteScalarAsync<int>(sql, entity);
@@ -159,7 +159,7 @@ public class CommissionerProfileService
             var sql = @"
                 UPDATE commissioner_profile SET
                     oath = @Oath,                     invoices = @Invoices,                     resides_in_service_area = @ResidesInServiceArea,                     registered_voter = @RegisteredVoter,                     recommended_for_appointment = @RecommendedForAppointment,                     do_not_appoint = @DoNotAppoint,                     do_not_appoint_details = @DoNotAppointDetails,                     appointed_date = @AppointedDate,                     assembly_meeting_date = @AssemblyMeetingDate,                     effective_date = @EffectiveDate,                     end_date = @EndDate,                     commissioner_status_id = @CommissionerStatusId,                     commission_seat_id = @CommissionSeatId,
-                    person_profile_id = @PersonProfileId
+                    person_profile_id = @PersonProfileId, ModifiedBy = @ModifiedBy
                 WHERE id = @Id";
 
             var affected = await _db.ExecuteAsync(sql, entity);
