@@ -56,7 +56,7 @@
                        GetItemDisplayText="@GetPersonDisplayText">
 
     <AdditionalItemColumns>
-        <TemplateColumn T="PersonProfile" Title="Commission Seat" Sortable="true">
+        <TemplateColumn T="PersonProfile" Title="Seat" Sortable="true">
             <CellTemplate>
                 @{
                     var personProfile = GetMostRecentCommissionerProfile(context.Item.Id);
