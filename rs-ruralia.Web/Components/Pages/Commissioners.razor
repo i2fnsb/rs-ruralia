@@ -93,16 +93,18 @@
             <MudExpansionPanels MultiExpansion="true">
                 @foreach (var profile in allProfilesForPerson)
                 {
-                    var seat = commissionSeats?.FirstOrDefault(s => s.Id == profile.CommissionSeatId);
-                    var seatType = seat != null ? commissionSeatTypes?.FirstOrDefault(t => t.Id == seat.CommissionSeatTypeId) : null;
-                    var seatClass = seat != null ? commissionSeatClasses?.FirstOrDefault(c => c.Id == seat.CommissionSeatClassId) : null;
-                    var serviceArea = seat != null ? serviceAreas?.FirstOrDefault(sa => sa.Id == seat.ServiceAreaId) : null;
-                    var status = commissionerStatuses?.FirstOrDefault(s => s.Id == profile.CommissionerStatusId);
-                    var isActive = status?.Active == true;
-                    var isCurrent = profile.ValidTo == null;
+                    var displayData = profileDisplayCache.TryGetValue(profile.Id, out var data) ? data : null;
+                    var seat = displayData?.Seat;
+                    var seatType = displayData?.SeatType;
+                    var seatClass = displayData?.SeatClass;
+                    var serviceArea = displayData?.ServiceArea;
+                    var status = displayData?.Status;
+                    var isActive = displayData?.IsActive ?? false;
+                    var isCurrent = displayData?.IsCurrent ?? false;
                     var isFirstProfile = allProfilesForPerson.First() == profile;
 
-                    <SectionPanel Title="@($"{seatType?.Type} - {seatClass?.Class} ({serviceArea?.Name})")"
+                    <SectionPanel @key="profile.Id"
+                                 Title="@($"{seatType?.Type} - {seatClass?.Class} ({serviceArea?.Name})")"
                                  Icon="@Icons.Material.Filled.AccountBox"
                                  Expanded="@isFirstProfile"
                                  MinimumViewMode="ViewMode.Public">
@@ -694,20 +696,19 @@
                             @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
                             {
                                 var noteCount = profileNoteCounts.TryGetValue(profile.Id, out var count) ? count : 0;
+                                var refreshKey = notesPanelRefreshKeys.TryGetValue(profile.Id, out var key) ? key : 0;
+
                                 <SectionPanel Title="Notes"
                                              Icon="@Icons.Material.Filled.Notes"
                                              MinimumViewMode="ViewMode.Admin"
                                              ShowCount="true"
                                              Count="@noteCount"
                                              CountColor="Color.Info">
-                                    @{
-                                        var refreshKey = notesPanelRefreshKeys.TryGetValue(profile.Id, out var key) ? key : 0;
-                                    }
-                                    <NotesPanel @key="refreshKey"
+                                    <NotesPanel @key="@($"notes-{profile.Id}-{refreshKey}")"
                                                EntityType="commissioner_profile" 
                                                EntityId="@profile.Id"
-                                               ShowHistory="false"
-                                               NotesCountChanged="@((c) => UpdateNoteCount(profile.Id, c))" />
+                                               ShowHistory="true"
+                                               NotesCountChanged="@GetNoteCountCallback(profile.Id)" />
                                 </SectionPanel>
                             }
                         </MudExpansionPanels>
@@ -773,6 +774,9 @@
     // Track note counts per profile
     private Dictionary<int, int> profileNoteCounts = new();
 
+    // Store callbacks per profile to make them stable references
+    private Dictionary<int, Action<int>> noteCountCallbacks = new();
+
     // Correspondence loading
     private bool isLoadingCorrespondence = false;
 
@@ -794,6 +798,20 @@
 
     // Track notes panel refresh keys
     private Dictionary<int, int> notesPanelRefreshKeys = new();
+
+    // Cache for profile display data to improve performance
+    private Dictionary<int, ProfileDisplayData> profileDisplayCache = new();
+
+    private class ProfileDisplayData
+    {
+        public CommissionSeat? Seat { get; set; }
+        public CommissionSeatType? SeatType { get; set; }
+        public CommissionSeatClass? SeatClass { get; set; }
+        public ServiceArea? ServiceArea { get; set; }
+        public CommissionerStatus? Status { get; set; }
+        public bool IsActive { get; set; }
+        public bool IsCurrent { get; set; }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -1136,6 +1154,46 @@
             .OrderByDescending(cp => cp.ValidFrom)
             .ThenByDescending(cp => cp.AppointedDate)
             .ToList();
+
+        // Pre-compute display data for better performance
+        profileDisplayCache.Clear();
+        noteCountCallbacks.Clear();
+
+        if (allProfilesForPerson != null)
+        {
+            foreach (var profile in allProfilesForPerson)
+            {
+                var seat = commissionSeats?.FirstOrDefault(s => s.Id == profile.CommissionSeatId);
+                var seatType = seat != null ? commissionSeatTypes?.FirstOrDefault(t => t.Id == seat.CommissionSeatTypeId) : null;
+                var seatClass = seat != null ? commissionSeatClasses?.FirstOrDefault(c => c.Id == seat.CommissionSeatClassId) : null;
+                var serviceArea = seat != null ? serviceAreas?.FirstOrDefault(sa => sa.Id == seat.ServiceAreaId) : null;
+                var status = commissionerStatuses?.FirstOrDefault(s => s.Id == profile.CommissionerStatusId);
+
+                profileDisplayCache[profile.Id] = new ProfileDisplayData
+                {
+                    Seat = seat,
+                    SeatType = seatType,
+                    SeatClass = seatClass,
+                    ServiceArea = serviceArea,
+                    Status = status,
+                    IsActive = status?.Active == true,
+                    IsCurrent = profile.ValidTo == null
+                };
+
+                // Create stable callback for this profile
+                var profileId = profile.Id;
+                noteCountCallbacks[profileId] = (count) => UpdateNoteCount(profileId, count);
+            }
+        }
+    }
+
+    private Action<int> GetNoteCountCallback(int profileId)
+    {
+        if (!noteCountCallbacks.ContainsKey(profileId))
+        {
+            noteCountCallbacks[profileId] = (count) => UpdateNoteCount(profileId, count);
+        }
+        return noteCountCallbacks[profileId];
     }
 
     private IEnumerable<CorrespondenceProfile>? GetCorrespondenceForProfile(int commissionerProfileId)
@@ -1309,13 +1367,11 @@
     private void OnNotesCountChanged(int count)
     {
         notesCount = count;
-        StateHasChanged();
     }
 
     private void UpdateNoteCount(int profileId, int count)
     {
         profileNoteCounts[profileId] = count;
-        StateHasChanged();
     }
 
     private void UpdateEditModel(CommissionerProfile version)
