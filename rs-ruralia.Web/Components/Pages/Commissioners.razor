@@ -8,6 +8,7 @@
 @inject CommissionSeatsApiClient CommissionSeatsApi
 @inject CommissionSeatTypesApiClient CommissionSeatTypesApi
 @inject CommissionSeatClassesApiClient CommissionSeatClassesApi
+@inject CommissionSeatStatusesApiClient CommissionSeatStatusesApi
 @inject ServiceAreasApiClient ServiceAreasApi
 @inject PersonProfilesApiClient PersonProfilesApi
 @inject PersonHonorificsApiClient PersonHonorificsApi
@@ -224,9 +225,100 @@
                                                                    TLookup="CommissionSeat"
                                                                    Property="@(x => x.CommissionSeatId)"
                                                                    ReadOnly="false"
-                                                                   LookupItems="@GetFilteredCommissionSeats(profile.CommissionSeatId)"
+                                                                   LookupItems="@GetFilteredCommissionSeatsForEdit(profile.Id)"
                                                                    LookupTextSelector="@(item => GetCommissionSeatDisplayText((CommissionSeat)item))"
-                                                                   For="@(() => editModel.CommissionSeatId)" />
+                                                                   ForeignKeyIdSelector="@(x => x.Id)"
+                                                                   ForeignKeyNameSelector="@(x => GetCommissionSeatDisplayText(x))"
+                                                                   ForeignKeyDescriptionSelector="@(x => $"Term: {x.TermStartDate?.ToString("MMM yyyy")} - {x.TermEndDate?.ToString("MMM yyyy")}")"
+                                                                   OnForeignKeyCreate="@CreateCommissionSeat"
+                                                                   OnForeignKeyUpdate="@UpdateCommissionSeat"
+                                                                   OnForeignKeyDelete="@DeleteCommissionSeat"
+                                                                   OnForeignKeyDataChanged="@(EventCallback.Factory.Create(this, LoadCommissionSeats))"
+                                                                   ForeignKeyDialogTitle="Manage Commission Seats"
+                                                                   For="@(() => editModel.CommissionSeatId)">
+                                                            <ForeignKeyFormContent Context="entity">
+                                                                <MudItem xs="12" md="6">
+                                                                    <AutoField @bind-Value="entity.ServiceAreaId" 
+                                                                               TModel="CommissionSeat" 
+                                                                               TValue="int"
+                                                                               TLookup="ServiceArea"
+                                                                               ReadOnly
+                                                                               Property="@(x => x.ServiceAreaId)"
+                                                                               LookupItems="@serviceAreas"
+                                                                               LookupTextSelector="@(item => ((ServiceArea)item).Name ?? string.Empty)"
+                                                                               For="@(() => entity.ServiceAreaId)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12" md="6">
+                                                                    <AutoField @bind-Value="entity.CommissionSeatTypeId" 
+                                                                               TModel="CommissionSeat" 
+                                                                               TValue="int"
+                                                                               TLookup="CommissionSeatType"
+                                                                               ReadOnly
+                                                                               Property="@(x => x.CommissionSeatTypeId)"
+                                                                               LookupItems="@commissionSeatTypes"
+                                                                               LookupTextSelector="@(item => ((CommissionSeatType)item).Type ?? string.Empty)"
+                                                                               For="@(() => entity.CommissionSeatTypeId)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12" md="6">
+                                                                    <AutoField @bind-Value="entity.CommissionSeatClassId" 
+                                                                               TModel="CommissionSeat" 
+                                                                               TValue="int"
+                                                                               TLookup="CommissionSeatClass"
+                                                                               ReadOnly
+                                                                               Property="@(x => x.CommissionSeatClassId)"
+                                                                               LookupItems="@commissionSeatClasses"
+                                                                               LookupTextSelector="@(item => ((CommissionSeatClass)item).Class ?? string.Empty)"
+                                                                               For="@(() => entity.CommissionSeatClassId)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12" md="6">
+                                                                    <AutoField @bind-Value="entity.CommissionSeatStatusId" 
+                                                                               TModel="CommissionSeat" 
+                                                                               TValue="int"
+                                                                               TLookup="CommissionSeatStatus"
+                                                                               Property="@(x => x.CommissionSeatStatusId)"
+                                                                               ReadOnly
+                                                                               LookupItems="@commissionSeatStatuses"
+                                                                               LookupTextSelector="@(item => ((CommissionSeatStatus)item).Status ?? string.Empty)"
+                                                                               For="@(() => entity.CommissionSeatStatusId)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12" md="6">
+                                                                    <AutoField @bind-Value="entity.TermStartDate" 
+                                                                               TModel="CommissionSeat" 
+                                                                               TValue="DateTime?"
+                                                                               TLookup="object"
+                                                                               ReadOnly
+                                                                               Property="@(x => x.TermStartDate)"
+                                                                               For="@(() => entity.TermStartDate)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12" md="6">
+                                                                    <AutoField @bind-Value="entity.TermEndDate" 
+                                                                               TModel="CommissionSeat" 
+                                                                               TValue="DateTime?"
+                                                                               TLookup="object"
+                                                                               ReadOnly
+                                                                               Property="@(x => x.TermEndDate)"
+                                                                               For="@(() => entity.TermEndDate)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12" md="6">
+                                                                    <AutoField @bind-Value="entity.CreationDate" 
+                                                                               TModel="CommissionSeat" 
+                                                                               TValue="DateTime?"
+                                                                               TLookup="object"
+                                                                               ReadOnly
+                                                                               Property="@(x => x.CreationDate)"
+                                                                               For="@(() => entity.CreationDate)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12" md="6">
+                                                                    <AutoField @bind-Value="entity.TerminationDate" 
+                                                                               TModel="CommissionSeat" 
+                                                                               TValue="DateTime?"
+                                                                               TLookup="object"
+                                                                               ReadOnly
+                                                                               Property="@(x => x.TerminationDate)"
+                                                                               For="@(() => entity.TerminationDate)" />
+                                                                </MudItem>
+                                                            </ForeignKeyFormContent>
+                                                        </AutoField>
                                                     </MudItem>
 
                                                     <MudItem xs="12" md="6">
@@ -814,6 +906,7 @@
     private IEnumerable<CommissionSeat>? commissionSeats;
     private IEnumerable<CommissionSeatType>? commissionSeatTypes;
     private IEnumerable<CommissionSeatClass>? commissionSeatClasses;
+    private IEnumerable<CommissionSeatStatus>? commissionSeatStatuses;
     private IEnumerable<ServiceArea>? serviceAreas;
     private IEnumerable<PersonProfile>? personProfiles;
     private IEnumerable<PersonHonorific>? personHonorifics;
@@ -904,7 +997,7 @@
     private async Task LoadAllData()
     {
         isLoading = true;
-        
+
         var tasks = new List<Task>
         {
             LoadCommissionerProfiles(),
@@ -912,6 +1005,7 @@
             LoadCommissionSeats(),
             LoadCommissionSeatTypes(),
             LoadCommissionSeatClasses(),
+            LoadCommissionSeatStatuses(),
             LoadServiceAreas(),
             LoadPersonProfiles(),
             LoadPersonHonorifics(),
@@ -1019,6 +1113,19 @@
         catch (Exception)
         {
             commissionSeatClasses = Array.Empty<CommissionSeatClass>();
+        }
+    }
+
+    private async Task LoadCommissionSeatStatuses()
+    {
+        try
+        {
+            var result = await CommissionSeatStatusesApi.GetAllCommissionSeatStatusesAsync();
+            commissionSeatStatuses = result?.Data ?? Array.Empty<CommissionSeatStatus>();
+        }
+        catch (Exception)
+        {
+            commissionSeatStatuses = Array.Empty<CommissionSeatStatus>();
         }
     }
 
@@ -1147,10 +1254,11 @@
             .Distinct()
             .ToHashSet();
 
-        // Return person profiles that have commissioner profiles, ordered by name
+        // Return person profiles that have commissioner profiles, ordered by status (active first), then by name
         return personProfiles
             .Where(p => personIdsWithProfiles.Contains(p.Id))
-            .OrderBy(p => p.LastName ?? "")
+            .OrderByDescending(p => HasActiveProfile(p.Id))  // Active profiles first
+            .ThenBy(p => p.LastName ?? "")
             .ThenBy(p => p.FirstName ?? "")
             .ToList();
     }
@@ -1888,6 +1996,68 @@
         }
     }
 
+    private int? GetServiceAreaForProfile(int profileId)
+    {
+        // Check if we have a selected service area for this profile during editing
+        if (selectedServiceAreaByProfile.TryGetValue(profileId, out var serviceAreaId) && serviceAreaId.HasValue)
+        {
+            return serviceAreaId;
+        }
+
+        // Otherwise, get it from the current commission seat
+        if (editModel != null && editModel.Id == profileId)
+        {
+            var seat = commissionSeats?.FirstOrDefault(s => s.Id == editModel.CommissionSeatId);
+            return seat?.ServiceAreaId;
+        }
+
+        return null;
+    }
+
+    private void OnServiceAreaChanged(int profileId, int? serviceAreaId)
+    {
+        selectedServiceAreaByProfile[profileId] = serviceAreaId;
+
+        // Clear the commission seat selection when service area changes
+        if (editModel != null && editModel.Id == profileId)
+        {
+            var currentSeat = commissionSeats?.FirstOrDefault(s => s.Id == editModel.CommissionSeatId);
+            if (currentSeat?.ServiceAreaId != serviceAreaId)
+            {
+                // Reset to first available seat in the new service area
+                var firstSeatInArea = commissionSeats?
+                    .Where(s => s.ServiceAreaId == serviceAreaId)
+                    .OrderBy(s => s.Id)
+                    .FirstOrDefault();
+
+                if (firstSeatInArea != null)
+                {
+                    editModel.CommissionSeatId = firstSeatInArea.Id;
+                }
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private IEnumerable<CommissionSeat>? GetFilteredCommissionSeatsForEdit(int profileId)
+    {
+        if (commissionSeats == null) return Array.Empty<CommissionSeat>();
+
+        var serviceAreaId = GetServiceAreaForProfile(profileId);
+
+        if (serviceAreaId.HasValue)
+        {
+            return commissionSeats
+                .Where(s => s.ServiceAreaId == serviceAreaId.Value)
+                .OrderBy(s => s.Id)
+                .ToList();
+        }
+
+        // If no service area selected, return all seats
+        return commissionSeats;
+    }
+
     private async Task<bool> CreateCommissionerStatus(CommissionerStatus entity)
     {
         var result = await CommissionerStatusesApi.CreateCommissionerStatusAsync(entity);
@@ -1903,6 +2073,24 @@
     private async Task<bool> DeleteCommissionerStatus(CommissionerStatus entity)
     {
         var result = await CommissionerStatusesApi.DeleteCommissionerStatusAsync(entity.Id);
+        return result?.IsSuccess ?? false;
+    }
+
+    private async Task<bool> CreateCommissionSeat(CommissionSeat entity)
+    {
+        var result = await CommissionSeatsApi.CreateCommissionSeatAsync(entity);
+        return result?.IsSuccess ?? false;
+    }
+
+    private async Task<bool> UpdateCommissionSeat(CommissionSeat entity)
+    {
+        var result = await CommissionSeatsApi.UpdateCommissionSeatAsync(entity.Id, entity);
+        return result?.IsSuccess ?? false;
+    }
+
+    private async Task<bool> DeleteCommissionSeat(CommissionSeat entity)
+    {
+        var result = await CommissionSeatsApi.DeleteCommissionSeatAsync(entity.Id);
         return result?.IsSuccess ?? false;
     }
 
