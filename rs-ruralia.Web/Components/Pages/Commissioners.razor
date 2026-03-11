@@ -106,20 +106,18 @@
                                  Icon="@Icons.Material.Filled.AccountBox"
                                  Expanded="@isFirstProfile"
                                  MinimumViewMode="ViewMode.Public">
-                        <TitleActions>
-                            <MudStack Row="true" Spacing="1">
-                                <MudChip T="string" 
-                                        Size="Size.Small" 
-                                        Color="@(isActive ? Color.Success : Color.Default)"
-                                        Icon="@(isActive ? Icons.Material.Filled.Check : Icons.Material.Filled.Circle)">
-                                    @(status?.Status ?? "Unknown")
-                                </MudChip>
-                                @if (isCurrent)
-                                {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Current</MudChip>
-                                }
-                            </MudStack>
-                        </TitleActions>
+                        <MudStack Row="true" Spacing="1">
+                            <MudChip T="string" 
+                                    Size="Size.Small" 
+                                    Color="@(isActive ? Color.Success : Color.Default)"
+                                    Icon="@(isActive ? Icons.Material.Filled.Check : Icons.Material.Filled.Circle)">
+                                @(status?.Status ?? "Unknown")
+                            </MudChip>
+                            @if (isCurrent)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info">Current</MudChip>
+                            }
+                        </MudStack>
 
                         <MudExpansionPanels MultiExpansion="true">
                             <!-- Profile Details Section -->
@@ -127,10 +125,14 @@
                                          Icon="@Icons.Material.Filled.Person"
                                          Expanded="true"
                                          MinimumViewMode="ViewMode.Public">
+                                @{
+                                    var profileVersions = GetAllVersionsOfProfile(profile);
+                                    var displayVersion = currentlyDisplayedVersions.TryGetValue(profile.Id, out var tracked) ? tracked : profile;
+                                }
                                 <VersionedDetailsPanel TEntity="CommissionerProfile"
-                                   AllVersions="@(new[] { profile })"
-                                   CurrentVersion="@profile"
-                                   CurrentVersionChanged="@((v) => Task.CompletedTask)"
+                                   AllVersions="@profileVersions"
+                                   CurrentVersion="@displayVersion"
+                                   CurrentVersionChanged="@((v) => HandleVersionChanged(profile.Id, v))"
                                    GetValidFrom="@(x => x.ValidFrom)"
                                    GetValidTo="@(x => x.ValidTo)"
                                    GetModifiedBy="@(x => x.ModifiedBy)"
@@ -140,7 +142,7 @@
                                    OnEditClicked="@(() => EnableEditForProfile(profile.Id))"
                                    IsLoading="false"
                                    ErrorMessage="@null"
-                                   OnRestore="@((h) => Task.CompletedTask)">
+                                   OnRestore="@(async (historicalVersion) => await HandleRestoreVersion(profile.Id, historicalVersion))">
 
                                     <!-- Edit Mode Content -->
                                     <DetailsContent Context="version">
@@ -387,14 +389,14 @@
                                                                       Color="Color.Primary" 
                                                                       Size="Size.Small"
                                                                       StartIcon="@Icons.Material.Filled.OpenInNew"
-                                                                      OnClick="@(() => NavigationManager.NavigateTo($"/persons?id={profile.PersonProfileId}"))">
-                                                                @GetPersonName(profile.PersonProfileId)
+                                                                      OnClick="@(() => NavigationManager.NavigateTo($"/persons?id={displayVersion.PersonProfileId}"))">
+                                                                @GetPersonName(displayVersion.PersonProfileId)
                                                             </MudButton>
                                                         }
                                                         else
                                                         {
                                                             <MudText Typo="Typo.body1" Style="font-weight: 600; font-size: 1.1rem;">
-                                                                @GetPersonName(profile.PersonProfileId)
+                                                                @GetPersonName(displayVersion.PersonProfileId)
                                                             </MudText>
                                                         }
                                                     </ValueContent>
@@ -407,14 +409,18 @@
                                                          Icon="@Icons.Material.Filled.Landscape"
                                                          PropertyExpression="@(x => x.CommissionSeatId)">
                                                     <ValueContent>
-                                                        @if (serviceArea != null)
+                                                        @{
+                                                            var versionSeat = commissionSeats?.FirstOrDefault(s => s.Id == displayVersion.CommissionSeatId);
+                                                            var versionServiceArea = versionSeat != null ? serviceAreas?.FirstOrDefault(sa => sa.Id == versionSeat.ServiceAreaId) : null;
+                                                        }
+                                                        @if (versionServiceArea != null)
                                                         {
                                                             <MudButton Variant="Variant.Text" 
                                                                       Color="Color.Primary" 
                                                                       Size="Size.Small"
                                                                       StartIcon="@Icons.Material.Filled.OpenInNew"
-                                                                      OnClick="@(() => NavigationManager.NavigateTo($"/service-areas?id={serviceArea.Id}"))">
-                                                                @serviceArea.Name
+                                                                      OnClick="@(() => NavigationManager.NavigateTo($"/service-areas?id={versionServiceArea.Id}"))">
+                                                                @versionServiceArea.Name
                                                             </MudButton>
                                                         }
                                                         else
@@ -432,21 +438,22 @@
                                                          PropertyExpression="@(x => x.CommissionSeatId)">
                                                     <ValueContent>
                                                         @{
-                                                            var seatDisplay = GetCommissionSeatDisplayText(seat);
-                                                            if (seat != null)
-                                                            {
-                                                                <MudButton Variant="Variant.Text" 
-                                                                          Color="Color.Primary" 
-                                                                          Size="Size.Small"
-                                                                          StartIcon="@Icons.Material.Filled.OpenInNew"
-                                                                          OnClick="@(() => NavigationManager.NavigateTo($"/commission-seats?id={seat.Id}"))">
-                                                                    @seatDisplay
-                                                                </MudButton>
-                                                            }
-                                                            else
-                                                            {
-                                                                <MudText>@seatDisplay</MudText>
-                                                            }
+                                                            var versionSeatForDisplay = commissionSeats?.FirstOrDefault(s => s.Id == displayVersion.CommissionSeatId);
+                                                            var seatDisplay = GetCommissionSeatDisplayText(versionSeatForDisplay);
+                                                        }
+                                                        @if (versionSeatForDisplay != null)
+                                                        {
+                                                            <MudButton Variant="Variant.Text" 
+                                                                      Color="Color.Primary" 
+                                                                      Size="Size.Small"
+                                                                      StartIcon="@Icons.Material.Filled.OpenInNew"
+                                                                      OnClick="@(() => NavigationManager.NavigateTo($"/commission-seats?id={versionSeatForDisplay.Id}"))">
+                                                                @seatDisplay
+                                                            </MudButton>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText>@seatDisplay</MudText>
                                                         }
                                                     </ValueContent>
                                                 </InfoCard>
@@ -458,10 +465,14 @@
                                                          Icon="@Icons.Material.Filled.Circle"
                                                          PropertyExpression="@(x => x.CommissionerStatusId)">
                                                     <ValueContent>
+                                                        @{
+                                                            var versionStatus = commissionerStatuses?.FirstOrDefault(s => s.Id == displayVersion.CommissionerStatusId);
+                                                            var isVersionActive = versionStatus?.Active == true;
+                                                        }
                                                         <MudChip T="string" 
                                                                 Size="Size.Small" 
-                                                                Color="@(isActive ? Color.Success : Color.Default)">
-                                                            @(status?.Status ?? "—")
+                                                                Color="@(isVersionActive ? Color.Success : Color.Default)">
+                                                            @(versionStatus?.Status ?? "—")
                                                         </MudChip>
                                                     </ValueContent>
                                                 </InfoCard>
@@ -473,11 +484,11 @@
                                                          Icon="@Icons.Material.Filled.HowToVote"
                                                          PropertyExpression="@(x => x.RegisteredVoter)">
                                                     <ValueContent>
-                                                        @if (profile.RegisteredVoter == true)
+                                                        @if (displayVersion.RegisteredVoter == true)
                                                         {
                                                             <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
                                                         }
-                                                        else if (profile.RegisteredVoter == false)
+                                                        else if (displayVersion.RegisteredVoter == false)
                                                         {
                                                             <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
                                                         }
@@ -495,11 +506,11 @@
                                                          Icon="@Icons.Material.Filled.ThumbUp"
                                                          PropertyExpression="@(x => x.RecommendedForAppointment)">
                                                     <ValueContent>
-                                                        @if (profile.RecommendedForAppointment == true)
+                                                        @if (displayVersion.RecommendedForAppointment == true)
                                                         {
                                                             <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
                                                         }
-                                                        else if (profile.RecommendedForAppointment == false)
+                                                        else if (displayVersion.RecommendedForAppointment == false)
                                                         {
                                                             <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
                                                         }
@@ -517,11 +528,11 @@
                                                          Icon="@Icons.Material.Filled.Block"
                                                          PropertyExpression="@(x => x.DoNotAppoint)">
                                                     <ValueContent>
-                                                        @if (profile.DoNotAppoint == true)
+                                                        @if (displayVersion.DoNotAppoint == true)
                                                         {
                                                             <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Block">Yes</MudChip>
                                                         }
-                                                        else if (profile.DoNotAppoint == false)
+                                                        else if (displayVersion.DoNotAppoint == false)
                                                         {
                                                             <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Check">No</MudChip>
                                                         }
@@ -533,12 +544,12 @@
                                                 </InfoCard>
                                             </MudItem>
 
-                                            @if (profile.DoNotAppoint == true)
+                                            @if (displayVersion.DoNotAppoint == true)
                                             {
                                                 <MudItem xs="12">
                                                     <InfoCard TValue="string" TModel="CommissionerProfile"
                                                              Label="Do Not Appoint Details" 
-                                                             Value="@profile.DoNotAppointDetails"
+                                                             Value="@displayVersion.DoNotAppointDetails"
                                                              Icon="@Icons.Material.Filled.Notes"
                                                              PropertyExpression="@(x => x.DoNotAppointDetails)" />
                                                 </MudItem>
@@ -550,11 +561,11 @@
                                                          Icon="@Icons.Material.Filled.Verified"
                                                          PropertyExpression="@(x => x.Oath)">
                                                     <ValueContent>
-                                                        @if (profile.Oath == true)
+                                                        @if (displayVersion.Oath == true)
                                                         {
                                                             <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Taken</MudChip>
                                                         }
-                                                        else if (profile.Oath == false)
+                                                        else if (displayVersion.Oath == false)
                                                         {
                                                             <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.PendingActions">Not Taken</MudChip>
                                                         }
@@ -569,7 +580,7 @@
                                             <MudItem xs="12" md="6">
                                                 <InfoCard TValue="string" TModel="CommissionerProfile"
                                                          Label="Appointed Date" 
-                                                         Value="@(profile.AppointedDate?.ToString("MMM d, yyyy"))"
+                                                         Value="@(displayVersion.AppointedDate?.ToString("MMM d, yyyy"))"
                                                          Icon="@Icons.Material.Filled.CalendarToday"
                                                          PropertyExpression="@(x => x.AppointedDate)" />
                                             </MudItem>
@@ -577,7 +588,7 @@
                                             <MudItem xs="12" md="6">
                                                 <InfoCard TValue="string" TModel="CommissionerProfile"
                                                          Label="Assembly Meeting Date" 
-                                                         Value="@(profile.AssemblyMeetingDate?.ToString("MMM d, yyyy"))"
+                                                         Value="@(displayVersion.AssemblyMeetingDate?.ToString("MMM d, yyyy"))"
                                                          Icon="@Icons.Material.Filled.CalendarToday"
                                                          PropertyExpression="@(x => x.AssemblyMeetingDate)" />
                                             </MudItem>
@@ -585,7 +596,7 @@
                                             <MudItem xs="12" md="6">
                                                 <InfoCard TValue="string" TModel="CommissionerProfile"
                                                          Label="Effective Date" 
-                                                         Value="@(profile.EffectiveDate?.ToString("MMM d, yyyy"))"
+                                                         Value="@(displayVersion.EffectiveDate?.ToString("MMM d, yyyy"))"
                                                          Icon="@Icons.Material.Filled.Event"
                                                          PropertyExpression="@(x => x.EffectiveDate)" />
                                             </MudItem>
@@ -593,7 +604,7 @@
                                             <MudItem xs="12" md="6">
                                                 <InfoCard TValue="string" TModel="CommissionerProfile"
                                                          Label="End Date" 
-                                                         Value="@(profile.EndDate?.ToString("MMM d, yyyy"))"
+                                                         Value="@(displayVersion.EndDate?.ToString("MMM d, yyyy"))"
                                                          Icon="@Icons.Material.Filled.Event"
                                                          PropertyExpression="@(x => x.EndDate)" />
                                             </MudItem>
@@ -604,11 +615,11 @@
                                                          Icon="@Icons.Material.Filled.Receipt"
                                                          PropertyExpression="@(x => x.Invoices)">
                                                     <ValueContent>
-                                                        @if (profile.Invoices == true)
+                                                        @if (displayVersion.Invoices == true)
                                                         {
                                                             <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
                                                         }
-                                                        else if (profile.Invoices == false)
+                                                        else if (displayVersion.Invoices == false)
                                                         {
                                                             <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
                                                         }
@@ -682,12 +693,21 @@
                             <!-- Notes Section -->
                             @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
                             {
+                                var noteCount = profileNoteCounts.TryGetValue(profile.Id, out var count) ? count : 0;
                                 <SectionPanel Title="Notes"
                                              Icon="@Icons.Material.Filled.Notes"
-                                             MinimumViewMode="ViewMode.Admin">
-                                    <NotesPanel EntityType="commissioner_profile" 
+                                             MinimumViewMode="ViewMode.Admin"
+                                             ShowCount="true"
+                                             Count="@noteCount"
+                                             CountColor="Color.Info">
+                                    @{
+                                        var refreshKey = notesPanelRefreshKeys.TryGetValue(profile.Id, out var key) ? key : 0;
+                                    }
+                                    <NotesPanel @key="refreshKey"
+                                               EntityType="commissioner_profile" 
                                                EntityId="@profile.Id"
-                                               ShowHistory="false" />
+                                               ShowHistory="false"
+                                               NotesCountChanged="@((c) => UpdateNoteCount(profile.Id, c))" />
                                 </SectionPanel>
                             }
                         </MudExpansionPanels>
@@ -750,6 +770,9 @@
     // Notes management field
     private int notesCount = 0;
 
+    // Track note counts per profile
+    private Dictionary<int, int> profileNoteCounts = new();
+
     // Correspondence loading
     private bool isLoadingCorrespondence = false;
 
@@ -762,6 +785,15 @@
 
     // Track which profile is being edited
     private int? editingProfileId = null;
+
+    // Cache for profile version history
+    private Dictionary<int, IEnumerable<CommissionerProfile>> profileVersionCache = new();
+
+    // Track currently displayed version for each profile
+    private Dictionary<int, CommissionerProfile> currentlyDisplayedVersions = new();
+
+    // Track notes panel refresh keys
+    private Dictionary<int, int> notesPanelRefreshKeys = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -1120,6 +1152,51 @@
         return profiles?.ToList();
     }
 
+    private IEnumerable<CommissionerProfile>? GetAllVersionsOfProfile(CommissionerProfile profile)
+    {
+        if (profile == null) 
+            return new[] { profile };
+
+        // Check cache first
+        if (profileVersionCache.TryGetValue(profile.Id, out var cachedVersions))
+        {
+            return cachedVersions;
+        }
+
+        // If not in cache, load from API
+        _ = LoadProfileVersionsAsync(profile.Id);
+
+        // Return just the current profile for now (will update when async load completes)
+        return new[] { profile };
+    }
+
+    private async Task LoadProfileVersionsAsync(int profileId)
+    {
+        try
+        {
+            var result = await CommissionerProfilesApi.GetCommissionerProfileHistoryAsync(profileId);
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                var versions = result.Data
+                    .OrderByDescending(cp => cp.ValidFrom)
+                    .ToList();
+
+                profileVersionCache[profileId] = versions;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception)
+        {
+            // If history load fails, just use the current profile
+            var currentProfile = allProfilesForPerson?.FirstOrDefault(p => p.Id == profileId);
+            if (currentProfile != null)
+            {
+                profileVersionCache[profileId] = new[] { currentProfile };
+            }
+        }
+    }
+
     private async Task LoadAllVersions()
     {
         if (selectedPerson == null) return;
@@ -1129,6 +1206,10 @@
 
         try
         {
+            // Clear version cache when loading new person
+            profileVersionCache.Clear();
+            currentlyDisplayedVersions.Clear();
+
             // Load all profiles for this person
             LoadAllProfilesForPerson();
             await LoadOtherProfilesForPerson();
@@ -1146,6 +1227,78 @@
         }
     }
 
+    private Task HandleVersionChanged(int profileId, CommissionerProfile selectedVersion)
+    {
+        // Update the currently displayed version for this profile
+        currentlyDisplayedVersions[profileId] = selectedVersion;
+
+        // Trigger UI update
+        StateHasChanged();
+
+        return Task.CompletedTask;
+    }
+
+    private async Task HandleRestoreVersion(int profileId, CommissionerProfile historicalVersion)
+    {
+        if (historicalVersion == null) return;
+
+        isSaving = true;
+        ClearMessages();
+
+        try
+        {
+            // Clone the historical version data
+            var restoredData = CloneCommissioner(historicalVersion);
+
+            // Keep the current profile ID (we're updating, not creating)
+            restoredData.Id = profileId;
+
+            // Get user email for audit
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userEmail = user.Identity?.Name ?? user.Claims.FirstOrDefault(c => c.Type.Contains("email"))?.Value;
+
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                restoredData.ModifiedBy = userEmail;
+            }
+
+            // Update the profile with historical data
+            var result = await CommissionerProfilesApi.UpdateCommissionerProfileAsync(profileId, restoredData);
+
+            if (result?.IsSuccess == true)
+            {
+                successMessage = $"Successfully restored version from {historicalVersion.ValidFrom:g}";
+
+                // Reload data
+                await LoadCommissionerProfiles();
+
+                // Clear caches to force reload
+                profileVersionCache.Remove(profileId);
+                currentlyDisplayedVersions.Remove(profileId);
+
+                // Reload all profiles for this person
+                LoadAllProfilesForPerson();
+
+                await InvokeAsync(StateHasChanged);
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to restore historical version";
+                errorDetails = result?.Errors;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error restoring historical version: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
     private async Task OnCurrentVersionChanged(CommissionerProfile newVersion)
     {
         currentViewVersion = newVersion;
@@ -1156,6 +1309,12 @@
     private void OnNotesCountChanged(int count)
     {
         notesCount = count;
+        StateHasChanged();
+    }
+
+    private void UpdateNoteCount(int profileId, int count)
+    {
+        profileNoteCounts[profileId] = count;
         StateHasChanged();
     }
 
@@ -1298,11 +1457,29 @@
                 successMessage = "Commissioner profile updated successfully!";
                 editingProfileId = null;
 
+                // Reload commissioner profiles
                 await LoadCommissionerProfiles();
+
+                // Clear version cache to force reload
+                profileVersionCache.Remove(profileId);
 
                 // Reload all profiles for this person
                 LoadAllProfilesForPerson();
+
+                // Get the updated profile and set it as the displayed version
+                var updatedProfile = allProfilesForPerson?.FirstOrDefault(p => p.Id == profileId);
+                if (updatedProfile != null)
+                {
+                    currentlyDisplayedVersions[profileId] = updatedProfile;
+
+                    // Reload version history in background
+                    _ = LoadProfileVersionsAsync(profileId);
+                }
+
                 await InvokeAsync(StateHasChanged);
+
+                // Prompt user to add a note
+                await PromptForEditNote(profileId, userEmail);
             }
             else
             {
@@ -1489,6 +1666,93 @@
     private string GetPersonDisplayText(PersonProfile person)
     {
         return GetPersonName(person.Id);
+    }
+
+    private async Task PromptForNote(int profileId, string changeDescription)
+    {
+        var parameters = new DialogParameters
+        {
+            { "EntityType", "commissioner_profile" },
+            { "EntityId", profileId },
+            { "SuggestedNote", changeDescription }
+        };
+
+        var options = new DialogOptions 
+        { 
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<AddEditNoteDialog>("Add Note (Optional)", parameters, options);
+        var dialogResult = await dialog.Result;
+
+        // Note is saved within the dialog, we don't need to do anything here
+        // Just refresh the UI if needed
+        if (!dialogResult.Canceled)
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task PromptForEditNote(int entityId, string? userEmail)
+    {
+        var person = personProfiles?.FirstOrDefault(p => p.Id == selectedPerson?.Id);
+        var personName = person != null ? GetPersonName(person.Id) : "Commissioner";
+
+        var parameters = new DialogParameters
+        {
+            { "EntityName", $"{personName} - Commissioner Profile" }
+        };
+
+        var options = new DialogOptions 
+        { 
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<AddEditNoteDialog>("Add Note (Optional)", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is string noteText && !string.IsNullOrWhiteSpace(noteText))
+        {
+            await CreateEditNote(entityId, noteText, userEmail);
+        }
+    }
+
+    private async Task CreateEditNote(int profileId, string noteText, string? userEmail)
+    {
+        try
+        {
+            var note = new Note
+            {
+                NoteText = noteText,
+                CommissionerProfileId = profileId,
+                ModifiedBy = userEmail ?? "Unknown User",
+            };
+
+            var result = await NotesApi.CreateNoteAsync(note);
+
+            if (result?.IsSuccess == true)
+            {
+                // Increment refresh key to force NotesPanel to reload
+                if (notesPanelRefreshKeys.ContainsKey(profileId))
+                {
+                    notesPanelRefreshKeys[profileId]++;
+                }
+                else
+                {
+                    notesPanelRefreshKeys[profileId] = 1;
+                }
+
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception)
+        {
+            // Silently fail - note creation is optional
+        }
     }
 
     private async Task OpenCreateDialog()
