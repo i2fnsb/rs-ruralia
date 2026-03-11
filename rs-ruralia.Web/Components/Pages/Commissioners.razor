@@ -238,7 +238,50 @@
                                                                    ReadOnly="false"
                                                                    LookupItems="@commissionerStatuses"
                                                                    LookupTextSelector="@(item => ((CommissionerStatus)item).Status ?? string.Empty)"
-                                                                   For="@(() => editModel.CommissionerStatusId)" />
+                                                                   ForeignKeyIdSelector="@(x => x.Id)"
+                                                                   ForeignKeyNameSelector="@(x => x.Status ?? "")"
+                                                                   ForeignKeyDescriptionSelector="@(x => x.Description ?? "")"
+                                                                   OnForeignKeyCreate="@CreateCommissionerStatus"
+                                                                   OnForeignKeyUpdate="@UpdateCommissionerStatus"
+                                                                   OnForeignKeyDelete="@DeleteCommissionerStatus"
+                                                                   OnForeignKeyDataChanged="@(EventCallback.Factory.Create(this, LoadCommissionerStatuses))"
+                                                                   ForeignKeyDialogTitle="Manage Commissioner Statuses"
+                                                                   For="@(() => editModel.CommissionerStatusId)">
+                                                            <ForeignKeyFormContent Context="entity">
+                                                                <MudItem xs="12">
+                                                                    <AutoField @bind-Value="entity.Status" 
+                                                                               TModel="CommissionerStatus" 
+                                                                               TValue="string"
+                                                                               TLookup="object"
+                                                                               Property="@(x => x.Status)"
+                                                                               For="@(() => entity.Status)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12">
+                                                                    <AutoField @bind-Value="entity.StatusCode" 
+                                                                               TModel="CommissionerStatus" 
+                                                                               TValue="string"
+                                                                               TLookup="object"
+                                                                               Property="@(x => x.StatusCode)"
+                                                                               For="@(() => entity.StatusCode)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12">
+                                                                    <AutoField @bind-Value="entity.Description" 
+                                                                               TModel="CommissionerStatus" 
+                                                                               TValue="string"
+                                                                               TLookup="object"
+                                                                               Property="@(x => x.Description)"
+                                                                               For="@(() => entity.Description)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12">
+                                                                    <AutoField @bind-Value="entity.Active" 
+                                                                               TModel="CommissionerStatus" 
+                                                                               TValue="bool?"
+                                                                               TLookup="object"
+                                                                               Property="@(x => x.Active)"
+                                                                               For="@(() => entity.Active)" />
+                                                                </MudItem>
+                                                            </ForeignKeyFormContent>
+                                                        </AutoField>
                                                     </MudItem>
 
                                                     <MudItem xs="12" md="6">
@@ -304,6 +347,16 @@
                                                     </MudItem>
 
                                                     <MudItem xs="12" md="6">
+                                                        <AutoField @bind-Value="editModel.Invoices" 
+                                                                   TModel="CommissionerProfile" 
+                                                                   TValue="bool?" 
+                                                                   TLookup="object"
+                                                                   Property="@(x => x.Invoices)"
+                                                                   ReadOnly="false"
+                                                                   For="@(() => editModel.Invoices)" />
+                                                    </MudItem>
+
+                                                    <MudItem xs="12" md="6">
                                                         <AutoField @bind-Value="editModel.AppointedDate" 
                                                                    TModel="CommissionerProfile" 
                                                                    TValue="DateTime?" 
@@ -341,16 +394,6 @@
                                                                    Property="@(x => x.EndDate)"
                                                                    ReadOnly="false"
                                                                    For="@(() => editModel.EndDate)" />
-                                                    </MudItem>
-
-                                                    <MudItem xs="12" md="6">
-                                                        <AutoField @bind-Value="editModel.Invoices" 
-                                                                   TModel="CommissionerProfile" 
-                                                                   TValue="bool?" 
-                                                                   TLookup="object"
-                                                                   Property="@(x => x.Invoices)"
-                                                                   ReadOnly="false"
-                                                                   For="@(() => editModel.Invoices)" />
                                                     </MudItem>
 
                                                     <MudItem xs="12" md="6">
@@ -611,6 +654,28 @@
                                             </MudItem>
 
                                             <MudItem xs="12" md="6">
+                                                <InfoCard TValue="bool?" TModel="CommissionerProfile"
+                                                         Label="Invoices" 
+                                                         Icon="@Icons.Material.Filled.Receipt"
+                                                         PropertyExpression="@(x => x.Invoices)">
+                                                    <ValueContent>
+                                                        @if (displayVersion.Invoices == true)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
+                                                        }
+                                                        else if (displayVersion.Invoices == false)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText>—</MudText>
+                                                        }
+                                                    </ValueContent>
+                                                </InfoCard>
+                                            </MudItem>
+
+                                            <MudItem xs="12" md="6">
                                                 <InfoCard TValue="string" TModel="CommissionerProfile"
                                                          Label="Appointed Date" 
                                                          Value="@(displayVersion.AppointedDate?.ToString("MMM d, yyyy"))"
@@ -640,28 +705,6 @@
                                                          Value="@(displayVersion.EndDate?.ToString("MMM d, yyyy"))"
                                                          Icon="@Icons.Material.Filled.Event"
                                                          PropertyExpression="@(x => x.EndDate)" />
-                                            </MudItem>
-
-                                            <MudItem xs="12" md="6">
-                                                <InfoCard TValue="bool?" TModel="CommissionerProfile"
-                                                         Label="Invoices" 
-                                                         Icon="@Icons.Material.Filled.Receipt"
-                                                         PropertyExpression="@(x => x.Invoices)">
-                                                    <ValueContent>
-                                                        @if (displayVersion.Invoices == true)
-                                                        {
-                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
-                                                        }
-                                                        else if (displayVersion.Invoices == false)
-                                                        {
-                                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
-                                                        }
-                                                        else
-                                                        {
-                                                            <MudText>—</MudText>
-                                                        }
-                                                    </ValueContent>
-                                                </InfoCard>
                                             </MudItem>
                                         </MudGrid>
                                     </ViewModeContent>
@@ -1843,6 +1886,24 @@
         {
             // Silently fail - note creation is optional
         }
+    }
+
+    private async Task<bool> CreateCommissionerStatus(CommissionerStatus entity)
+    {
+        var result = await CommissionerStatusesApi.CreateCommissionerStatusAsync(entity);
+        return result?.IsSuccess ?? false;
+    }
+
+    private async Task<bool> UpdateCommissionerStatus(CommissionerStatus entity)
+    {
+        var result = await CommissionerStatusesApi.UpdateCommissionerStatusAsync(entity.Id, entity);
+        return result?.IsSuccess ?? false;
+    }
+
+    private async Task<bool> DeleteCommissionerStatus(CommissionerStatus entity)
+    {
+        var result = await CommissionerStatusesApi.DeleteCommissionerStatusAsync(entity.Id);
+        return result?.IsSuccess ?? false;
     }
 
     private async Task OpenCreateDialog()
