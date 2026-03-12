@@ -330,9 +330,7 @@
                                             <MudText Typo="Typo.body2" Color="Color.Secondary">No subdivisions assigned</MudText>
                                         }
 
-                                        @if (CanEditFields())
-                                        {
-                                            <MudAutocomplete T="RoadSubdivision"
+                                        <MudAutocomplete T="RoadSubdivision"
                                                            Label="Add Subdivision"
                                                            SearchFunc="@SearchAvailableSubdivisions"
                                                            ToStringFunc="@(s => s?.Name ?? string.Empty)"
@@ -361,7 +359,6 @@
                                                     </MudText>
                                                 </MudAlert>
                                             }
-                                        }
                                     </MudItem>
 
                                     <MudItem xs="12" md="6">
