@@ -48,6 +48,28 @@ public class RoadsApiClient(HttpClient httpClient)
             cancellationToken);
     }
 
+    public async Task<Result<IEnumerable<RoadSubdivision>>?> GetSubdivisionsByRoadIdAsync(int roadId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteAsync<IEnumerable<RoadSubdivision>>(
+            () => httpClient.GetAsync($"/roads/{roadId}/subdivisions", cancellationToken),
+            cancellationToken);
+    }
+
+    public async Task<Result<RoadRoadSubdivision>?> AddSubdivisionToRoadAsync(int roadId, int subdivisionId, CancellationToken cancellationToken = default)
+    {
+        var entity = new RoadRoadSubdivision { RoadId = roadId, RoadSubdivisionId = subdivisionId };
+        return await ExecuteAsync<RoadRoadSubdivision>(
+            () => httpClient.PostAsJsonAsync($"/roads/{roadId}/subdivisions/{subdivisionId}", entity, cancellationToken),
+            cancellationToken);
+    }
+
+    public async Task<Result?> RemoveSubdivisionFromRoadAsync(int roadId, int subdivisionId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteAsync(
+            () => httpClient.DeleteAsync($"/roads/{roadId}/subdivisions/{subdivisionId}", cancellationToken),
+            cancellationToken);
+    }
+
     // Generic helper for requests that return data
     private async Task<Result<T>?> ExecuteAsync<T>(
         Func<Task<HttpResponseMessage>> request,

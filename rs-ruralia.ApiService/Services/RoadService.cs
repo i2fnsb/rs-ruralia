@@ -229,7 +229,7 @@ public class RoadService
 
             var sql = "DELETE FROM road WHERE id = @Id";
             var affected = await _db.ExecuteAsync(sql, new { Id = id });
-            
+
             if (affected == 0)
                 return Result.Failure("Road not found");
 
@@ -239,6 +239,93 @@ public class RoadService
         catch (Exception ex)
         {
             return Result.Failure($"Failed to delete road: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<IEnumerable<RoadSubdivision>>> GetSubdivisionsByRoadIdAsync(int roadId)
+    {
+        try
+        {
+            if (roadId <= 0)
+                return Result<IEnumerable<RoadSubdivision>>.Failure("Invalid road ID provided");
+
+            var sql = @"
+                SELECT rs.* 
+                FROM road_subdivision rs
+                INNER JOIN road_road_subdivision rrs ON rs.id = rrs.road_subdivision_id
+                WHERE rrs.road_id = @RoadId
+                ORDER BY rs.name";
+
+            var result = await _db.QueryAsync<RoadSubdivision>(sql, new { RoadId = roadId });
+            return Result<IEnumerable<RoadSubdivision>>.Success(result);
+        }
+        catch (Exception ex)
+        {
+            return Result<IEnumerable<RoadSubdivision>>.Failure($"Failed to retrieve subdivisions: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<RoadRoadSubdivision>> AddSubdivisionToRoadAsync(int roadId, int subdivisionId, string? modifiedBy)
+    {
+        try
+        {
+            if (roadId <= 0 || subdivisionId <= 0)
+                return Result<RoadRoadSubdivision>.Failure("Invalid road or subdivision ID");
+
+            // Check if relationship already exists
+            var checkSql = @"
+                SELECT COUNT(*) 
+                FROM road_road_subdivision 
+                WHERE road_id = @RoadId AND road_subdivision_id = @SubdivisionId";
+
+            var exists = await _db.ExecuteScalarAsync<int>(checkSql, new { RoadId = roadId, SubdivisionId = subdivisionId });
+
+            if (exists > 0)
+                return Result<RoadRoadSubdivision>.Failure("This subdivision is already associated with this road");
+
+            var sql = @"
+                INSERT INTO road_road_subdivision (road_id, road_subdivision_id, ModifiedBy)
+                VALUES (@RoadId, @SubdivisionId, @ModifiedBy);
+                SELECT CAST(SCOPE_IDENTITY() as int)";
+
+            var id = await _db.ExecuteScalarAsync<int>(sql, new { RoadId = roadId, SubdivisionId = subdivisionId, ModifiedBy = modifiedBy });
+
+            var entity = new RoadRoadSubdivision 
+            { 
+                Id = id, 
+                RoadId = roadId, 
+                RoadSubdivisionId = subdivisionId,
+                ModifiedBy = modifiedBy
+            };
+
+            await InvalidateCacheAsync();
+            return Result<RoadRoadSubdivision>.Success(entity);
+        }
+        catch (Exception ex)
+        {
+            return Result<RoadRoadSubdivision>.Failure($"Failed to add subdivision to road: {ex.Message}");
+        }
+    }
+
+    public async Task<Result> RemoveSubdivisionFromRoadAsync(int roadId, int subdivisionId)
+    {
+        try
+        {
+            if (roadId <= 0 || subdivisionId <= 0)
+                return Result.Failure("Invalid road or subdivision ID");
+
+            var sql = "DELETE FROM road_road_subdivision WHERE road_id = @RoadId AND road_subdivision_id = @SubdivisionId";
+            var affected = await _db.ExecuteAsync(sql, new { RoadId = roadId, SubdivisionId = subdivisionId });
+
+            if (affected == 0)
+                return Result.Failure("Subdivision relationship not found");
+
+            await InvalidateCacheAsync();
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure($"Failed to remove subdivision from road: {ex.Message}");
         }
     }
 
