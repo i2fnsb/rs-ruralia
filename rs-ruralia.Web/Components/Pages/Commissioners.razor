@@ -2168,7 +2168,8 @@
             { x => x.Description, "Create a new commissioner profile record. All fields marked with * are required." },
             { x => x.OnCreate, new Func<CommissionerProfile, Task<(bool, string?, string[]?)>>(CreateCommissionerProfile) },
             { x => x.AutoSetModifiedBy, true },
-            { x => x.FormContent, GetCommissionerProfileFormContent() }
+            { x => x.FormContent, GetCommissionerProfileFormContent() },
+            { x => x.InitialEntity, GetInitialCommissionerProfile() }
         };
 
         var options = new DialogOptions 
@@ -2206,27 +2207,48 @@
         }
     }
 
+    private CommissionerProfile GetInitialCommissionerProfile()
+    {
+        var initial = new CommissionerProfile();
+
+        // Set default person if one is selected
+        if (selectedPerson != null)
+        {
+            initial.PersonProfileId = selectedPerson.Id;
+        }
+
+        return initial;
+    }
+
     private RenderFragment<CommissionerProfile> GetCommissionerProfileFormContent() => entity => __builder =>
     {
         <MudItem xs="12" md="6">
-            <AutoField @bind-Value="entity.PersonProfileId" 
-                       TModel="CommissionerProfile" 
-                       TValue="int"
-                       TLookup="PersonProfile"
-                       Property="@(x => x.PersonProfileId)"
-                       LookupItems="@personProfiles"
-                       LookupTextSelector="@(item => GetPersonName(((PersonProfile)item).Id))"
-                       For="@(() => entity.PersonProfileId)" />
+            <MudAutocomplete T="PersonProfile"
+                             Value="@GetPersonProfileById(entity.PersonProfileId)"
+                             ValueChanged="@(person => { if (person != null) { entity.PersonProfileId = person.Id; } })"
+                             Label="@(FormAttributeHelper.GetDisplayName<CommissionerProfile>(x => x.PersonProfileId))"
+                             HelperText="@(FormAttributeHelper.GetDescription<CommissionerProfile>(x => x.PersonProfileId))"
+                             SearchFunc="@SearchPersonProfiles"
+                             ToStringFunc="@(p => p != null ? GetPersonName(p.Id) : string.Empty)"
+                             Variant="Variant.Outlined"
+                             Dense="true"
+                             ResetValueOnEmptyText="true"
+                             CoerceText="true"
+                             Required />
         </MudItem>
         <MudItem xs="12" md="6">
-            <AutoField @bind-Value="entity.CommissionSeatId" 
-                       TModel="CommissionerProfile" 
-                       TValue="int"
-                       TLookup="CommissionSeat"
-                       Property="@(x => x.CommissionSeatId)"
-                       LookupItems="@GetOrderedCommissionSeatsForCreate()"
-                       LookupTextSelector="@(item => GetCommissionSeatWithServiceAreaDisplayText((CommissionSeat)item))"
-                       For="@(() => entity.CommissionSeatId)" />
+            <MudAutocomplete T="CommissionSeat"
+                             Value="@GetCommissionSeatById(entity.CommissionSeatId)"
+                             ValueChanged="@(seat => { if (seat != null) { entity.CommissionSeatId = seat.Id; } })"
+                             Label="@(FormAttributeHelper.GetDisplayName<CommissionerProfile>(x => x.CommissionSeatId))"
+                             HelperText="@(FormAttributeHelper.GetDescription<CommissionerProfile>(x => x.CommissionSeatId))"
+                             SearchFunc="@SearchCommissionSeats"
+                             ToStringFunc="@(s => s != null ? GetCommissionSeatWithServiceAreaDisplayText(s) : string.Empty)"
+                             Variant="Variant.Outlined"
+                             Dense="true"
+                             ResetValueOnEmptyText="true"
+                             CoerceText="true"
+                             Required />
         </MudItem>
         <MudItem xs="12" md="6">
             <AutoField @bind-Value="entity.CommissionerStatusId" 
@@ -2330,6 +2352,62 @@
                        For="@(() => entity.Invoices)" />
         </MudItem>
     };
+
+    private PersonProfile? GetPersonProfileById(int personProfileId)
+    {
+        return personProfiles?.FirstOrDefault(p => p.Id == personProfileId);
+    }
+
+    private CommissionSeat? GetCommissionSeatById(int commissionSeatId)
+    {
+        return commissionSeats?.FirstOrDefault(s => s.Id == commissionSeatId);
+    }
+
+    private async Task<IEnumerable<PersonProfile>> SearchPersonProfiles(string searchString, CancellationToken cancellationToken)
+    {
+        if (personProfiles == null) return Array.Empty<PersonProfile>();
+
+        await Task.Delay(0, cancellationToken); // Prevent warning about async method
+
+        if (string.IsNullOrWhiteSpace(searchString))
+        {
+            return personProfiles
+                .OrderBy(p => p.LastName)
+                .ThenBy(p => p.FirstName)
+                .Take(50);
+        }
+
+        searchString = searchString.ToLowerInvariant();
+
+        return personProfiles
+            .Where(p => GetPersonName(p.Id).ToLowerInvariant().Contains(searchString))
+            .OrderBy(p => p.LastName)
+            .ThenBy(p => p.FirstName)
+            .Take(50);
+    }
+
+    private async Task<IEnumerable<CommissionSeat>> SearchCommissionSeats(string searchString, CancellationToken cancellationToken)
+    {
+        var orderedSeats = GetOrderedCommissionSeatsForCreate();
+        if (orderedSeats == null) return Array.Empty<CommissionSeat>();
+
+        await Task.Delay(0, cancellationToken); // Prevent warning about async method
+
+        if (string.IsNullOrWhiteSpace(searchString))
+        {
+            return orderedSeats.Take(50);
+        }
+
+        searchString = searchString.ToLowerInvariant();
+
+        return orderedSeats
+            .Where(seat =>
+            {
+                var displayText = GetCommissionSeatWithServiceAreaDisplayText(seat).ToLowerInvariant();
+                return displayText.Contains(searchString);
+            })
+            .Take(50);
+    }
 
     private async Task<(bool Success, string? ErrorMessage, string[]? ErrorDetails)> CreateCommissionerProfile(CommissionerProfile entity)
     {

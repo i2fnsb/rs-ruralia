@@ -132,12 +132,12 @@ public class CommissionerProfileService
 
             var sql = @"
                 INSERT INTO commissioner_profile (oath, invoices, resides_in_service_area, registered_voter, recommended_for_appointment, do_not_appoint, do_not_appoint_details, appointed_date, assembly_meeting_date, effective_date, end_date, commissioner_status_id, commission_seat_id, person_profile_id, ModifiedBy)
-                VALUES (@Oath @Invoices @ResidesInServiceArea @RegisteredVoter @RecommendedForAppointment @DoNotAppoint @DoNotAppointDetails @AppointedDate @AssemblyMeetingDate @EffectiveDate @EndDate @CommissionerStatusId @CommissionSeatId @PersonProfileId @ModifiedBy -join ', ');
+                VALUES (@Oath, @Invoices, @ResidesInServiceArea, @RegisteredVoter, @RecommendedForAppointment, @DoNotAppoint, @DoNotAppointDetails, @AppointedDate, @AssemblyMeetingDate, @EffectiveDate, @EndDate, @CommissionerStatusId, @CommissionSeatId, @PersonProfileId, @ModifiedBy);
                 SELECT CAST(SCOPE_IDENTITY() as int)";
 
             entity.Id = await _db.ExecuteScalarAsync<int>(sql, entity);
             await InvalidateCacheAsync();
-            
+
             return Result<CommissionerProfile>.Success(entity);
         }
         catch (Exception ex)
