@@ -8,6 +8,7 @@
 @inject CommissionSeatsApiClient CommissionSeatsApi
 @inject CommissionSeatTypesApiClient CommissionSeatTypesApi
 @inject CommissionSeatClassesApiClient CommissionSeatClassesApi
+@inject CommissionSeatStatusesApiClient CommissionSeatStatusesApi
 @inject ServiceAreasApiClient ServiceAreasApi
 @inject PersonProfilesApiClient PersonProfilesApi
 @inject PersonHonorificsApiClient PersonHonorificsApi
@@ -21,7 +22,7 @@
 @inject IDialogService DialogService
 @inject ViewModeService ViewModeService
 
-<EntityManagementLayout TEntity="CommissionerProfile"
+<EntityManagementLayout TEntity="PersonProfile"
                        Title="Commissioners"
                        Subtitle="Manage commissioner profiles, seats, and correspondence"
                        Icon="@Icons.Material.Filled.Groups"
@@ -31,527 +32,882 @@
                        SearchPlaceholder="Search commissioners..."
                        ShowSearch="true"
                        SearchString="@_searchString"
+                       CustomQuickFilter="@QuickFilterCommissioners"
                        ShowTotalCount="true"
-                       TotalCount="@(commissionerProfiles?.Count())"
+                       TotalCount="@(GetPeopleWithCommissionerProfiles()?.Count())"
                        CountIcon="@Icons.Material.Filled.Groups"
-                       HasSelection="@(selectedCommissioner != null)"
-                       EntitySingularName="a Commissioner"
+                       HasSelection="@(selectedPerson != null)"
+                       EntitySingularName="Commissioner"
                        EntityPluralName="commissioners"
                        EnableViewModeManagement="true"
                        EnableEditPermissionCheck="true"
                        CanEditChanged="@(async (canEdit) => { this.canEdit = canEdit; await InvokeAsync(StateHasChanged); })"
                        IsEditorChanged="@(async (editor) => { this.isEditor = editor; await InvokeAsync(StateHasChanged); })"
                        OnEditModeCancelled="@HandleEditModeCancelled"
-                       SelectedItem="@selectedCommissioner"
-                       GetSelectedItemDisplayText="@GetCommissionerDisplayText"
+                       SelectedItem="@selectedPerson"
+                       GetSelectedItemDisplayText="@GetPersonDisplayText"
                        ShowSelectedItemChip="true"
                        ShowCreateButton="true"
                        CreateButtonTitle="Create New Commissioner Profile"
                        OnCreateClicked="@OpenCreateDialog"
                        UseBuiltInDataGrid="true"
                        IsLoadingItems="@isLoading"
-                       Items="@commissionerProfiles"
+                       Items="@GetPeopleWithCommissionerProfiles()"
                        OnItemClicked="@(async (item) => await HandleItemClick(item))"
                        GetItemIcon="@(c => Icons.Material.Filled.Person)"
-                       GetItemDisplayText="@GetCommissionerDisplayText">
+                       GetItemDisplayText="@GetPersonDisplayText">
 
     <AdditionalItemColumns>
-        <TemplateColumn T="CommissionerProfile" Title="Person">
+        <TemplateColumn T="PersonProfile" Title="Seat" Sortable="true">
             <CellTemplate>
-                @GetPersonName(context.Item.PersonProfileId)
+                @{
+                    var personProfile = GetMostRecentCommissionerProfile(context.Item.Id);
+                    var seat = personProfile != null ? commissionSeats?.FirstOrDefault(s => s.Id == personProfile.CommissionSeatId) : null;
+                    var seatType = seat != null ? commissionSeatTypes?.FirstOrDefault(t => t.Id == seat.CommissionSeatTypeId) : null;
+                    var seatDisplay = seatType != null
+                        ? $"{seatType.Type}" 
+                        : "—";
+                }
+                <MudText Typo="Typo.body2">@seatDisplay</MudText>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="PersonProfile" Title="Status" Sortable="true">
+            <CellTemplate>
+                @{
+                    var hasActiveProfile = HasActiveProfile(context.Item.Id);
+                }
+                @if (hasActiveProfile)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Active</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Circle">Inactive</MudChip>
+                }
             </CellTemplate>
         </TemplateColumn>
     </AdditionalItemColumns>
 
     <!-- Detail Content (Expandable Sections) -->
     <DetailContent>
-        <MudExpansionPanels MultiExpansion="true">
-            <!-- Details Section -->
-            <SectionPanel Title="Details" 
-                         Icon="@Icons.Material.Filled.Info" 
-                         Expanded="true"
-                         MinimumViewMode="ViewMode.Public">
-                <VersionedDetailsPanel TEntity="CommissionerProfile"
-                   AllVersions="@allVersions"
-                   CurrentVersion="@currentViewVersion"
-                   CurrentVersionChanged="@OnCurrentVersionChanged"
-                   GetValidFrom="@(x => x.ValidFrom)"
-                   GetValidTo="@(x => x.ValidTo)"
-                   GetModifiedBy="@(x => x.ModifiedBy)"
-                   GetDisplayText="@GetCommissionerDisplayText"
-                   CanEdit="@(canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))"
-                   IsEditMode="@isEditMode"
-                   OnEditClicked="@EnableEdit"
-                   IsLoading="@(isLoading || isLoadingHistory)"
-                   ErrorMessage="@(errorMessage ?? historyErrorMessage)"
-                   OnRestore="@HandleRestore">
-                    
-                    <!-- Edit Mode Content -->
-                    <DetailsContent Context="version">
-                        @if (editContext != null && editModel != null)
-                        {
-                            <EditForm EditContext="@editContext" OnValidSubmit="SaveEdit">
-                                <DataAnnotationsValidator />
-                                <MudGrid>
-                                    <MudItem xs="12">
-                                        @if (canEdit && IsViewingCurrentVersion() && ViewModeService.IsAtLeast(ViewMode.Admin))
+        @if (selectedPerson != null && allProfilesForPerson != null)
+        {
+            <MudExpansionPanels MultiExpansion="true">
+                @foreach (var profile in allProfilesForPerson)
+                {
+                    var displayData = profileDisplayCache.TryGetValue(profile.Id, out var data) ? data : null;
+                    var seat = displayData?.Seat;
+                    var seatType = displayData?.SeatType;
+                    var seatClass = displayData?.SeatClass;
+                    var serviceArea = displayData?.ServiceArea;
+                    var status = displayData?.Status;
+                    var isActive = displayData?.IsActive ?? false;
+                    var isCurrent = displayData?.IsCurrent ?? false;
+                    var isFirstProfile = allProfilesForPerson.First() == profile;
+
+                    <SectionPanel @key="profile.Id"
+                                 Title="@($"{seatType?.Type} - {seatClass?.Class} ({serviceArea?.Name})")"
+                                 Icon="@Icons.Material.Filled.AccountBox"
+                                 Expanded="@isFirstProfile"
+                                 MinimumViewMode="ViewMode.Public">
+                        <MudStack Row="true" Spacing="1">
+                            <MudChip T="string" 
+                                    Size="Size.Small" 
+                                    Color="@(isActive ? Color.Success : Color.Default)"
+                                    Icon="@(isActive ? Icons.Material.Filled.Check : Icons.Material.Filled.Circle)">
+                                @(status?.Status ?? "Unknown")
+                            </MudChip>
+                            @if (isCurrent)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info">Current</MudChip>
+                            }
+                        </MudStack>
+
+                        <MudExpansionPanels MultiExpansion="true">
+                            <!-- Profile Details Section -->
+                            <SectionPanel Title="Profile Details"
+                                         Icon="@Icons.Material.Filled.Person"
+                                         Expanded="true"
+                                         MinimumViewMode="ViewMode.Public">
+                                @{
+                                    var profileVersions = GetAllVersionsOfProfile(profile);
+                                    var displayVersion = currentlyDisplayedVersions.TryGetValue(profile.Id, out var tracked) ? tracked : profile;
+                                }
+                                <VersionedDetailsPanel TEntity="CommissionerProfile"
+                                   AllVersions="@profileVersions"
+                                   CurrentVersion="@displayVersion"
+                                   CurrentVersionChanged="@((v) => HandleVersionChanged(profile.Id, v))"
+                                   GetValidFrom="@(x => x.ValidFrom)"
+                                   GetValidTo="@(x => x.ValidTo)"
+                                   GetModifiedBy="@(x => x.ModifiedBy)"
+                                   GetDisplayText="@GetCommissionerDisplayText"
+                                   CanEdit="@(canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))"
+                                   IsEditMode="@(editingProfileId == profile.Id)"
+                                   OnEditClicked="@(() => EnableEditForProfile(profile.Id))"
+                                   IsLoading="false"
+                                   ErrorMessage="@null"
+                                   OnRestore="@(async (historicalVersion) => await HandleRestoreVersion(profile.Id, historicalVersion))">
+
+                                    <!-- Edit Mode Content -->
+                                    <DetailsContent Context="version">
+                                        @if (editingProfileId == profile.Id && editModel != null && editModel.Id == profile.Id)
                                         {
-                                            @if (isEditMode)
-                                            {
-                                                <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
-                                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@isSaving">
-                                                        @if (isSaving)
+                                            <EditForm EditContext="@editContext" OnValidSubmit="@(() => SaveProfileEdit(profile.Id))">
+                                                <DataAnnotationsValidator />
+                                                <MudGrid>
+                                                    <MudItem xs="12">
+                                                        @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
                                                         {
-                                                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
-                                                            <MudText Class="ms-2">Saving...</MudText>
+                                                            <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
+                                                                <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@isSaving">
+                                                                    @if (isSaving)
+                                                                    {
+                                                                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                                                                        <MudText Class="ms-2">Saving...</MudText>
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <MudIcon Icon="@Icons.Material.Filled.Save" Class="me-1" /> <MudText>Save</MudText>
+                                                                    }
+                                                                </MudButton>
+                                                                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="CancelEdit" Disabled="@isSaving">
+                                                                    Cancel
+                                                                </MudButton>
+                                                            </MudStack>
+                                                        }
+                                                    </MudItem>
+
+                                                    @if (!string.IsNullOrEmpty(successMessage))
+                                                    {
+                                                        <MudItem xs="12">
+                                                            <MudAlert Severity="Severity.Success" Variant="Variant.Filled">@successMessage</MudAlert>
+                                                        </MudItem>
+                                                    }
+
+                                                    @if (!string.IsNullOrEmpty(errorMessage))
+                                                    {
+                                                        <MudItem xs="12">
+                                                            <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
+                                                                <MudText>@errorMessage</MudText>
+                                                                @if (errorDetails != null && errorDetails.Length > 0)
+                                                                {
+                                                                    <MudList T="string" Dense="true">
+                                                                        @foreach (var detail in errorDetails)
+                                                                        {
+                                                                            <MudListItem>@detail</MudListItem>
+                                                                        }
+                                                                    </MudList>
+                                                                }
+                                                            </MudAlert>
+                                                        </MudItem>
+                                                    }
+
+                                                    <MudItem xs="12" md="6">
+                                                        <AutoField @bind-Value="editModel.PersonProfileId" 
+                                                                   TModel="CommissionerProfile" 
+                                                                   TValue="int"
+                                                                   TLookup="PersonProfile"
+                                                                   Property="@(x => x.PersonProfileId)"
+                                                                   ReadOnly="true"
+                                                                   LookupItems="@personProfiles"
+                                                                   LookupTextSelector="@(item => GetPersonName(((PersonProfile)item).Id))"
+                                                                   For="@(() => editModel.PersonProfileId)" />
+                                                    </MudItem>
+
+                                                    <MudItem xs="12" md="6">
+                                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">Service Area</MudText>
+                                                        <MudText Typo="Typo.body2">@(serviceArea?.Name ?? "—")</MudText>
+                                                    </MudItem>
+
+                                                    <MudItem xs="12" md="6">
+                                                        <AutoField @bind-Value="editModel.CommissionSeatId" 
+                                                                   TModel="CommissionerProfile" 
+                                                                   TValue="int"
+                                                                   TLookup="CommissionSeat"
+                                                                   Property="@(x => x.CommissionSeatId)"
+                                                                   ReadOnly="false"
+                                                                   LookupItems="@GetFilteredCommissionSeatsForEdit(profile.Id)"
+                                                                   LookupTextSelector="@(item => GetCommissionSeatDisplayText((CommissionSeat)item))"
+                                                                   ForeignKeyIdSelector="@(x => x.Id)"
+                                                                   ForeignKeyNameSelector="@(x => GetCommissionSeatDisplayText(x))"
+                                                                   ForeignKeyDescriptionSelector="@(x => $"Term: {x.TermStartDate?.ToString("MMM yyyy")} - {x.TermEndDate?.ToString("MMM yyyy")}")"
+                                                                   OnForeignKeyCreate="@CreateCommissionSeat"
+                                                                   OnForeignKeyUpdate="@UpdateCommissionSeat"
+                                                                   OnForeignKeyDelete="@DeleteCommissionSeat"
+                                                                   OnForeignKeyDataChanged="@(EventCallback.Factory.Create(this, LoadCommissionSeats))"
+                                                                   ForeignKeyDialogTitle="Manage Commission Seats"
+                                                                   For="@(() => editModel.CommissionSeatId)">
+                                                            <ForeignKeyFormContent Context="entity">
+                                                                <MudItem xs="12" md="6">
+                                                                    <AutoField @bind-Value="entity.ServiceAreaId" 
+                                                                               TModel="CommissionSeat" 
+                                                                               TValue="int"
+                                                                               TLookup="ServiceArea"
+                                                                               ReadOnly
+                                                                               Property="@(x => x.ServiceAreaId)"
+                                                                               LookupItems="@serviceAreas"
+                                                                               LookupTextSelector="@(item => ((ServiceArea)item).Name ?? string.Empty)"
+                                                                               For="@(() => entity.ServiceAreaId)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12" md="6">
+                                                                    <AutoField @bind-Value="entity.CommissionSeatTypeId" 
+                                                                               TModel="CommissionSeat" 
+                                                                               TValue="int"
+                                                                               TLookup="CommissionSeatType"
+                                                                               ReadOnly
+                                                                               Property="@(x => x.CommissionSeatTypeId)"
+                                                                               LookupItems="@commissionSeatTypes"
+                                                                               LookupTextSelector="@(item => ((CommissionSeatType)item).Type ?? string.Empty)"
+                                                                               For="@(() => entity.CommissionSeatTypeId)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12" md="6">
+                                                                    <AutoField @bind-Value="entity.CommissionSeatClassId" 
+                                                                               TModel="CommissionSeat" 
+                                                                               TValue="int"
+                                                                               TLookup="CommissionSeatClass"
+                                                                               ReadOnly
+                                                                               Property="@(x => x.CommissionSeatClassId)"
+                                                                               LookupItems="@commissionSeatClasses"
+                                                                               LookupTextSelector="@(item => ((CommissionSeatClass)item).Class ?? string.Empty)"
+                                                                               For="@(() => entity.CommissionSeatClassId)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12" md="6">
+                                                                    <AutoField @bind-Value="entity.CommissionSeatStatusId" 
+                                                                               TModel="CommissionSeat" 
+                                                                               TValue="int"
+                                                                               TLookup="CommissionSeatStatus"
+                                                                               Property="@(x => x.CommissionSeatStatusId)"
+                                                                               ReadOnly
+                                                                               LookupItems="@commissionSeatStatuses"
+                                                                               LookupTextSelector="@(item => ((CommissionSeatStatus)item).Status ?? string.Empty)"
+                                                                               For="@(() => entity.CommissionSeatStatusId)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12" md="6">
+                                                                    <AutoField @bind-Value="entity.TermStartDate" 
+                                                                               TModel="CommissionSeat" 
+                                                                               TValue="DateTime?"
+                                                                               TLookup="object"
+                                                                               ReadOnly
+                                                                               Property="@(x => x.TermStartDate)"
+                                                                               For="@(() => entity.TermStartDate)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12" md="6">
+                                                                    <AutoField @bind-Value="entity.TermEndDate" 
+                                                                               TModel="CommissionSeat" 
+                                                                               TValue="DateTime?"
+                                                                               TLookup="object"
+                                                                               ReadOnly
+                                                                               Property="@(x => x.TermEndDate)"
+                                                                               For="@(() => entity.TermEndDate)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12" md="6">
+                                                                    <AutoField @bind-Value="entity.CreationDate" 
+                                                                               TModel="CommissionSeat" 
+                                                                               TValue="DateTime?"
+                                                                               TLookup="object"
+                                                                               ReadOnly
+                                                                               Property="@(x => x.CreationDate)"
+                                                                               For="@(() => entity.CreationDate)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12" md="6">
+                                                                    <AutoField @bind-Value="entity.TerminationDate" 
+                                                                               TModel="CommissionSeat" 
+                                                                               TValue="DateTime?"
+                                                                               TLookup="object"
+                                                                               ReadOnly
+                                                                               Property="@(x => x.TerminationDate)"
+                                                                               For="@(() => entity.TerminationDate)" />
+                                                                </MudItem>
+                                                            </ForeignKeyFormContent>
+                                                        </AutoField>
+                                                    </MudItem>
+
+                                                    <MudItem xs="12" md="6">
+                                                        <AutoField @bind-Value="editModel.CommissionerStatusId" 
+                                                                   TModel="CommissionerProfile" 
+                                                                   TValue="int"
+                                                                   TLookup="CommissionerStatus"
+                                                                   Property="@(x => x.CommissionerStatusId)"
+                                                                   ReadOnly="false"
+                                                                   LookupItems="@commissionerStatuses"
+                                                                   LookupTextSelector="@(item => ((CommissionerStatus)item).Status ?? string.Empty)"
+                                                                   ForeignKeyIdSelector="@(x => x.Id)"
+                                                                   ForeignKeyNameSelector="@(x => x.Status ?? "")"
+                                                                   ForeignKeyDescriptionSelector="@(x => x.Description ?? "")"
+                                                                   OnForeignKeyCreate="@CreateCommissionerStatus"
+                                                                   OnForeignKeyUpdate="@UpdateCommissionerStatus"
+                                                                   OnForeignKeyDelete="@DeleteCommissionerStatus"
+                                                                   OnForeignKeyDataChanged="@(EventCallback.Factory.Create(this, LoadCommissionerStatuses))"
+                                                                   ForeignKeyDialogTitle="Manage Commissioner Statuses"
+                                                                   For="@(() => editModel.CommissionerStatusId)">
+                                                            <ForeignKeyFormContent Context="entity">
+                                                                <MudItem xs="12">
+                                                                    <AutoField @bind-Value="entity.Status" 
+                                                                               TModel="CommissionerStatus" 
+                                                                               TValue="string"
+                                                                               TLookup="object"
+                                                                               Property="@(x => x.Status)"
+                                                                               For="@(() => entity.Status)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12">
+                                                                    <AutoField @bind-Value="entity.StatusCode" 
+                                                                               TModel="CommissionerStatus" 
+                                                                               TValue="string"
+                                                                               TLookup="object"
+                                                                               Property="@(x => x.StatusCode)"
+                                                                               For="@(() => entity.StatusCode)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12">
+                                                                    <AutoField @bind-Value="entity.Description" 
+                                                                               TModel="CommissionerStatus" 
+                                                                               TValue="string"
+                                                                               TLookup="object"
+                                                                               Property="@(x => x.Description)"
+                                                                               For="@(() => entity.Description)" />
+                                                                </MudItem>
+                                                                <MudItem xs="12">
+                                                                    <AutoField @bind-Value="entity.Active" 
+                                                                               TModel="CommissionerStatus" 
+                                                                               TValue="bool?"
+                                                                               TLookup="object"
+                                                                               Property="@(x => x.Active)"
+                                                                               For="@(() => entity.Active)" />
+                                                                </MudItem>
+                                                            </ForeignKeyFormContent>
+                                                        </AutoField>
+                                                    </MudItem>
+
+                                                    <MudItem xs="12" md="6">
+                                                        <AutoField @bind-Value="editModel.RegisteredVoter" 
+                                                                   TModel="CommissionerProfile" 
+                                                                   TValue="bool?" 
+                                                                   TLookup="object"
+                                                                   Property="@(x => x.RegisteredVoter)"
+                                                                   ReadOnly="false"
+                                                                   For="@(() => editModel.RegisteredVoter)" />
+                                                    </MudItem>
+                                                    <MudItem xs="12" md="6">
+                                                        <AutoField @bind-Value="editModel.ResidesInServiceArea" 
+                                                                   TModel="CommissionerProfile" 
+                                                                   TValue="bool?" 
+                                                                   TLookup="object"
+                                                                   Property="@(x => x.ResidesInServiceArea)"
+                                                                   ReadOnly="false"
+                                                                   For="@(() => editModel.ResidesInServiceArea)" />
+                                                    </MudItem>
+
+                                                    <MudItem xs="12" md="6">
+                                                        <AutoField @bind-Value="editModel.RecommendedForAppointment" 
+                                                                   TModel="CommissionerProfile" 
+                                                                   TValue="bool?" 
+                                                                   TLookup="object"
+                                                                   Property="@(x => x.RecommendedForAppointment)"
+                                                                   ReadOnly="false"
+                                                                   For="@(() => editModel.RecommendedForAppointment)" />
+                                                    </MudItem>
+
+                                                    <MudItem xs="12" md="6">
+                                                        <AutoField @bind-Value="editModel.DoNotAppoint" 
+                                                                   TModel="CommissionerProfile" 
+                                                                   TValue="bool?" 
+                                                                   TLookup="object"
+                                                                   Property="@(x => x.DoNotAppoint)"
+                                                                   ReadOnly="false"
+                                                                   For="@(() => editModel.DoNotAppoint)" />
+                                                    </MudItem>
+
+                                                    @if (editModel.DoNotAppoint == true)
+                                                    {
+                                                        <MudItem xs="12">
+                                                            <AutoField @bind-Value="editModel.DoNotAppointDetails" 
+                                                                       TModel="CommissionerProfile" 
+                                                                       TValue="string" 
+                                                                       TLookup="object"
+                                                                       Property="@(x => x.DoNotAppointDetails)"
+                                                                       ReadOnly="false"
+                                                                       For="@(() => editModel.DoNotAppointDetails)" />
+                                                        </MudItem>
+                                                    }
+
+                                                    <MudItem xs="12" md="6">
+                                                        <AutoField @bind-Value="editModel.Oath" 
+                                                                   TModel="CommissionerProfile" 
+                                                                   TValue="bool?" 
+                                                                   TLookup="object"
+                                                                   Property="@(x => x.Oath)"
+                                                                   ReadOnly="false"
+                                                                   For="@(() => editModel.Oath)" />
+                                                    </MudItem>
+
+                                                    <MudItem xs="12" md="6">
+                                                        <AutoField @bind-Value="editModel.Invoices" 
+                                                                   TModel="CommissionerProfile" 
+                                                                   TValue="bool?" 
+                                                                   TLookup="object"
+                                                                   Property="@(x => x.Invoices)"
+                                                                   ReadOnly="false"
+                                                                   For="@(() => editModel.Invoices)" />
+                                                    </MudItem>
+
+                                                    <MudItem xs="12" md="6">
+                                                        <AutoField @bind-Value="editModel.AppointedDate" 
+                                                                   TModel="CommissionerProfile" 
+                                                                   TValue="DateTime?" 
+                                                                   TLookup="object"
+                                                                   Property="@(x => x.AppointedDate)"
+                                                                   ReadOnly="false"
+                                                                   For="@(() => editModel.AppointedDate)" />
+                                                    </MudItem>
+
+                                                    <MudItem xs="12" md="6">
+                                                        <AutoField @bind-Value="editModel.AssemblyMeetingDate" 
+                                                                   TModel="CommissionerProfile" 
+                                                                   TValue="DateTime?" 
+                                                                   TLookup="object"
+                                                                   Property="@(x => x.AssemblyMeetingDate)"
+                                                                   ReadOnly="false"
+                                                                   For="@(() => editModel.AssemblyMeetingDate)" />
+                                                    </MudItem>
+
+                                                    <MudItem xs="12" md="6">
+                                                        <AutoField @bind-Value="editModel.EffectiveDate" 
+                                                                   TModel="CommissionerProfile" 
+                                                                   TValue="DateTime?" 
+                                                                   TLookup="object"
+                                                                   Property="@(x => x.EffectiveDate)"
+                                                                   ReadOnly="false"
+                                                                   For="@(() => editModel.EffectiveDate)" />
+                                                    </MudItem>
+
+                                                    <MudItem xs="12" md="6">
+                                                        <AutoField @bind-Value="editModel.EndDate" 
+                                                                   TModel="CommissionerProfile" 
+                                                                   TValue="DateTime?" 
+                                                                   TLookup="object"
+                                                                   Property="@(x => x.EndDate)"
+                                                                   ReadOnly="false"
+                                                                   For="@(() => editModel.EndDate)" />
+                                                    </MudItem>
+
+                                                    <MudItem xs="12" md="6">
+                                                        <AutoField Value="editModel.ValidFrom" 
+                                                                   TModel="CommissionerProfile" 
+                                                                   TValue="DateTime?" 
+                                                                   TLookup="object"
+                                                                   Property="@(x => x.ValidFrom)"
+                                                                   ReadOnly="true" />
+                                                    </MudItem>
+
+                                                    <MudItem xs="12" md="6">
+                                                        <AutoField Value="editModel.ValidTo" 
+                                                                   TModel="CommissionerProfile" 
+                                                                   TValue="DateTime?" 
+                                                                   TLookup="object"
+                                                                   Property="@(x => x.ValidTo)"
+                                                                   ReadOnly="true" />
+                                                    </MudItem>
+
+                                                    <MudItem xs="12" md="6">
+                                                        <AutoField @bind-Value="editModel.ModifiedBy" 
+                                                                   TModel="CommissionerProfile" 
+                                                                   TValue="string" 
+                                                                   TLookup="object"
+                                                                   Property="@(x => x.ModifiedBy)"
+                                                                   ReadOnly="true" />
+                                                    </MudItem>
+                                                </MudGrid>
+                                            </EditForm>
+                                        }
+                                    </DetailsContent>
+
+                                    <!-- View Mode Content -->
+                                    <ViewModeContent Context="version">
+                                        <MudGrid Spacing="3">
+                                            <MudItem xs="12" md="6">
+                                                <InfoCard TValue="string" TModel="CommissionerProfile"
+                                                         Label="Person" 
+                                                         Icon="@Icons.Material.Filled.Person"
+                                                         ValueStyle="font-weight: 600; font-size: 1.1rem;"
+                                                         PropertyExpression="@(x => x.PersonProfileId)">
+                                                    <ValueContent>
+                                                        @if (isEditor)
+                                                        {
+                                                            <MudButton Variant="Variant.Text" 
+                                                                      Color="Color.Primary" 
+                                                                      Size="Size.Small"
+                                                                      StartIcon="@Icons.Material.Filled.OpenInNew"
+                                                                      OnClick="@(() => NavigationManager.NavigateTo($"/persons?id={displayVersion.PersonProfileId}"))">
+                                                                @GetPersonName(displayVersion.PersonProfileId)
+                                                            </MudButton>
                                                         }
                                                         else
                                                         {
-                                                            <MudIcon Icon="@Icons.Material.Filled.Save" Class="me-1" /> <MudText>Save</MudText>
+                                                            <MudText Typo="Typo.body1" Style="font-weight: 600; font-size: 1.1rem;">
+                                                                @GetPersonName(displayVersion.PersonProfileId)
+                                                            </MudText>
                                                         }
-                                                    </MudButton>
-                                                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="CancelEdit" Disabled="@isSaving">
-                                                        Cancel
-                                                    </MudButton>
-                                                </MudStack>
-                                            }
-                                        }
-                                    </MudItem>
+                                                    </ValueContent>
+                                                </InfoCard>
+                                            </MudItem>
 
-                                    @if (!string.IsNullOrEmpty(successMessage))
-                                    {
-                                        <MudItem xs="12">
-                                            <MudAlert Severity="Severity.Success" Variant="Variant.Filled">@successMessage</MudAlert>
-                                        </MudItem>
-                                    }
-
-                                    @if (!string.IsNullOrEmpty(errorMessage))
-                                    {
-                                        <MudItem xs="12">
-                                            <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
-                                                <MudText>@errorMessage</MudText>
-                                                @if (errorDetails != null && errorDetails.Length > 0)
-                                                {
-                                                    <MudList T="string" Dense="true">
-                                                        @foreach (var detail in errorDetails)
+                                            <MudItem xs="12" md="6">
+                                                <InfoCard TValue="string" TModel="CommissionerProfile"
+                                                         Label="Service Area" 
+                                                         Icon="@Icons.Material.Filled.Landscape"
+                                                         PropertyExpression="@(x => x.CommissionSeatId)">
+                                                    <ValueContent>
+                                                        @{
+                                                            var versionSeat = commissionSeats?.FirstOrDefault(s => s.Id == displayVersion.CommissionSeatId);
+                                                            var versionServiceArea = versionSeat != null ? serviceAreas?.FirstOrDefault(sa => sa.Id == versionSeat.ServiceAreaId) : null;
+                                                        }
+                                                        @if (versionServiceArea != null)
                                                         {
-                                                            <MudListItem>@detail</MudListItem>
+                                                            <MudButton Variant="Variant.Text" 
+                                                                      Color="Color.Primary" 
+                                                                      Size="Size.Small"
+                                                                      StartIcon="@Icons.Material.Filled.OpenInNew"
+                                                                      OnClick="@(() => NavigationManager.NavigateTo($"/service-areas?id={versionServiceArea.Id}"))">
+                                                                @versionServiceArea.Name
+                                                            </MudButton>
                                                         }
-                                                    </MudList>
-                                                }
-                                            </MudAlert>
-                                        </MudItem>
-                                    }
+                                                        else
+                                                        {
+                                                            <MudText>—</MudText>
+                                                        }
+                                                    </ValueContent>
+                                                </InfoCard>
+                                            </MudItem>
 
-                                    <MudItem xs="12" md="6">
-                                        <AutoField @bind-Value="editModel.PersonProfileId" 
-                                                   TModel="CommissionerProfile" 
-                                                   TValue="int"
-                                                   TLookup="PersonProfile"
-                                                   Property="@(x => x.PersonProfileId)"
-                                                   ReadOnly="@(!CanEditFields())"
-                                                   LookupItems="@personProfiles"
-                                                   LookupTextSelector="@(item => GetPersonName(((PersonProfile)item).Id))"
-                                                   For="@(() => editModel.PersonProfileId)" />
-                                    </MudItem>
+                                            <MudItem xs="12" md="6">
+                                                <InfoCard TValue="string" TModel="CommissionerProfile"
+                                                         Label="Commission Seat" 
+                                                         Icon="@Icons.Material.Filled.EventSeat"
+                                                         PropertyExpression="@(x => x.CommissionSeatId)">
+                                                    <ValueContent>
+                                                        @{
+                                                            var versionSeatForDisplay = commissionSeats?.FirstOrDefault(s => s.Id == displayVersion.CommissionSeatId);
+                                                            var seatDisplay = GetCommissionSeatDisplayText(versionSeatForDisplay);
+                                                        }
+                                                        @if (versionSeatForDisplay != null)
+                                                        {
+                                                            <MudButton Variant="Variant.Text" 
+                                                                      Color="Color.Primary" 
+                                                                      Size="Size.Small"
+                                                                      StartIcon="@Icons.Material.Filled.OpenInNew"
+                                                                      OnClick="@(() => NavigationManager.NavigateTo($"/commission-seats?id={versionSeatForDisplay.Id}"))">
+                                                                @seatDisplay
+                                                            </MudButton>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText>@seatDisplay</MudText>
+                                                        }
+                                                    </ValueContent>
+                                                </InfoCard>
+                                            </MudItem>
 
-                                    <MudItem xs="12" md="6">
-                                        <AutoField @bind-Value="editModel.CommissionSeatId" 
-                                                   TModel="CommissionerProfile" 
-                                                   TValue="int"
-                                                   TLookup="CommissionSeat"
-                                                   Property="@(x => x.CommissionSeatId)"
-                                                   ReadOnly="@(!CanEditFields())"
-                                                   LookupItems="@commissionSeats"
-                                                   LookupTextSelector="@(item => GetCommissionSeatDisplayText((CommissionSeat)item))"
-                                                   For="@(() => editModel.CommissionSeatId)" />
-                                    </MudItem>
+                                            <MudItem xs="12" md="6">
+                                                <InfoCard TValue="string" TModel="CommissionerProfile"
+                                                         Label="Status" 
+                                                         Icon="@Icons.Material.Filled.Circle"
+                                                         PropertyExpression="@(x => x.CommissionerStatusId)">
+                                                    <ValueContent>
+                                                        @{
+                                                            var versionStatus = commissionerStatuses?.FirstOrDefault(s => s.Id == displayVersion.CommissionerStatusId);
+                                                            var isVersionActive = versionStatus?.Active == true;
+                                                        }
+                                                        <MudChip T="string" 
+                                                                Size="Size.Small" 
+                                                                Color="@(isVersionActive ? Color.Success : Color.Default)">
+                                                            @(versionStatus?.Status ?? "—")
+                                                        </MudChip>
+                                                    </ValueContent>
+                                                </InfoCard>
+                                            </MudItem>
 
-                                    <MudItem xs="12" md="6">
-                                        <AutoField @bind-Value="editModel.CommissionerStatusId" 
-                                                   TModel="CommissionerProfile" 
-                                                   TValue="int"
-                                                   TLookup="CommissionerStatus"
-                                                   Property="@(x => x.CommissionerStatusId)"
-                                                   ReadOnly="@(!CanEditFields())"
-                                                   LookupItems="@commissionerStatuses"
-                                                   LookupTextSelector="@(item => ((CommissionerStatus)item).Status ?? string.Empty)"
-                                                   For="@(() => editModel.CommissionerStatusId)" />
-                                    </MudItem>
+                                            <MudItem xs="12" md="6">
+                                                <InfoCard TValue="bool?" TModel="CommissionerProfile"
+                                                         Label="Registered Voter" 
+                                                         Icon="@Icons.Material.Filled.HowToVote"
+                                                         PropertyExpression="@(x => x.RegisteredVoter)">
+                                                    <ValueContent>
+                                                        @if (displayVersion.RegisteredVoter == true)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
+                                                        }
+                                                        else if (displayVersion.RegisteredVoter == false)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText>—</MudText>
+                                                        }
+                                                    </ValueContent>
+                                                </InfoCard>
+                                            </MudItem>
 
-                                    <MudItem xs="12" md="6">
-                                        <AutoField @bind-Value="editModel.AppointedDate" 
-                                                   TModel="CommissionerProfile" 
-                                                   TValue="DateTime?" 
-                                                   TLookup="object"
-                                                   Property="@(x => x.AppointedDate)"
-                                                   ReadOnly="@(!CanEditFields())"
-                                                   For="@(() => editModel.AppointedDate)" />
-                                    </MudItem>
+                                            <MudItem xs="12" md="6">
+                                                <InfoCard TValue="bool?" TModel="CommissionerProfile"
+                                                         Label="Resides In Service Area" 
+                                                         Icon="@Icons.Material.Filled.House"
+                                                         PropertyExpression="@(x => x.ResidesInServiceArea)">
+                                                    <ValueContent>
+                                                        @if (displayVersion.ResidesInServiceArea == true)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
+                                                        }
+                                                        else if (displayVersion.ResidesInServiceArea == false)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText>—</MudText>
+                                                        }
+                                                    </ValueContent>
+                                                </InfoCard>
+                                            </MudItem>
 
-                                    <MudItem xs="12" md="6">
-                                        <AutoField @bind-Value="editModel.EndDate" 
-                                                   TModel="CommissionerProfile" 
-                                                   TValue="DateTime?" 
-                                                   TLookup="object"
-                                                   Property="@(x => x.EndDate)"
-                                                   ReadOnly="@(!CanEditFields())"
-                                                   For="@(() => editModel.EndDate)" />
-                                    </MudItem>
+                                            <MudItem xs="12" md="6">
+                                                <InfoCard TValue="bool?" TModel="CommissionerProfile"
+                                                         Label="Recommended For Appointment" 
+                                                         Icon="@Icons.Material.Filled.ThumbUp"
+                                                         PropertyExpression="@(x => x.RecommendedForAppointment)">
+                                                    <ValueContent>
+                                                        @if (displayVersion.RecommendedForAppointment == true)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
+                                                        }
+                                                        else if (displayVersion.RecommendedForAppointment == false)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText>—</MudText>
+                                                        }
+                                                    </ValueContent>
+                                                </InfoCard>
+                                            </MudItem>
 
-                                    <MudItem xs="12" md="6">
-                                        <AutoField @bind-Value="editModel.Oath" 
-                                                   TModel="CommissionerProfile" 
-                                                   TValue="bool?" 
-                                                   TLookup="object"
-                                                   Property="@(x => x.Oath)"
-                                                   ReadOnly="@(!CanEditFields())"
-                                                   For="@(() => editModel.Oath)" />
-                                    </MudItem>
+                                            <MudItem xs="12" md="6">
+                                                <InfoCard TValue="bool?" TModel="CommissionerProfile"
+                                                         Label="Do Not Appoint" 
+                                                         Icon="@Icons.Material.Filled.Block"
+                                                         PropertyExpression="@(x => x.DoNotAppoint)">
+                                                    <ValueContent>
+                                                        @if (displayVersion.DoNotAppoint == true)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Block">Yes</MudChip>
+                                                        }
+                                                        else if (displayVersion.DoNotAppoint == false)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Check">No</MudChip>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText>—</MudText>
+                                                        }
+                                                    </ValueContent>
+                                                </InfoCard>
+                                            </MudItem>
 
-                                    <MudItem xs="12" md="6">
-                                        <AutoField Value="editModel.ValidFrom" 
-                                                   TModel="CommissionerProfile" 
-                                                   TValue="DateTime?" 
-                                                   TLookup="object"
-                                                   Property="@(x => x.ValidFrom)"
-                                                   ReadOnly="true" />
-                                    </MudItem>
-
-                                    <MudItem xs="12" md="6">
-                                        <AutoField @bind-Value="editModel.ModifiedBy" 
-                                                   TModel="CommissionerProfile" 
-                                                   TValue="string" 
-                                                   TLookup="object"
-                                                   Property="@(x => x.ModifiedBy)"
-                                                   ReadOnly="true" />
-                                    </MudItem>
-                                </MudGrid>
-                            </EditForm>
-                        }
-                    </DetailsContent>
-
-                    <!-- View Mode Content -->
-                    <ViewModeContent Context="version">
-                        <MudGrid Spacing="3">
-                            <MudItem xs="12" md="6">
-                                <InfoCard TValue="string" TModel="CommissionerProfile"
-                                         Label="Person" 
-                                         Icon="@Icons.Material.Filled.Person"
-                                         ValueStyle="font-weight: 600; font-size: 1.1rem;"
-                                         PropertyExpression="@(x => x.PersonProfileId)">
-                                    <ValueContent>
-                                        @if (isEditor)
-                                        {
-                                            <MudButton Variant="Variant.Text" 
-                                                      Color="Color.Primary" 
-                                                      Size="Size.Small"
-                                                      StartIcon="@Icons.Material.Filled.OpenInNew"
-                                                      OnClick="@(() => NavigationManager.NavigateTo($"/persons?id={version.PersonProfileId}"))">
-                                                @GetPersonName(version.PersonProfileId)
-                                            </MudButton>
-                                        }
-                                        else
-                                        {
-                                            <MudText Typo="Typo.body1" Style="font-weight: 600; font-size: 1.1rem;">
-                                                @GetPersonName(version.PersonProfileId)
-                                            </MudText>
-                                        }
-                                    </ValueContent>
-                                </InfoCard>
-                            </MudItem>
-
-                            <MudItem xs="12" md="6">
-                                <InfoCard TValue="string" TModel="CommissionerProfile"
-                                         Label="Commission Seat" 
-                                         Icon="@Icons.Material.Filled.EventSeat"
-                                         PropertyExpression="@(x => x.CommissionSeatId)">
-                                    <ValueContent>
-                                        @{
-                                            var seat = commissionSeats?.FirstOrDefault(s => s.Id == version.CommissionSeatId);
-                                            if (seat != null)
+                                            @if (displayVersion.DoNotAppoint == true)
                                             {
-                                                <MudButton Variant="Variant.Text" 
-                                                          Color="Color.Primary" 
-                                                          Size="Size.Small"
-                                                          StartIcon="@Icons.Material.Filled.OpenInNew"
-                                                          OnClick="@(() => NavigationManager.NavigateTo($"/commission-seats?id={seat.Id}"))">
-                                                    @GetCommissionSeatDisplayText(seat)
-                                                </MudButton>
+                                                <MudItem xs="12">
+                                                    <InfoCard TValue="string" TModel="CommissionerProfile"
+                                                             Label="Do Not Appoint Details" 
+                                                             Value="@displayVersion.DoNotAppointDetails"
+                                                             Icon="@Icons.Material.Filled.Notes"
+                                                             PropertyExpression="@(x => x.DoNotAppointDetails)" />
+                                                </MudItem>
                                             }
-                                            else
-                                            {
-                                                <MudText>—</MudText>
-                                            }
-                                        }
-                                    </ValueContent>
-                                </InfoCard>
-                            </MudItem>
 
-                            <MudItem xs="12" md="6">
-                                <InfoCard TValue="string" TModel="CommissionerProfile"
-                                         Label="Service Area" 
-                                         Icon="@Icons.Material.Filled.Landscape"
-                                         PropertyExpression="@(x => x.CommissionSeatId)">
-                                    <ValueContent>
-                                        @{
-                                            var seat = commissionSeats?.FirstOrDefault(s => s.Id == version.CommissionSeatId);
-                                            var serviceArea = seat != null ? serviceAreas?.FirstOrDefault(sa => sa.Id == seat.ServiceAreaId) : null;
-                                            if (serviceArea != null)
-                                            {
-                                                <MudButton Variant="Variant.Text" 
-                                                          Color="Color.Primary" 
-                                                          Size="Size.Small"
-                                                          StartIcon="@Icons.Material.Filled.OpenInNew"
-                                                          OnClick="@(() => NavigationManager.NavigateTo($"/service-areas?id={serviceArea.Id}"))">
-                                                    @serviceArea.Name
-                                                </MudButton>
-                                            }
-                                            else
-                                            {
-                                                <MudText>—</MudText>
-                                            }
-                                        }
-                                    </ValueContent>
-                                </InfoCard>
-                            </MudItem>
+                                            <MudItem xs="12" md="6">
+                                                <InfoCard TValue="bool?" TModel="CommissionerProfile"
+                                                         Label="Oath" 
+                                                         Icon="@Icons.Material.Filled.Verified"
+                                                         PropertyExpression="@(x => x.Oath)">
+                                                    <ValueContent>
+                                                        @if (displayVersion.Oath == true)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Taken</MudChip>
+                                                        }
+                                                        else if (displayVersion.Oath == false)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.PendingActions">Not Taken</MudChip>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText>—</MudText>
+                                                        }
+                                                    </ValueContent>
+                                                </InfoCard>
+                                            </MudItem>
 
-                            <MudItem xs="12" md="6">
-                                <InfoCard TValue="string" TModel="CommissionerProfile"
-                                         Label="Status" 
-                                         Icon="@Icons.Material.Filled.Circle"
-                                         PropertyExpression="@(x => x.CommissionerStatusId)">
-                                    <ValueContent>
-                                        @{
-                                            var status = commissionerStatuses?.FirstOrDefault(s => s.Id == version.CommissionerStatusId);
-                                            var isActive = status?.Active == true;
-                                            <MudChip T="string" 
-                                                    Size="Size.Small" 
-                                                    Color="@(isActive ? Color.Success : Color.Default)">
-                                                @(status?.Status ?? "—")
-                                            </MudChip>
-                                        }
-                                    </ValueContent>
-                                </InfoCard>
-                            </MudItem>
+                                            <MudItem xs="12" md="6">
+                                                <InfoCard TValue="bool?" TModel="CommissionerProfile"
+                                                         Label="Invoices" 
+                                                         Icon="@Icons.Material.Filled.Receipt"
+                                                         PropertyExpression="@(x => x.Invoices)">
+                                                    <ValueContent>
+                                                        @if (displayVersion.Invoices == true)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
+                                                        }
+                                                        else if (displayVersion.Invoices == false)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText>—</MudText>
+                                                        }
+                                                    </ValueContent>
+                                                </InfoCard>
+                                            </MudItem>
 
-                            <MudItem xs="12" md="6">
-                                <InfoCard TValue="string" TModel="CommissionerProfile"
-                                         Label="Appointed Date" 
-                                         Value="@(version.AppointedDate?.ToString("MMM d, yyyy"))"
-                                         Icon="@Icons.Material.Filled.CalendarToday"
-                                         PropertyExpression="@(x => x.AppointedDate)" />
-                            </MudItem>
+                                            <MudItem xs="12" md="6">
+                                                <InfoCard TValue="string" TModel="CommissionerProfile"
+                                                         Label="Appointed Date" 
+                                                         Value="@(displayVersion.AppointedDate?.ToString("MMM d, yyyy"))"
+                                                         Icon="@Icons.Material.Filled.CalendarToday"
+                                                         PropertyExpression="@(x => x.AppointedDate)" />
+                                            </MudItem>
 
-                            <MudItem xs="12" md="6">
-                                <InfoCard TValue="string" TModel="CommissionerProfile"
-                                         Label="End Date" 
-                                         Value="@(version.EndDate?.ToString("MMM d, yyyy"))"
-                                         Icon="@Icons.Material.Filled.Event"
-                                         PropertyExpression="@(x => x.EndDate)" />
-                            </MudItem>
+                                            <MudItem xs="12" md="6">
+                                                <InfoCard TValue="string" TModel="CommissionerProfile"
+                                                         Label="Assembly Meeting Date" 
+                                                         Value="@(displayVersion.AssemblyMeetingDate?.ToString("MMM d, yyyy"))"
+                                                         Icon="@Icons.Material.Filled.CalendarToday"
+                                                         PropertyExpression="@(x => x.AssemblyMeetingDate)" />
+                                            </MudItem>
 
-                            <MudItem xs="12" md="6">
-                                <InfoCard TValue="bool?" TModel="CommissionerProfile"
-                                         Label="Oath" 
-                                         Icon="@Icons.Material.Filled.Verified"
-                                         PropertyExpression="@(x => x.Oath)">
-                                    <ValueContent>
-                                        @if (version.Oath == true)
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Taken</MudChip>
-                                        }
-                                        else if (version.Oath == false)
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.PendingActions">Not Taken</MudChip>
-                                        }
-                                        else
-                                        {
-                                            <MudText>—</MudText>
-                                        }
-                                    </ValueContent>
-                                </InfoCard>
-                            </MudItem>
-                        </MudGrid>
-                    </ViewModeContent>
-                </VersionedDetailsPanel>
-            </SectionPanel>
+                                            <MudItem xs="12" md="6">
+                                                <InfoCard TValue="string" TModel="CommissionerProfile"
+                                                         Label="Effective Date" 
+                                                         Value="@(displayVersion.EffectiveDate?.ToString("MMM d, yyyy"))"
+                                                         Icon="@Icons.Material.Filled.Event"
+                                                         PropertyExpression="@(x => x.EffectiveDate)" />
+                                            </MudItem>
 
-            <!-- Correspondence Section -->
-            <SectionPanel Title="@(isEditor ? "All Correspondence Profiles" : "Public Correspondence")" 
-                         Icon="@Icons.Material.Filled.ContactMail"
-                         MinimumViewMode="ViewMode.Public"
-                         ShowCount="true"
-                         Count="@(GetCorrespondenceProfiles()?.Count() ?? 0)"
-                         CountColor="Color.Info">
-                @if (selectedCommissioner != null)
-                {
-                    <MudStack Spacing="2">
-                        @if (isLoadingCorrespondence)
-                        {
-                            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
-                        }
-                        else
-                        {
-                            var profiles = GetCorrespondenceProfiles();
-                            if (profiles != null && profiles.Any())
-                            {
-                                @foreach (var profile in profiles)
-                                {
-                                    var email = correspondenceEmails?.FirstOrDefault(e => e.Id == profile.CorrespondenceEmailId);
-                                    var phone = correspondencePhones?.FirstOrDefault(p => p.Id == profile.CorrespondencePhoneId);
-                                    
-                                    <MudCard Outlined="true">
-                                        <MudCardContent>
-                                            <MudStack Spacing="2">
-                                                <MudStack Row="true" Justify="Justify.SpaceBetween">
-                                                    <MudText Typo="Typo.h6">
-                                                        @(profile.PublicProfile == true ? "Public Profile" : "Private Profile")
-                                                    </MudText>
-                                                    @if (profile.PublicProfile == true)
-                                                    {
-                                                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Public">Public</MudChip>
-                                                    }
-                                                    else
-                                                    {
-                                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Lock">Private</MudChip>
-                                                    }
-                                                </MudStack>
-                                                
-                                                @if (profile.Email == true && email != null)
-                                                {
-                                                    <MudText Typo="Typo.body2">
-                                                        <MudIcon Icon="@Icons.Material.Filled.Email" Size="Size.Small" /> @email.Email
-                                                    </MudText>
-                                                }
-                                                
-                                                @if (profile.Phone == true && phone != null)
-                                                {
-                                                    <MudText Typo="Typo.body2">
-                                                        <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" /> @phone.Number
-                                                    </MudText>
-                                                }
-                                            </MudStack>
-                                        </MudCardContent>
-                                    </MudCard>
+                                            <MudItem xs="12" md="6">
+                                                <InfoCard TValue="string" TModel="CommissionerProfile"
+                                                         Label="End Date" 
+                                                         Value="@(displayVersion.EndDate?.ToString("MMM d, yyyy"))"
+                                                         Icon="@Icons.Material.Filled.Event"
+                                                         PropertyExpression="@(x => x.EndDate)" />
+                                            </MudItem>
+                                        </MudGrid>
+                                    </ViewModeContent>
+                                </VersionedDetailsPanel>
+                            </SectionPanel>
+
+                            <!-- Correspondence Section -->
+                            <SectionPanel Title="@(ViewModeService.IsAtLeast(ViewMode.Admin) ? "All Correspondence" : "Public Correspondence")"
+                                         Icon="@Icons.Material.Filled.ContactMail"
+                                         MinimumViewMode="ViewMode.Public"
+                                         ShowCount="true"
+                                         Count="@(GetCorrespondenceForProfile(profile.Id)?.Count() ?? 0)"
+                                         CountColor="Color.Info">
+                                @{
+                                    var profileCorrespondence = GetCorrespondenceForProfile(profile.Id);
                                 }
-                            }
-                            else
+                                @if (profileCorrespondence != null && profileCorrespondence.Any())
+                                {
+                                    <MudStack Spacing="2">
+                                        @foreach (var correspondence in profileCorrespondence)
+                                        {
+                                            var email = correspondenceEmails?.FirstOrDefault(e => e.Id == correspondence.CorrespondenceEmailId);
+                                            var phone = correspondencePhones?.FirstOrDefault(p => p.Id == correspondence.CorrespondencePhoneId);
+
+                                            <MudCard Outlined="true">
+                                                <MudCardContent>
+                                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                                        <MudStack Spacing="1">
+                                                            @if (correspondence.Email == true && email != null)
+                                                            {
+                                                                <MudText Typo="Typo.body2">
+                                                                    <MudIcon Icon="@Icons.Material.Filled.Email" Size="Size.Small" /> @email.Email
+                                                                </MudText>
+                                                            }
+                                                            @if (correspondence.Phone == true && phone != null)
+                                                            {
+                                                                <MudText Typo="Typo.body2">
+                                                                    <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" /> @phone.Number
+                                                                </MudText>
+                                                            }
+                                                        </MudStack>
+                                                        @if (correspondence.PublicProfile == true)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Public">Public</MudChip>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Lock">Private</MudChip>
+                                                        }
+                                                    </MudStack>
+                                                </MudCardContent>
+                                            </MudCard>
+                                        }
+                                    </MudStack>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2" Align="Align.Center" Class="my-4">No correspondence profiles</MudText>
+                                }
+                            </SectionPanel>
+
+                            <!-- Notes Section -->
+                            @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
                             {
-                                <MudText Typo="Typo.body2" Align="Align.Center" Class="my-4">No correspondence profiles found.</MudText>
+                                var noteCount = profileNoteCounts.TryGetValue(profile.Id, out var count) ? count : 0;
+                                var refreshKey = notesPanelRefreshKeys.TryGetValue(profile.Id, out var key) ? key : 0;
+
+                                <SectionPanel Title="Notes"
+                                             Icon="@Icons.Material.Filled.Notes"
+                                             MinimumViewMode="ViewMode.Admin"
+                                             ShowCount="true"
+                                             Count="@noteCount"
+                                             CountColor="Color.Info">
+                                    <NotesPanel @key="@($"notes-{profile.Id}-{refreshKey}")"
+                                               EntityType="commissioner_profile" 
+                                               EntityId="@profile.Id"
+                                               ShowHistory="true"
+                                               NotesCountChanged="@GetNoteCountCallback(profile.Id)" />
+                                </SectionPanel>
                             }
-                        }
-                    </MudStack>
+                        </MudExpansionPanels>
+                    </SectionPanel>
                 }
-            </SectionPanel>
 
-            <!-- Other Profiles for Same Person -->
-            @if (selectedCommissioner != null)
-            {
-                <SectionPanel Title="Other Commissioner Profiles for This Person" 
-                             Icon="@Icons.Material.Filled.PersonOutline"
-                             MinimumViewMode="ViewMode.Public"
-                             ShowCount="true"
-                             Count="@(otherProfilesForPerson?.Count() ?? 0)"
-                             CountColor="Color.Secondary">
-                    <MudStack Spacing="2">
-                        @if (isLoadingOtherProfiles)
-                        {
-                            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
-                        }
-                        else if (otherProfilesForPerson != null && otherProfilesForPerson.Any())
-                        {
-                            <MudTable T="CommissionerProfile" Items="@otherProfilesForPerson" Hover="true" Striped="true" Dense="true">
-                                <HeaderContent>
-                                    <MudTh>Commission Seat</MudTh>
-                                    <MudTh>Service Area</MudTh>
-                                    <MudTh>Status</MudTh>
-                                    <MudTh>Appointed</MudTh>
-                                    <MudTh>End Date</MudTh>
-                                    <MudTh Style="width: 100px;">Actions</MudTh>
-                                </HeaderContent>
-                                <RowTemplate>
-                                    <MudTd DataLabel="Commission Seat">
-                                        @{
-                                            var seat = commissionSeats?.FirstOrDefault(s => s.Id == context.CommissionSeatId);
-                                            @GetCommissionSeatDisplayText(seat)
-                                        }
-                                    </MudTd>
-                                    <MudTd DataLabel="Service Area">
-                                        @{
-                                            var seat = commissionSeats?.FirstOrDefault(s => s.Id == context.CommissionSeatId);
-                                            var serviceArea = seat != null ? serviceAreas?.FirstOrDefault(sa => sa.Id == seat.ServiceAreaId) : null;
-                                            @(serviceArea?.Name ?? "—")
-                                        }
-                                    </MudTd>
-                                    <MudTd DataLabel="Status">
-                                        @{
-                                            var status = commissionerStatuses?.FirstOrDefault(s => s.Id == context.CommissionerStatusId);
-                                            <MudChip T="string" Size="Size.Small" Color="@(status?.Active == true ? Color.Success : Color.Default)">
-                                                @(status?.Status ?? "—")
-                                            </MudChip>
-                                        }
-                                    </MudTd>
-                                    <MudTd DataLabel="Appointed">@(context.AppointedDate?.ToString("MMM d, yyyy") ?? "—")</MudTd>
-                                    <MudTd DataLabel="End Date">@(context.EndDate?.ToString("MMM d, yyyy") ?? "—")</MudTd>
-                                    <MudTd DataLabel="Actions">
-                                        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
-                                                      Size="Size.Small" 
-                                                      Color="Color.Primary" 
-                                                      OnClick="@(() => NavigationManager.NavigateTo($"/commissioners?id={context.Id}"))" />
-                                    </MudTd>
-                                </RowTemplate>
-                            </MudTable>
-                        }
-                        else
-                        {
-                            <MudText Typo="Typo.body2" Align="Align.Center" Class="my-4">No other profiles for this person.</MudText>
-                        }
-                    </MudStack>
-                </SectionPanel>
-            }
-
-            <!-- Notes Section -->
-            @if (canEdit)
-            {
-                <SectionPanel Title="Notes"
-                             Icon="@Icons.Material.Filled.Notes"
-                             MinimumViewMode="ViewMode.Admin"
-                             ShowCount="true"
-                             Count="@notesCount"
-                             CountColor="Color.Dark">
-                    <NotesPanel EntityType="commissioner_profile" 
-                               EntityId="@selectedCommissioner.Id"
-                               HighlightedNoteDate="@(currentViewVersion?.ValidFrom)"
-                               ShowHistory="true"
-                               NotesCountChanged="@OnNotesCountChanged" />
-                </SectionPanel>
-            }
-
-            <!-- Report Builder Section -->
-            @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
-            {
-                <SectionPanel Title="Report Builder"
-                             Icon="@Icons.Material.Filled.Assessment"
-                             MinimumViewMode="ViewMode.Admin">
-                    <MudAlert Severity="Severity.Info" Variant="Variant.Text">
-                        Report Builder functionality will be implemented here.
-                    </MudAlert>
-                </SectionPanel>
-            }
-        </MudExpansionPanels>
+                <!-- Report Builder Section -->
+                @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
+                {
+                    <SectionPanel Title="Report Builder"
+                                 Icon="@Icons.Material.Filled.Assessment"
+                                 MinimumViewMode="ViewMode.Admin">
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Text">
+                            Report Builder functionality will be implemented here.
+                        </MudAlert>
+                    </SectionPanel>
+                }
+            </MudExpansionPanels>
+        }
     </DetailContent>
 </EntityManagementLayout>
 
 @code {
     [SupplyParameterFromQuery(Name = "id")]
-    public int? CommissionerId { get; set; }
+    public int? PersonId { get; set; }
 
     private IEnumerable<CommissionerProfile>? commissionerProfiles;
     private IEnumerable<CommissionerStatus>? commissionerStatuses;
     private IEnumerable<CommissionSeat>? commissionSeats;
     private IEnumerable<CommissionSeatType>? commissionSeatTypes;
     private IEnumerable<CommissionSeatClass>? commissionSeatClasses;
+    private IEnumerable<CommissionSeatStatus>? commissionSeatStatuses;
     private IEnumerable<ServiceArea>? serviceAreas;
     private IEnumerable<PersonProfile>? personProfiles;
     private IEnumerable<PersonHonorific>? personHonorifics;
@@ -559,7 +915,8 @@
     private IEnumerable<CorrespondenceProfile>? correspondenceProfiles;
     private IEnumerable<CorrespondenceEmail>? correspondenceEmails;
     private IEnumerable<CorrespondencePhone>? correspondencePhones;
-    
+
+    private PersonProfile? selectedPerson;
     private CommissionerProfile? selectedCommissioner;
     private bool isLoading = false;
     private bool isSaving = false;
@@ -582,12 +939,50 @@
     // Notes management field
     private int notesCount = 0;
 
+    // Track note counts per profile
+    private Dictionary<int, int> profileNoteCounts = new();
+
+    // Store callbacks per profile to make them stable references
+    private Dictionary<int, Action<int>> noteCountCallbacks = new();
+
     // Correspondence loading
     private bool isLoadingCorrespondence = false;
 
     // Other profiles for same person
     private IEnumerable<CommissionerProfile>? otherProfilesForPerson;
     private bool isLoadingOtherProfiles = false;
+
+    // All profiles for selected person (replacing the version history approach)
+    private IEnumerable<CommissionerProfile>? allProfilesForPerson;
+
+    // Track which profile is being edited
+    private int? editingProfileId = null;
+
+    // Track selected service area for filtering commission seats
+    private Dictionary<int, int?> selectedServiceAreaByProfile = new();
+
+    // Cache for profile version history
+    private Dictionary<int, IEnumerable<CommissionerProfile>> profileVersionCache = new();
+
+    // Track currently displayed version for each profile
+    private Dictionary<int, CommissionerProfile> currentlyDisplayedVersions = new();
+
+    // Track notes panel refresh keys
+    private Dictionary<int, int> notesPanelRefreshKeys = new();
+
+    // Cache for profile display data to improve performance
+    private Dictionary<int, ProfileDisplayData> profileDisplayCache = new();
+
+    private class ProfileDisplayData
+    {
+        public CommissionSeat? Seat { get; set; }
+        public CommissionSeatType? SeatType { get; set; }
+        public CommissionSeatClass? SeatClass { get; set; }
+        public ServiceArea? ServiceArea { get; set; }
+        public CommissionerStatus? Status { get; set; }
+        public bool IsActive { get; set; }
+        public bool IsCurrent { get; set; }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -603,7 +998,7 @@
     private async Task LoadAllData()
     {
         isLoading = true;
-        
+
         var tasks = new List<Task>
         {
             LoadCommissionerProfiles(),
@@ -611,6 +1006,7 @@
             LoadCommissionSeats(),
             LoadCommissionSeatTypes(),
             LoadCommissionSeatClasses(),
+            LoadCommissionSeatStatuses(),
             LoadServiceAreas(),
             LoadPersonProfiles(),
             LoadPersonHonorifics(),
@@ -634,14 +1030,15 @@
 
     private void SelectCommissionerFromParameters()
     {
-        if (commissionerProfiles == null || !commissionerProfiles.Any() || !CommissionerId.HasValue)
+        if (personProfiles == null || !personProfiles.Any() || !PersonId.HasValue)
             return;
 
-        var target = commissionerProfiles.FirstOrDefault(c => c.Id == CommissionerId.Value);
+        var target = personProfiles.FirstOrDefault(p => p.Id == PersonId.Value);
 
-        if (target != null && selectedCommissioner?.Id != target.Id)
+        if (target != null && selectedPerson?.Id != target.Id)
         {
-            selectedCommissioner = target;
+            selectedPerson = target;
+            selectedCommissioner = GetMostRecentCommissionerProfile(target.Id);
             isEditMode = false;
             ClearMessages();
             _ = LoadAllVersions();
@@ -717,6 +1114,19 @@
         catch (Exception)
         {
             commissionSeatClasses = Array.Empty<CommissionSeatClass>();
+        }
+    }
+
+    private async Task LoadCommissionSeatStatuses()
+    {
+        try
+        {
+            var result = await CommissionSeatStatusesApi.GetAllCommissionSeatStatusesAsync();
+            commissionSeatStatuses = result?.Data ?? Array.Empty<CommissionSeatStatus>();
+        }
+        catch (Exception)
+        {
+            commissionSeatStatuses = Array.Empty<CommissionSeatStatus>();
         }
     }
 
@@ -813,14 +1223,14 @@
 
     private async Task LoadOtherProfilesForPerson()
     {
-        if (selectedCommissioner == null) return;
+        if (selectedPerson == null) return;
 
         isLoadingOtherProfiles = true;
 
         try
         {
             otherProfilesForPerson = commissionerProfiles?
-                .Where(cp => cp.PersonProfileId == selectedCommissioner.PersonProfileId && cp.Id != selectedCommissioner.Id)
+                .Where(cp => cp.PersonProfileId == selectedPerson.Id && cp.Id != selectedCommissioner?.Id)
                 .OrderByDescending(cp => cp.AppointedDate)
                 .ToList();
         }
@@ -834,59 +1244,302 @@
         }
     }
 
-    private IEnumerable<CorrespondenceProfile>? GetCorrespondenceProfiles()
+    private IEnumerable<PersonProfile>? GetPeopleWithCommissionerProfiles()
     {
-        if (selectedCommissioner == null) return null;
+        if (personProfiles == null || !personProfiles.Any() || commissionerProfiles == null)
+            return Array.Empty<PersonProfile>();
 
-        var profiles = correspondenceProfiles?
-            .Where(cp => cp.CommissionerProfileId == selectedCommissioner.Id);
+        // Get unique PersonProfileIds from commissioner profiles
+        var personIdsWithProfiles = commissionerProfiles
+            .Select(cp => cp.PersonProfileId)
+            .Distinct()
+            .ToHashSet();
 
-        if (!isEditor)
+        // Return person profiles that have commissioner profiles, ordered by status (active first), then by name
+        return personProfiles
+            .Where(p => personIdsWithProfiles.Contains(p.Id))
+            .OrderByDescending(p => HasActiveProfile(p.Id))  // Active profiles first
+            .ThenBy(p => p.LastName ?? "")
+            .ThenBy(p => p.FirstName ?? "")
+            .ToList();
+    }
+
+    private CommissionerProfile? GetMostRecentCommissionerProfile(int personProfileId)
+    {
+        if (commissionerProfiles == null) return null;
+
+        // First try to get an active profile
+        var activeProfile = commissionerProfiles
+            .Where(cp => cp.PersonProfileId == personProfileId)
+            .FirstOrDefault(cp =>
+            {
+                var status = commissionerStatuses?.FirstOrDefault(s => s.Id == cp.CommissionerStatusId);
+                return status?.Active == true && cp.ValidTo == null;
+            });
+
+        // If no active profile, get the most recent one
+        return activeProfile ?? commissionerProfiles
+            .Where(cp => cp.PersonProfileId == personProfileId)
+            .OrderByDescending(cp => cp.ValidFrom)
+            .FirstOrDefault();
+    }
+
+    private IEnumerable<CommissionerProfile>? GetUniquePersonProfiles()
+    {
+        if (commissionerProfiles == null || !commissionerProfiles.Any())
+            return Array.Empty<CommissionerProfile>();
+
+        // Group by PersonProfileId and return one profile per person
+        return commissionerProfiles
+            .GroupBy(cp => cp.PersonProfileId)
+            .Select(group =>
+            {
+                // First try to get an active profile
+                var activeProfile = group.FirstOrDefault(cp =>
+                {
+                    var status = commissionerStatuses?.FirstOrDefault(s => s.Id == cp.CommissionerStatusId);
+                    return status?.Active == true && cp.ValidTo == null;
+                });
+
+                // If no active profile, get the most recent one
+                return activeProfile ?? group.OrderByDescending(cp => cp.ValidFrom).First();
+            })
+            .OrderBy(cp =>
+            {
+                var person = personProfiles?.FirstOrDefault(p => p.Id == cp.PersonProfileId);
+                return person?.LastName ?? "";
+            })
+            .ThenBy(cp =>
+            {
+                var person = personProfiles?.FirstOrDefault(p => p.Id == cp.PersonProfileId);
+                return person?.FirstName ?? "";
+            })
+            .ToList();
+    }
+
+    private bool HasActiveProfile(int personProfileId)
+    {
+        if (commissionerProfiles == null) return false;
+
+        return commissionerProfiles
+            .Where(cp => cp.PersonProfileId == personProfileId)
+            .Any(cp =>
+            {
+                var status = commissionerStatuses?.FirstOrDefault(s => s.Id == cp.CommissionerStatusId);
+                return status?.Active == true;
+            });
+    }
+
+    private void LoadAllProfilesForPerson()
+    {
+        if (selectedPerson == null) return;
+
+        // Get all profiles for this person, ordered by most recent first
+        allProfilesForPerson = commissionerProfiles?
+            .Where(cp => cp.PersonProfileId == selectedPerson.Id)
+            .OrderByDescending(cp => cp.ValidFrom)
+            .ThenByDescending(cp => cp.AppointedDate)
+            .ToList();
+
+        // Pre-compute display data for better performance
+        profileDisplayCache.Clear();
+        noteCountCallbacks.Clear();
+
+        if (allProfilesForPerson != null)
         {
-            // Only show public profiles for non-editors
+            foreach (var profile in allProfilesForPerson)
+            {
+                var seat = commissionSeats?.FirstOrDefault(s => s.Id == profile.CommissionSeatId);
+                var seatType = seat != null ? commissionSeatTypes?.FirstOrDefault(t => t.Id == seat.CommissionSeatTypeId) : null;
+                var seatClass = seat != null ? commissionSeatClasses?.FirstOrDefault(c => c.Id == seat.CommissionSeatClassId) : null;
+                var serviceArea = seat != null ? serviceAreas?.FirstOrDefault(sa => sa.Id == seat.ServiceAreaId) : null;
+                var status = commissionerStatuses?.FirstOrDefault(s => s.Id == profile.CommissionerStatusId);
+
+                profileDisplayCache[profile.Id] = new ProfileDisplayData
+                {
+                    Seat = seat,
+                    SeatType = seatType,
+                    SeatClass = seatClass,
+                    ServiceArea = serviceArea,
+                    Status = status,
+                    IsActive = status?.Active == true,
+                    IsCurrent = profile.ValidTo == null
+                };
+
+                // Create stable callback for this profile
+                var profileId = profile.Id;
+                noteCountCallbacks[profileId] = (count) => UpdateNoteCount(profileId, count);
+            }
+        }
+    }
+
+    private Action<int> GetNoteCountCallback(int profileId)
+    {
+        if (!noteCountCallbacks.ContainsKey(profileId))
+        {
+            noteCountCallbacks[profileId] = (count) => UpdateNoteCount(profileId, count);
+        }
+        return noteCountCallbacks[profileId];
+    }
+
+    private IEnumerable<CorrespondenceProfile>? GetCorrespondenceForProfile(int commissionerProfileId)
+    {
+        var profiles = correspondenceProfiles?
+            .Where(cp => cp.CommissionerProfileId == commissionerProfileId);
+
+        if (!ViewModeService.IsAtLeast(ViewMode.Admin))
+        {
+            // Only show public profiles for non-admins
             profiles = profiles?.Where(cp => cp.PublicProfile == true);
         }
 
         return profiles?.ToList();
     }
 
+    private IEnumerable<CommissionerProfile>? GetAllVersionsOfProfile(CommissionerProfile profile)
+    {
+        if (profile == null) 
+            return new[] { profile };
+
+        // Check cache first
+        if (profileVersionCache.TryGetValue(profile.Id, out var cachedVersions))
+        {
+            return cachedVersions;
+        }
+
+        // If not in cache, load from API
+        _ = LoadProfileVersionsAsync(profile.Id);
+
+        // Return just the current profile for now (will update when async load completes)
+        return new[] { profile };
+    }
+
+    private async Task LoadProfileVersionsAsync(int profileId)
+    {
+        try
+        {
+            var result = await CommissionerProfilesApi.GetCommissionerProfileHistoryAsync(profileId);
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                var versions = result.Data
+                    .OrderByDescending(cp => cp.ValidFrom)
+                    .ToList();
+
+                profileVersionCache[profileId] = versions;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception)
+        {
+            // If history load fails, just use the current profile
+            var currentProfile = allProfilesForPerson?.FirstOrDefault(p => p.Id == profileId);
+            if (currentProfile != null)
+            {
+                profileVersionCache[profileId] = new[] { currentProfile };
+            }
+        }
+    }
+
     private async Task LoadAllVersions()
     {
-        if (selectedCommissioner == null) return;
+        if (selectedPerson == null) return;
 
         isLoadingHistory = true;
         historyErrorMessage = null;
 
         try
         {
-            var historyResult = await CommissionerProfilesApi.GetCommissionerProfileHistoryAsync(selectedCommissioner.Id);
-            var historyRecords = new List<CommissionerProfile>();
+            // Clear version cache when loading new person
+            profileVersionCache.Clear();
+            currentlyDisplayedVersions.Clear();
 
-            if (historyResult?.IsSuccess == true && historyResult.Data != null)
-            {
-                historyRecords.AddRange(historyResult.Data);
-            }
-
-            var versions = new List<CommissionerProfile> { selectedCommissioner };
-            versions.AddRange(historyRecords.Where(h => h.ValidFrom != selectedCommissioner.ValidFrom));
-            
-            allVersions = versions;
-            currentViewVersion = selectedCommissioner;
-            UpdateEditModel(currentViewVersion);
-
-            // Load related data
+            // Load all profiles for this person
+            LoadAllProfilesForPerson();
             await LoadOtherProfilesForPerson();
         }
         catch (Exception ex)
         {
-            historyErrorMessage = $"Error loading versions: {ex.Message}";
-            allVersions = new List<CommissionerProfile> { selectedCommissioner };
-            currentViewVersion = selectedCommissioner;
-            UpdateEditModel(currentViewVersion);
+            historyErrorMessage = $"Error loading profiles: {ex.Message}";
+            allProfilesForPerson = selectedCommissioner != null 
+                ? new List<CommissionerProfile> { selectedCommissioner } 
+                : new List<CommissionerProfile>();
         }
         finally
         {
             isLoadingHistory = false;
+        }
+    }
+
+    private Task HandleVersionChanged(int profileId, CommissionerProfile selectedVersion)
+    {
+        // Update the currently displayed version for this profile
+        currentlyDisplayedVersions[profileId] = selectedVersion;
+
+        // Trigger UI update
+        StateHasChanged();
+
+        return Task.CompletedTask;
+    }
+
+    private async Task HandleRestoreVersion(int profileId, CommissionerProfile historicalVersion)
+    {
+        if (historicalVersion == null) return;
+
+        isSaving = true;
+        ClearMessages();
+
+        try
+        {
+            // Clone the historical version data
+            var restoredData = CloneCommissioner(historicalVersion);
+
+            // Keep the current profile ID (we're updating, not creating)
+            restoredData.Id = profileId;
+
+            // Get user email for audit
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userEmail = user.Identity?.Name ?? user.Claims.FirstOrDefault(c => c.Type.Contains("email"))?.Value;
+
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                restoredData.ModifiedBy = userEmail;
+            }
+
+            // Update the profile with historical data
+            var result = await CommissionerProfilesApi.UpdateCommissionerProfileAsync(profileId, restoredData);
+
+            if (result?.IsSuccess == true)
+            {
+                successMessage = $"Successfully restored version from {historicalVersion.ValidFrom:g}";
+
+                // Reload data
+                await LoadCommissionerProfiles();
+
+                // Clear caches to force reload
+                profileVersionCache.Remove(profileId);
+                currentlyDisplayedVersions.Remove(profileId);
+
+                // Reload all profiles for this person
+                LoadAllProfilesForPerson();
+
+                await InvokeAsync(StateHasChanged);
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to restore historical version";
+                errorDetails = result?.Errors;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error restoring historical version: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -900,14 +1553,18 @@
     private void OnNotesCountChanged(int count)
     {
         notesCount = count;
-        StateHasChanged();
+    }
+
+    private void UpdateNoteCount(int profileId, int count)
+    {
+        profileNoteCounts[profileId] = count;
     }
 
     private void UpdateEditModel(CommissionerProfile version)
     {
         editModel = CloneCommissioner(version);
         editContext = new EditContext(editModel);
-        
+
         if (!IsViewingCurrentVersion())
         {
             isEditMode = false;
@@ -927,21 +1584,22 @@
         return isEditMode && IsViewingCurrentVersion();
     }
 
-    private async Task HandleItemClick(CommissionerProfile item)
+    private async Task HandleItemClick(PersonProfile item)
     {
-        selectedCommissioner = item;
+        selectedPerson = item;
+        selectedCommissioner = GetMostRecentCommissionerProfile(item.Id);
         isEditMode = false;
         ClearMessages();
         await LoadAllVersions();
         await InvokeAsync(StateHasChanged);
 
-        var uri = NavigationManager.GetUriWithQueryParameter("id", selectedCommissioner.Id);
+        var uri = NavigationManager.GetUriWithQueryParameter("id", selectedPerson.Id);
         NavigationManager.NavigateTo(uri, replace: true);
     }
 
     private async Task HandleRestore(CommissionerProfile historicalRecord)
     {
-        if (selectedCommissioner == null) return;
+        if (selectedPerson == null) return;
 
         isSaving = true;
         ClearMessages();
@@ -949,22 +1607,28 @@
         try
         {
             var restoredData = CloneCommissioner(historicalRecord);
-            restoredData.Id = selectedCommissioner.Id;
+            restoredData.Id = selectedCommissioner?.Id ?? 0;
+
+            if (restoredData.Id == 0)
+            {
+                errorMessage = "No commissioner profile selected to restore";
+                return;
+            }
 
             var result = await CommissionerProfilesApi.UpdateCommissionerProfileAsync(restoredData.Id, restoredData);
 
             if (result?.IsSuccess == true)
             {
                 successMessage = $"Successfully restored version from {historicalRecord.ValidFrom:g}";
-                
+
                 await LoadCommissionerProfiles();
-                
-                selectedCommissioner = commissionerProfiles?.FirstOrDefault(c => c.Id == selectedCommissioner.Id);
+
+                selectedCommissioner = commissionerProfiles?.FirstOrDefault(c => c.PersonProfileId == selectedPerson.Id);
                 if (selectedCommissioner != null)
                 {
                     await LoadAllVersions();
                 }
-                
+
                 isEditMode = false;
             }
             else
@@ -993,9 +1657,86 @@
                 UpdateEditModel(currentViewVersion);
             }
         }
-        
+
         isEditMode = true;
         ClearMessages();
+    }
+
+    private void EnableEditForProfile(int profileId)
+    {
+        var profile = allProfilesForPerson?.FirstOrDefault(p => p.Id == profileId);
+        if (profile != null)
+        {
+            editingProfileId = profileId;
+            editModel = CloneCommissioner(profile);
+            editContext = new EditContext(editModel);
+            ClearMessages();
+        }
+    }
+
+    private async Task SaveProfileEdit(int profileId)
+    {
+        if (editModel == null || editModel.Id != profileId) return;
+
+        isSaving = true;
+        ClearMessages();
+
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userEmail = user.Identity?.Name ?? user.Claims.FirstOrDefault(c => c.Type.Contains("email"))?.Value;
+
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                editModel.ModifiedBy = userEmail;
+            }
+
+            var result = await CommissionerProfilesApi.UpdateCommissionerProfileAsync(editModel.Id, editModel);
+
+            if (result?.IsSuccess == true)
+            {
+                successMessage = "Commissioner profile updated successfully!";
+                editingProfileId = null;
+
+                // Reload commissioner profiles
+                await LoadCommissionerProfiles();
+
+                // Clear version cache to force reload
+                profileVersionCache.Remove(profileId);
+
+                // Reload all profiles for this person
+                LoadAllProfilesForPerson();
+
+                // Get the updated profile and set it as the displayed version
+                var updatedProfile = allProfilesForPerson?.FirstOrDefault(p => p.Id == profileId);
+                if (updatedProfile != null)
+                {
+                    currentlyDisplayedVersions[profileId] = updatedProfile;
+
+                    // Reload version history in background
+                    _ = LoadProfileVersionsAsync(profileId);
+                }
+
+                await InvokeAsync(StateHasChanged);
+
+                // Prompt user to add a note
+                await PromptForEditNote(profileId, userEmail);
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to update commissioner profile";
+                errorDetails = result?.Errors;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error updating commissioner profile: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
     }
 
     private async Task SaveEdit()
@@ -1055,6 +1796,7 @@
             editContext = new EditContext(editModel);
         }
         isEditMode = false;
+        editingProfileId = null;
         ClearMessages();
     }
 
@@ -1074,6 +1816,13 @@
         AppointedDate = source.AppointedDate,
         EndDate = source.EndDate,
         Oath = source.Oath,
+        AssemblyMeetingDate = source.AssemblyMeetingDate,
+        EffectiveDate = source.EffectiveDate,
+        RegisteredVoter = source.RegisteredVoter,
+        RecommendedForAppointment = source.RecommendedForAppointment,
+        DoNotAppoint = source.DoNotAppoint,
+        DoNotAppointDetails = source.DoNotAppointDetails,
+        Invoices = source.Invoices,
         ValidFrom = source.ValidFrom,
         ValidTo = source.ValidTo,
         ModifiedBy = source.ModifiedBy
@@ -1119,7 +1868,54 @@
         var seatType = commissionSeatTypes?.FirstOrDefault(t => t.Id == seat.CommissionSeatTypeId);
         var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == seat.CommissionSeatClassId);
 
-        return $"{seatType?.Type ?? "Unknown"} - {seatClass?.Class ?? "Unknown"}";
+        var parts = new List<string>();
+
+        if (!string.IsNullOrEmpty(seatType?.Type))
+            parts.Add(seatType.Type);
+
+        if (!string.IsNullOrEmpty(seatClass?.Class))
+            parts.Add(seatClass.Class);
+
+        return parts.Any() ? string.Join(" - ", parts) : "—";
+    }
+
+    private string GetCommissionSeatWithServiceAreaDisplayText(CommissionSeat seat)
+    {
+        if (seat == null) return "—";
+
+        var serviceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == seat.ServiceAreaId);
+        var seatType = commissionSeatTypes?.FirstOrDefault(t => t.Id == seat.CommissionSeatTypeId);
+        var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == seat.CommissionSeatClassId);
+
+        var parts = new List<string>();
+
+        // Add service area first for grouping
+        if (!string.IsNullOrEmpty(serviceArea?.Name))
+            parts.Add($"[{serviceArea.Name}]");
+
+        if (!string.IsNullOrEmpty(seatType?.Type))
+            parts.Add(seatType.Type);
+
+        if (!string.IsNullOrEmpty(seatClass?.Class))
+            parts.Add(seatClass.Class);
+
+        if (seat.TermStartDate.HasValue && seat.TermEndDate.HasValue)
+            parts.Add($"({seat.TermStartDate.Value:MMM yyyy} - {seat.TermEndDate.Value:MMM yyyy})");
+
+        return parts.Any() ? string.Join(" - ", parts) : "—";
+    }
+
+    private IEnumerable<CommissionSeat>? GetFilteredCommissionSeats(int commissionSeatId)
+    {
+        if (commissionSeats == null) return Array.Empty<CommissionSeat>();
+
+        var currentSeat = commissionSeats.FirstOrDefault(s => s.Id == commissionSeatId);
+        if (currentSeat == null) return commissionSeats;
+
+        // Filter seats to only those in the same service area
+        return commissionSeats
+            .Where(s => s.ServiceAreaId == currentSeat.ServiceAreaId)
+            .ToList();
     }
 
     private string GetCommissionerStatusDisplayText(CommissionerStatus commissionerStatus)
@@ -1139,15 +1935,550 @@
     private string GetCommissionerDisplayText(CommissionerProfile commissioner)
     {
         var personName = GetPersonName(commissioner.PersonProfileId);
-        var seat = commissionSeats?.FirstOrDefault(s => s.Id == commissioner.CommissionSeatId);
-        var seatType = seat != null ? commissionSeatTypes?.FirstOrDefault(t => t.Id == seat.CommissionSeatTypeId) : null;
-        
-        return $"{personName} - {seatType?.Type ?? "Unknown Seat"}";
+
+        return $"{personName}";
+    }
+
+    private string GetPersonDisplayText(PersonProfile person)
+    {
+        return GetPersonName(person.Id);
+    }
+
+    private async Task PromptForNote(int profileId, string changeDescription)
+    {
+        var parameters = new DialogParameters
+        {
+            { "EntityType", "commissioner_profile" },
+            { "EntityId", profileId },
+            { "SuggestedNote", changeDescription }
+        };
+
+        var options = new DialogOptions 
+        { 
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<AddEditNoteDialog>("Add Note (Optional)", parameters, options);
+        var dialogResult = await dialog.Result;
+
+        // Note is saved within the dialog, we don't need to do anything here
+        // Just refresh the UI if needed
+        if (!dialogResult.Canceled)
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task PromptForEditNote(int entityId, string? userEmail)
+    {
+        var person = personProfiles?.FirstOrDefault(p => p.Id == selectedPerson?.Id);
+        var personName = person != null ? GetPersonName(person.Id) : "Commissioner";
+
+        var parameters = new DialogParameters
+        {
+            { "EntityName", $"{personName} - Commissioner Profile" }
+        };
+
+        var options = new DialogOptions 
+        { 
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<AddEditNoteDialog>("Add Note (Optional)", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is string noteText && !string.IsNullOrWhiteSpace(noteText))
+        {
+            await CreateEditNote(entityId, noteText, userEmail);
+        }
+    }
+
+    private async Task CreateEditNote(int profileId, string noteText, string? userEmail)
+    {
+        try
+        {
+            var note = new Note
+            {
+                NoteText = noteText,
+                CommissionerProfileId = profileId,
+                ModifiedBy = userEmail ?? "Unknown User",
+            };
+
+            var result = await NotesApi.CreateNoteAsync(note);
+
+            if (result?.IsSuccess == true)
+            {
+                // Increment refresh key to force NotesPanel to reload
+                if (notesPanelRefreshKeys.ContainsKey(profileId))
+                {
+                    notesPanelRefreshKeys[profileId]++;
+                }
+                else
+                {
+                    notesPanelRefreshKeys[profileId] = 1;
+                }
+
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception)
+        {
+            // Silently fail - note creation is optional
+        }
+    }
+
+    private int? GetServiceAreaForProfile(int profileId)
+    {
+        // Check if we have a selected service area for this profile during editing
+        if (selectedServiceAreaByProfile.TryGetValue(profileId, out var serviceAreaId) && serviceAreaId.HasValue)
+        {
+            return serviceAreaId;
+        }
+
+        // Otherwise, get it from the current commission seat
+        if (editModel != null && editModel.Id == profileId)
+        {
+            var seat = commissionSeats?.FirstOrDefault(s => s.Id == editModel.CommissionSeatId);
+            return seat?.ServiceAreaId;
+        }
+
+        return null;
+    }
+
+    private void OnServiceAreaChanged(int profileId, int? serviceAreaId)
+    {
+        selectedServiceAreaByProfile[profileId] = serviceAreaId;
+
+        // Clear the commission seat selection when service area changes
+        if (editModel != null && editModel.Id == profileId)
+        {
+            var currentSeat = commissionSeats?.FirstOrDefault(s => s.Id == editModel.CommissionSeatId);
+            if (currentSeat?.ServiceAreaId != serviceAreaId)
+            {
+                // Reset to first available seat in the new service area
+                var firstSeatInArea = commissionSeats?
+                    .Where(s => s.ServiceAreaId == serviceAreaId)
+                    .OrderBy(s => s.Id)
+                    .FirstOrDefault();
+
+                if (firstSeatInArea != null)
+                {
+                    editModel.CommissionSeatId = firstSeatInArea.Id;
+                }
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private IEnumerable<CommissionSeat>? GetFilteredCommissionSeatsForEdit(int profileId)
+    {
+        if (commissionSeats == null) return Array.Empty<CommissionSeat>();
+
+        var serviceAreaId = GetServiceAreaForProfile(profileId);
+
+        if (serviceAreaId.HasValue)
+        {
+            return commissionSeats
+                .Where(s => s.ServiceAreaId == serviceAreaId.Value)
+                .OrderBy(s => s.Id)
+                .ToList();
+        }
+
+        // If no service area selected, return all seats
+        return commissionSeats;
+    }
+
+    private IEnumerable<CommissionSeat>? GetOrderedCommissionSeatsForCreate()
+    {
+        if (commissionSeats == null) return Array.Empty<CommissionSeat>();
+
+        // Filter out seats with class "UKN"
+        var filteredSeats = commissionSeats.Where(seat =>
+        {
+            var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == seat.CommissionSeatClassId);
+            return seatClass?.Class?.Equals("UKN", StringComparison.OrdinalIgnoreCase) != true;
+        });
+
+        // Order by service area name, then by seat type, then by seat class
+        return filteredSeats
+            .OrderBy(seat =>
+            {
+                var serviceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == seat.ServiceAreaId);
+                return serviceArea?.Name ?? string.Empty;
+            })
+            .ThenBy(seat =>
+            {
+                var seatType = commissionSeatTypes?.FirstOrDefault(t => t.Id == seat.CommissionSeatTypeId);
+                return seatType?.Type ?? string.Empty;
+            })
+            .ThenBy(seat =>
+            {
+                var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == seat.CommissionSeatClassId);
+                return seatClass?.Class ?? string.Empty;
+            })
+            .ToList();
+    }
+
+    private async Task<bool> CreateCommissionerStatus(CommissionerStatus entity)
+    {
+        var result = await CommissionerStatusesApi.CreateCommissionerStatusAsync(entity);
+        return result?.IsSuccess ?? false;
+    }
+
+    private async Task<bool> UpdateCommissionerStatus(CommissionerStatus entity)
+    {
+        var result = await CommissionerStatusesApi.UpdateCommissionerStatusAsync(entity.Id, entity);
+        return result?.IsSuccess ?? false;
+    }
+
+    private async Task<bool> DeleteCommissionerStatus(CommissionerStatus entity)
+    {
+        var result = await CommissionerStatusesApi.DeleteCommissionerStatusAsync(entity.Id);
+        return result?.IsSuccess ?? false;
+    }
+
+    private async Task<bool> CreateCommissionSeat(CommissionSeat entity)
+    {
+        var result = await CommissionSeatsApi.CreateCommissionSeatAsync(entity);
+        return result?.IsSuccess ?? false;
+    }
+
+    private async Task<bool> UpdateCommissionSeat(CommissionSeat entity)
+    {
+        var result = await CommissionSeatsApi.UpdateCommissionSeatAsync(entity.Id, entity);
+        return result?.IsSuccess ?? false;
+    }
+
+    private async Task<bool> DeleteCommissionSeat(CommissionSeat entity)
+    {
+        var result = await CommissionSeatsApi.DeleteCommissionSeatAsync(entity.Id);
+        return result?.IsSuccess ?? false;
     }
 
     private async Task OpenCreateDialog()
     {
-        // TODO: Implement create dialog
-        await Task.CompletedTask;
+        var parameters = new DialogParameters<CreateEntityDialog<CommissionerProfile>>
+        {
+            { x => x.EntityDisplayName, "Commissioner Profile" },
+            { x => x.Description, "Create a new commissioner profile record. All fields marked with * are required." },
+            { x => x.OnCreate, new Func<CommissionerProfile, Task<(bool, string?, string[]?)>>(CreateCommissionerProfile) },
+            { x => x.AutoSetModifiedBy, true },
+            { x => x.FormContent, GetCommissionerProfileFormContent() },
+            { x => x.InitialEntity, GetInitialCommissionerProfile() }
+        };
+
+        var options = new DialogOptions 
+        { 
+            CloseButton = true, 
+            MaxWidth = MaxWidth.Large, 
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await DialogService.ShowAsync<CreateEntityDialog<CommissionerProfile>>("Create New Commissioner Profile", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is CommissionerProfile createdProfile)
+        {
+            // Reload commissioner profiles to include the new one
+            await LoadCommissionerProfiles();
+
+            // Get the person profile for this commissioner
+            var person = personProfiles?.FirstOrDefault(p => p.Id == createdProfile.PersonProfileId);
+            if (person != null)
+            {
+                selectedPerson = person;
+                selectedCommissioner = GetMostRecentCommissionerProfile(person.Id);
+
+                await LoadAllVersions();
+
+                // Update URL
+                var uri = NavigationManager.GetUriWithQueryParameter("id", person.Id);
+                NavigationManager.NavigateTo(uri, replace: true);
+            }
+
+            successMessage = $"Commissioner profile for '{GetPersonName(createdProfile.PersonProfileId)}' created successfully!";
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private CommissionerProfile GetInitialCommissionerProfile()
+    {
+        var initial = new CommissionerProfile();
+
+        // Set default person if one is selected
+        if (selectedPerson != null)
+        {
+            initial.PersonProfileId = selectedPerson.Id;
+        }
+
+        return initial;
+    }
+
+    private RenderFragment<CommissionerProfile> GetCommissionerProfileFormContent() => entity => __builder =>
+    {
+        <MudItem xs="12" md="6">
+            <MudAutocomplete T="PersonProfile"
+                             Value="@GetPersonProfileById(entity.PersonProfileId)"
+                             ValueChanged="@(person => { if (person != null) { entity.PersonProfileId = person.Id; } })"
+                             Label="@(FormAttributeHelper.GetDisplayName<CommissionerProfile>(x => x.PersonProfileId))"
+                             HelperText="@(FormAttributeHelper.GetDescription<CommissionerProfile>(x => x.PersonProfileId))"
+                             SearchFunc="@SearchPersonProfiles"
+                             ToStringFunc="@(p => p != null ? GetPersonName(p.Id) : string.Empty)"
+                             Variant="Variant.Outlined"
+                             Dense="true"
+                             ResetValueOnEmptyText="true"
+                             CoerceText="true"
+                             Required />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudAutocomplete T="CommissionSeat"
+                             Value="@GetCommissionSeatById(entity.CommissionSeatId)"
+                             ValueChanged="@(seat => { if (seat != null) { entity.CommissionSeatId = seat.Id; } })"
+                             Label="@(FormAttributeHelper.GetDisplayName<CommissionerProfile>(x => x.CommissionSeatId))"
+                             HelperText="@(FormAttributeHelper.GetDescription<CommissionerProfile>(x => x.CommissionSeatId))"
+                             SearchFunc="@SearchCommissionSeats"
+                             ToStringFunc="@(s => s != null ? GetCommissionSeatWithServiceAreaDisplayText(s) : string.Empty)"
+                             Variant="Variant.Outlined"
+                             Dense="true"
+                             ResetValueOnEmptyText="true"
+                             CoerceText="true"
+                             Required />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.CommissionerStatusId" 
+                       TModel="CommissionerProfile" 
+                       TValue="int"
+                       TLookup="CommissionerStatus"
+                       Property="@(x => x.CommissionerStatusId)"
+                       LookupItems="@commissionerStatuses"
+                       LookupTextSelector="@(item => ((CommissionerStatus)item).Status ?? string.Empty)"
+                       For="@(() => entity.CommissionerStatusId)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.AppointedDate" 
+                       TModel="CommissionerProfile" 
+                       TValue="DateTime?" 
+                       TLookup="object"
+                       Property="@(x => x.AppointedDate)"
+                       For="@(() => entity.AppointedDate)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.AssemblyMeetingDate" 
+                       TModel="CommissionerProfile" 
+                       TValue="DateTime?" 
+                       TLookup="object"
+                       Property="@(x => x.AssemblyMeetingDate)"
+                       For="@(() => entity.AssemblyMeetingDate)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.EffectiveDate" 
+                       TModel="CommissionerProfile" 
+                       TValue="DateTime?" 
+                       TLookup="object"
+                       Property="@(x => x.EffectiveDate)"
+                       For="@(() => entity.EffectiveDate)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.EndDate" 
+                       TModel="CommissionerProfile" 
+                       TValue="DateTime?" 
+                       TLookup="object"
+                       Property="@(x => x.EndDate)"
+                       For="@(() => entity.EndDate)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.RegisteredVoter" 
+                       TModel="CommissionerProfile" 
+                       TValue="bool?" 
+                       TLookup="object"
+                       Property="@(x => x.RegisteredVoter)"
+                       For="@(() => entity.RegisteredVoter)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.ResidesInServiceArea" 
+                       TModel="CommissionerProfile" 
+                       TValue="bool?" 
+                       TLookup="object"
+                       Property="@(x => x.ResidesInServiceArea)"
+                       For="@(() => entity.ResidesInServiceArea)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.RecommendedForAppointment" 
+                       TModel="CommissionerProfile" 
+                       TValue="bool?" 
+                       TLookup="object"
+                       Property="@(x => x.RecommendedForAppointment)"
+                       For="@(() => entity.RecommendedForAppointment)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.DoNotAppoint" 
+                       TModel="CommissionerProfile" 
+                       TValue="bool?" 
+                       TLookup="object"
+                       Property="@(x => x.DoNotAppoint)"
+                       For="@(() => entity.DoNotAppoint)" />
+        </MudItem>
+        @if (entity.DoNotAppoint == true)
+        {
+            <MudItem xs="12">
+                <AutoField @bind-Value="entity.DoNotAppointDetails" 
+                           TModel="CommissionerProfile" 
+                           TValue="string" 
+                           TLookup="object"
+                           Property="@(x => x.DoNotAppointDetails)"
+                           For="@(() => entity.DoNotAppointDetails)" />
+            </MudItem>
+        }
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.Oath" 
+                       TModel="CommissionerProfile" 
+                       TValue="bool?" 
+                       TLookup="object"
+                       Property="@(x => x.Oath)"
+                       For="@(() => entity.Oath)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.Invoices" 
+                       TModel="CommissionerProfile" 
+                       TValue="bool?" 
+                       TLookup="object"
+                       Property="@(x => x.Invoices)"
+                       For="@(() => entity.Invoices)" />
+        </MudItem>
+    };
+
+    private PersonProfile? GetPersonProfileById(int personProfileId)
+    {
+        return personProfiles?.FirstOrDefault(p => p.Id == personProfileId);
+    }
+
+    private CommissionSeat? GetCommissionSeatById(int commissionSeatId)
+    {
+        return commissionSeats?.FirstOrDefault(s => s.Id == commissionSeatId);
+    }
+
+    private async Task<IEnumerable<PersonProfile>> SearchPersonProfiles(string searchString, CancellationToken cancellationToken)
+    {
+        if (personProfiles == null) return Array.Empty<PersonProfile>();
+
+        await Task.Delay(0, cancellationToken); // Prevent warning about async method
+
+        if (string.IsNullOrWhiteSpace(searchString))
+        {
+            return personProfiles
+                .OrderBy(p => p.LastName)
+                .ThenBy(p => p.FirstName)
+                .Take(50);
+        }
+
+        searchString = searchString.ToLowerInvariant();
+
+        return personProfiles
+            .Where(p => GetPersonName(p.Id).ToLowerInvariant().Contains(searchString))
+            .OrderBy(p => p.LastName)
+            .ThenBy(p => p.FirstName)
+            .Take(50);
+    }
+
+    private async Task<IEnumerable<CommissionSeat>> SearchCommissionSeats(string searchString, CancellationToken cancellationToken)
+    {
+        var orderedSeats = GetOrderedCommissionSeatsForCreate();
+        if (orderedSeats == null) return Array.Empty<CommissionSeat>();
+
+        await Task.Delay(0, cancellationToken); // Prevent warning about async method
+
+        if (string.IsNullOrWhiteSpace(searchString))
+        {
+            return orderedSeats.Take(50);
+        }
+
+        searchString = searchString.ToLowerInvariant();
+
+        return orderedSeats
+            .Where(seat =>
+            {
+                var displayText = GetCommissionSeatWithServiceAreaDisplayText(seat).ToLowerInvariant();
+                return displayText.Contains(searchString);
+            })
+            .Take(50);
+    }
+
+    private async Task<(bool Success, string? ErrorMessage, string[]? ErrorDetails)> CreateCommissionerProfile(CommissionerProfile entity)
+    {
+        try
+        {
+            var result = await CommissionerProfilesApi.CreateCommissionerProfileAsync(entity);
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                // Update the entity with the returned data (which includes the ID)
+                entity.Id = result.Data.Id;
+                entity.ValidFrom = result.Data.ValidFrom;
+
+                return (true, null, null);
+            }
+            else
+            {
+                return (false, result?.ErrorMessage ?? "Failed to create commissioner profile", result?.Errors);
+            }
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Error creating commissioner profile: {ex.Message}", null);
+        }
+    }
+
+    private bool QuickFilterCommissioners(PersonProfile person, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        searchString = searchString.ToLowerInvariant();
+
+        // Search in person name
+        var personName = GetPersonName(person.Id).ToLowerInvariant();
+        if (personName.Contains(searchString))
+            return true;
+
+        // Get the most recent commissioner profile for this person
+        var profile = GetMostRecentCommissionerProfile(person.Id);
+        if (profile == null)
+            return false;
+
+        // Search in seat type
+        var seat = commissionSeats?.FirstOrDefault(s => s.Id == profile.CommissionSeatId);
+        if (seat != null)
+        {
+            var seatType = commissionSeatTypes?.FirstOrDefault(t => t.Id == seat.CommissionSeatTypeId);
+            if (seatType?.Type?.ToLowerInvariant().Contains(searchString) == true)
+                return true;
+
+            var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == seat.CommissionSeatClassId);
+            if (seatClass?.Class?.ToLowerInvariant().Contains(searchString) == true)
+                return true;
+
+            var serviceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == seat.ServiceAreaId);
+            if (serviceArea?.Name?.ToLowerInvariant().Contains(searchString) == true)
+                return true;
+        }
+
+        // Search in status
+        var status = commissionerStatuses?.FirstOrDefault(s => s.Id == profile.CommissionerStatusId);
+        if (status?.Status?.ToLowerInvariant().Contains(searchString) == true)
+            return true;
+
+        // Search for "active" or "inactive"
+        var isActive = HasActiveProfile(person.Id);
+        if (isActive && "active".ToUpper().Equals(searchString.ToUpper()))
+            return true;
+        if (!isActive && "inactive".ToUpper().Equals(searchString.ToUpper()))
+            return true;
+
+        return false;
     }
 }

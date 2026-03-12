@@ -153,7 +153,7 @@ public class NoteService
                     person_profile_id = @PersonProfileId,
                     vendor_profile_id = @VendorProfileId,
                     rfq_id = @RfqId,
-                    ordinance_id = @OrdinanceId
+                    ordinance_id = @OrdinanceId,
                     ModifiedBy = @ModifiedBy
                 WHERE id = @Id";
 
