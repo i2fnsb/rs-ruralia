@@ -146,6 +146,8 @@ else
 }
 
 @code {
+    [CascadingParameter] private EditContext? CascadedEditContext { get; set; }
+
     [Parameter, EditorRequired] public TValue? Value { get; set; }
     [Parameter] public EventCallback<TValue> ValueChanged { get; set; }
     [Parameter, EditorRequired] public Expression<Func<TModel, object>> Property { get; set; } = null!;
@@ -180,31 +182,59 @@ else
     private int? IntValue
     {
         get => Value as int?;
-        set => ValueChanged.InvokeAsync((TValue)(object)value!);
+        set
+        {
+            ValueChanged.InvokeAsync((TValue)(object)value!);
+            NotifyFieldChanged();
+        }
     }
 
     private decimal? DecimalValue
     {
         get => Value as decimal?;
-        set => ValueChanged.InvokeAsync((TValue)(object)value!);
+        set
+        {
+            ValueChanged.InvokeAsync((TValue)(object)value!);
+            NotifyFieldChanged();
+        }
     }
 
     private bool? BoolValue
     {
         get => Value as bool?;
-        set => ValueChanged.InvokeAsync((TValue)(object)value!);
+        set
+        {
+            ValueChanged.InvokeAsync((TValue)(object)value!);
+            NotifyFieldChanged();
+        }
     }
 
     private string? StringValue
     {
         get => Value as string;
-        set => ValueChanged.InvokeAsync((TValue)(object)value!);
+        set
+        {
+            ValueChanged.InvokeAsync((TValue)(object)value!);
+            NotifyFieldChanged();
+        }
     }
 
     private DateTime? DateTimeValue
     {
         get => Value as DateTime?;
-        set => ValueChanged.InvokeAsync((TValue)(object)value!);
+        set
+        {
+            ValueChanged.InvokeAsync((TValue)(object)value!);
+            NotifyFieldChanged();
+        }
+    }
+
+    private void NotifyFieldChanged()
+    {
+        if (CascadedEditContext != null && For != null)
+        {
+            CascadedEditContext.NotifyFieldChanged(FieldIdentifier.Create(For));
+        }
     }
 
     private bool IsNumericType()

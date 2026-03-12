@@ -1,6 +1,8 @@
 @typeparam TEntity where TEntity : class, new()
 @using MudBlazor
+@using System.ComponentModel
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@implements IDisposable
 
 <MudDialog>
     <DialogContent>
@@ -110,7 +112,7 @@
     protected override async Task OnInitializedAsync()
     {
         entity = new TEntity();
-        
+
         // Auto-set ModifiedBy if the entity has that property
         if (AutoSetModifiedBy)
         {
@@ -118,6 +120,22 @@
         }
 
         editContext = new EditContext(entity);
+
+        // Subscribe to field changed events to trigger UI updates
+        editContext.OnFieldChanged += HandleFieldChanged;
+    }
+
+    private void HandleFieldChanged(object? sender, FieldChangedEventArgs e)
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        if (editContext != null)
+        {
+            editContext.OnFieldChanged -= HandleFieldChanged;
+        }
     }
 
     private async Task SetModifiedBy()

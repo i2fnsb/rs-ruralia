@@ -1564,7 +1564,7 @@
     {
         editModel = CloneCommissioner(version);
         editContext = new EditContext(editModel);
-        
+
         if (!IsViewingCurrentVersion())
         {
             isEditMode = false;
@@ -1868,7 +1868,41 @@
         var seatType = commissionSeatTypes?.FirstOrDefault(t => t.Id == seat.CommissionSeatTypeId);
         var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == seat.CommissionSeatClassId);
 
-        return $"{seatType?.Type ?? "Unknown"} - {seatClass?.Class ?? "Unknown"}";
+        var parts = new List<string>();
+
+        if (!string.IsNullOrEmpty(seatType?.Type))
+            parts.Add(seatType.Type);
+
+        if (!string.IsNullOrEmpty(seatClass?.Class))
+            parts.Add(seatClass.Class);
+
+        return parts.Any() ? string.Join(" - ", parts) : "—";
+    }
+
+    private string GetCommissionSeatWithServiceAreaDisplayText(CommissionSeat seat)
+    {
+        if (seat == null) return "—";
+
+        var serviceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == seat.ServiceAreaId);
+        var seatType = commissionSeatTypes?.FirstOrDefault(t => t.Id == seat.CommissionSeatTypeId);
+        var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == seat.CommissionSeatClassId);
+
+        var parts = new List<string>();
+
+        // Add service area first for grouping
+        if (!string.IsNullOrEmpty(serviceArea?.Name))
+            parts.Add($"[{serviceArea.Name}]");
+
+        if (!string.IsNullOrEmpty(seatType?.Type))
+            parts.Add(seatType.Type);
+
+        if (!string.IsNullOrEmpty(seatClass?.Class))
+            parts.Add(seatClass.Class);
+
+        if (seat.TermStartDate.HasValue && seat.TermEndDate.HasValue)
+            parts.Add($"({seat.TermStartDate.Value:MMM yyyy} - {seat.TermEndDate.Value:MMM yyyy})");
+
+        return parts.Any() ? string.Join(" - ", parts) : "—";
     }
 
     private IEnumerable<CommissionSeat>? GetFilteredCommissionSeats(int commissionSeatId)
@@ -2059,6 +2093,37 @@
         return commissionSeats;
     }
 
+    private IEnumerable<CommissionSeat>? GetOrderedCommissionSeatsForCreate()
+    {
+        if (commissionSeats == null) return Array.Empty<CommissionSeat>();
+
+        // Filter out seats with class "UKN"
+        var filteredSeats = commissionSeats.Where(seat =>
+        {
+            var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == seat.CommissionSeatClassId);
+            return seatClass?.Class?.Equals("UKN", StringComparison.OrdinalIgnoreCase) != true;
+        });
+
+        // Order by service area name, then by seat type, then by seat class
+        return filteredSeats
+            .OrderBy(seat =>
+            {
+                var serviceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == seat.ServiceAreaId);
+                return serviceArea?.Name ?? string.Empty;
+            })
+            .ThenBy(seat =>
+            {
+                var seatType = commissionSeatTypes?.FirstOrDefault(t => t.Id == seat.CommissionSeatTypeId);
+                return seatType?.Type ?? string.Empty;
+            })
+            .ThenBy(seat =>
+            {
+                var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == seat.CommissionSeatClassId);
+                return seatClass?.Class ?? string.Empty;
+            })
+            .ToList();
+    }
+
     private async Task<bool> CreateCommissionerStatus(CommissionerStatus entity)
     {
         var result = await CommissionerStatusesApi.CreateCommissionerStatusAsync(entity);
@@ -2097,15 +2162,204 @@
 
     private async Task OpenCreateDialog()
     {
-        // TODO: Implement create dialog
-        await Task.CompletedTask;
+        var parameters = new DialogParameters<CreateEntityDialog<CommissionerProfile>>
+        {
+            { x => x.EntityDisplayName, "Commissioner Profile" },
+            { x => x.Description, "Create a new commissioner profile record. All fields marked with * are required." },
+            { x => x.OnCreate, new Func<CommissionerProfile, Task<(bool, string?, string[]?)>>(CreateCommissionerProfile) },
+            { x => x.AutoSetModifiedBy, true },
+            { x => x.FormContent, GetCommissionerProfileFormContent() }
+        };
+
+        var options = new DialogOptions 
+        { 
+            CloseButton = true, 
+            MaxWidth = MaxWidth.Large, 
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await DialogService.ShowAsync<CreateEntityDialog<CommissionerProfile>>("Create New Commissioner Profile", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is CommissionerProfile createdProfile)
+        {
+            // Reload commissioner profiles to include the new one
+            await LoadCommissionerProfiles();
+
+            // Get the person profile for this commissioner
+            var person = personProfiles?.FirstOrDefault(p => p.Id == createdProfile.PersonProfileId);
+            if (person != null)
+            {
+                selectedPerson = person;
+                selectedCommissioner = GetMostRecentCommissionerProfile(person.Id);
+
+                await LoadAllVersions();
+
+                // Update URL
+                var uri = NavigationManager.GetUriWithQueryParameter("id", person.Id);
+                NavigationManager.NavigateTo(uri, replace: true);
+            }
+
+            successMessage = $"Commissioner profile for '{GetPersonName(createdProfile.PersonProfileId)}' created successfully!";
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private RenderFragment<CommissionerProfile> GetCommissionerProfileFormContent() => entity => __builder =>
+    {
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.PersonProfileId" 
+                       TModel="CommissionerProfile" 
+                       TValue="int"
+                       TLookup="PersonProfile"
+                       Property="@(x => x.PersonProfileId)"
+                       LookupItems="@personProfiles"
+                       LookupTextSelector="@(item => GetPersonName(((PersonProfile)item).Id))"
+                       For="@(() => entity.PersonProfileId)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.CommissionSeatId" 
+                       TModel="CommissionerProfile" 
+                       TValue="int"
+                       TLookup="CommissionSeat"
+                       Property="@(x => x.CommissionSeatId)"
+                       LookupItems="@GetOrderedCommissionSeatsForCreate()"
+                       LookupTextSelector="@(item => GetCommissionSeatWithServiceAreaDisplayText((CommissionSeat)item))"
+                       For="@(() => entity.CommissionSeatId)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.CommissionerStatusId" 
+                       TModel="CommissionerProfile" 
+                       TValue="int"
+                       TLookup="CommissionerStatus"
+                       Property="@(x => x.CommissionerStatusId)"
+                       LookupItems="@commissionerStatuses"
+                       LookupTextSelector="@(item => ((CommissionerStatus)item).Status ?? string.Empty)"
+                       For="@(() => entity.CommissionerStatusId)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.AppointedDate" 
+                       TModel="CommissionerProfile" 
+                       TValue="DateTime?" 
+                       TLookup="object"
+                       Property="@(x => x.AppointedDate)"
+                       For="@(() => entity.AppointedDate)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.AssemblyMeetingDate" 
+                       TModel="CommissionerProfile" 
+                       TValue="DateTime?" 
+                       TLookup="object"
+                       Property="@(x => x.AssemblyMeetingDate)"
+                       For="@(() => entity.AssemblyMeetingDate)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.EffectiveDate" 
+                       TModel="CommissionerProfile" 
+                       TValue="DateTime?" 
+                       TLookup="object"
+                       Property="@(x => x.EffectiveDate)"
+                       For="@(() => entity.EffectiveDate)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.EndDate" 
+                       TModel="CommissionerProfile" 
+                       TValue="DateTime?" 
+                       TLookup="object"
+                       Property="@(x => x.EndDate)"
+                       For="@(() => entity.EndDate)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.RegisteredVoter" 
+                       TModel="CommissionerProfile" 
+                       TValue="bool?" 
+                       TLookup="object"
+                       Property="@(x => x.RegisteredVoter)"
+                       For="@(() => entity.RegisteredVoter)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.ResidesInServiceArea" 
+                       TModel="CommissionerProfile" 
+                       TValue="bool?" 
+                       TLookup="object"
+                       Property="@(x => x.ResidesInServiceArea)"
+                       For="@(() => entity.ResidesInServiceArea)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.RecommendedForAppointment" 
+                       TModel="CommissionerProfile" 
+                       TValue="bool?" 
+                       TLookup="object"
+                       Property="@(x => x.RecommendedForAppointment)"
+                       For="@(() => entity.RecommendedForAppointment)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.DoNotAppoint" 
+                       TModel="CommissionerProfile" 
+                       TValue="bool?" 
+                       TLookup="object"
+                       Property="@(x => x.DoNotAppoint)"
+                       For="@(() => entity.DoNotAppoint)" />
+        </MudItem>
+        @if (entity.DoNotAppoint == true)
+        {
+            <MudItem xs="12">
+                <AutoField @bind-Value="entity.DoNotAppointDetails" 
+                           TModel="CommissionerProfile" 
+                           TValue="string" 
+                           TLookup="object"
+                           Property="@(x => x.DoNotAppointDetails)"
+                           For="@(() => entity.DoNotAppointDetails)" />
+            </MudItem>
+        }
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.Oath" 
+                       TModel="CommissionerProfile" 
+                       TValue="bool?" 
+                       TLookup="object"
+                       Property="@(x => x.Oath)"
+                       For="@(() => entity.Oath)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.Invoices" 
+                       TModel="CommissionerProfile" 
+                       TValue="bool?" 
+                       TLookup="object"
+                       Property="@(x => x.Invoices)"
+                       For="@(() => entity.Invoices)" />
+        </MudItem>
+    };
+
+    private async Task<(bool Success, string? ErrorMessage, string[]? ErrorDetails)> CreateCommissionerProfile(CommissionerProfile entity)
+    {
+        try
+        {
+            var result = await CommissionerProfilesApi.CreateCommissionerProfileAsync(entity);
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                // Update the entity with the returned data (which includes the ID)
+                entity.Id = result.Data.Id;
+                entity.ValidFrom = result.Data.ValidFrom;
+
+                return (true, null, null);
+            }
+            else
+            {
+                return (false, result?.ErrorMessage ?? "Failed to create commissioner profile", result?.Errors);
+            }
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Error creating commissioner profile: {ex.Message}", null);
+        }
     }
 
     private bool QuickFilterCommissioners(PersonProfile person, string searchString)
     {
         if (string.IsNullOrWhiteSpace(searchString))
             return true;
-
         searchString = searchString.ToLowerInvariant();
 
         // Search in person name
@@ -2142,9 +2396,9 @@
 
         // Search for "active" or "inactive"
         var isActive = HasActiveProfile(person.Id);
-        if (isActive && "active".Contains(searchString))
+        if (isActive && "active".ToUpper().Equals(searchString.ToUpper()))
             return true;
-        if (!isActive && "inactive".Contains(searchString))
+        if (!isActive && "inactive".ToUpper().Equals(searchString.ToUpper()))
             return true;
 
         return false;
