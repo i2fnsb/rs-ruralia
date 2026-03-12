@@ -347,8 +347,7 @@
                                                                Style="flex: 1" />
                                                 <MudIconButton Icon="@Icons.Material.Filled.Settings" 
                                                               Color="Color.Primary" 
-                                                              OnClick="OpenSubdivisionManagementDialog"
-                                                              Title="Manage Subdivisions" />
+                                                              OnClick="OpenSubdivisionManagementDialog" />
                                             </MudStack>
 
                                             @if (subdivisionsToAdd.Any() || subdivisionsToRemove.Any())
@@ -1311,9 +1310,204 @@
 
     private async Task OpenCreateDialog()
     {
-        // TODO: Implement create dialog
-        await Task.CompletedTask;
+        var parameters = new DialogParameters<CreateEntityDialog<Road>>
+        {
+            { x => x.EntityDisplayName, "Road" },
+            { x => x.Description, "Create a new road record. All fields marked with * are required." },
+            { x => x.OnCreate, new Func<Road, Task<(bool, string?, string[]?)>>(CreateRoad) },
+            { x => x.AutoSetModifiedBy, true },
+            { x => x.FormContent, GetRoadFormContent() }
+        };
+
+        var options = new DialogOptions 
+        { 
+            CloseButton = true, 
+            MaxWidth = MaxWidth.Large, 
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await DialogService.ShowAsync<CreateEntityDialog<Road>>("Create New Road", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is Road createdRoad)
+        {
+            // Reload roads to include the new one
+            await LoadRoads();
+
+            // Select the newly created road
+            selectedRoad = roads?.FirstOrDefault(r => r.Id == createdRoad.Id);
+            if (selectedRoad != null)
+            {
+                await LoadAllVersions();
+
+                // Update URL
+                var uri = NavigationManager.GetUriWithQueryParameter("id", selectedRoad.Id);
+                NavigationManager.NavigateTo(uri, replace: true);
+            }
+
+            successMessage = $"Road '{GetRoadDisplayText(createdRoad)}' created successfully!";
+            await InvokeAsync(StateHasChanged);
+        }
     }
+
+    private async Task<(bool Success, string? ErrorMessage, string[]? Errors)> CreateRoad(Road entity)
+    {
+        try
+        {
+            var result = await RoadsApi.CreateRoadAsync(entity);
+
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                return (true, null, null);
+            }
+
+            return (false, result?.ErrorMessage ?? "Failed to create road", result?.Errors);
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Error creating road: {ex.Message}", null);
+        }
+    }
+
+    private RenderFragment<Road> GetRoadFormContent() => entity => __builder =>
+    {
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.RoadNameId" 
+                       TModel="Road" 
+                       TValue="int?"
+                       TLookup="RoadName"
+                       Property="@(x => x.RoadNameId)"
+                       LookupItems="@roadNames"
+                       LookupTextSelector="@(item => ((RoadName)item).Name ?? "")"
+                       ForeignKeyIdSelector="@(x => x.Id)"
+                       ForeignKeyNameSelector="@(x => x.Name)"
+                       OnForeignKeyCreate="@CreateRoadName"
+                       OnForeignKeyUpdate="@UpdateRoadName"
+                       OnForeignKeyDelete="@DeleteRoadName"
+                       OnForeignKeyDataChanged="@(EventCallback.Factory.Create(this, LoadRoadNames))"
+                       ForeignKeyDialogTitle="Road Names"
+                       For="@(() => entity.RoadNameId)">
+                <ForeignKeyFormContent Context="roadNameEntity">
+                    <MudItem xs="12">
+                        <AutoField @bind-Value="roadNameEntity.Name"
+                                   TModel="RoadName"
+                                   TValue="string"
+                                   TLookup="object"
+                                   Property="@(x => x.Name)"
+                                   For="@(() => roadNameEntity.Name)" />
+                    </MudItem>
+                </ForeignKeyFormContent>       
+            </AutoField>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.Phase" 
+                       TModel="Road" 
+                       TValue="int?" 
+                       TLookup="object"
+                       Property="@(x => x.Phase)"
+                       For="@(() => entity.Phase)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.DistanceFeet" 
+                       TModel="Road" 
+                       TValue="decimal?" 
+                       TLookup="object"
+                       Property="@(x => x.DistanceFeet)"
+                       Format="N2"
+                       For="@(() => entity.DistanceFeet)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.ApprovedForMaintenance" 
+                       TModel="Road" 
+                       TValue="bool?" 
+                       TLookup="object"
+                       Property="@(x => x.ApprovedForMaintenance)"
+                       For="@(() => entity.ApprovedForMaintenance)" />
+        </MudItem>
+        <MudItem xs="12">
+            <AutoField @bind-Value="entity.StartDescription" 
+                       TModel="Road" 
+                       TValue="string" 
+                       TLookup="object"
+                       Property="@(x => x.StartDescription)"
+                       For="@(() => entity.StartDescription)" />
+        </MudItem>
+        <MudItem xs="12">
+            <AutoField @bind-Value="entity.EndDescription" 
+                       TModel="Road" 
+                       TValue="string" 
+                       TLookup="object"
+                       Property="@(x => x.EndDescription)"
+                       For="@(() => entity.EndDescription)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.RoadSurfaceTypeId" 
+                       TModel="Road" 
+                       TValue="int?"
+                       TLookup="RoadSurfaceType"
+                       Property="@(x => x.RoadSurfaceTypeId)"
+                       LookupItems="@roadSurfaceTypes"
+                       LookupTextSelector="@(item => ((RoadSurfaceType)item).Type ?? "")"
+                       ForeignKeyIdSelector="@(x => x.Id)"
+                       ForeignKeyNameSelector="@(x => x.Type)"
+                       OnForeignKeyCreate="@CreateRoadSurfaceType"
+                       OnForeignKeyUpdate="@UpdateRoadSurfaceType"
+                       OnForeignKeyDelete="@DeleteRoadSurfaceType"
+                       OnForeignKeyDataChanged="@(EventCallback.Factory.Create(this, LoadRoadSurfaceTypes))"
+                       ForeignKeyDialogTitle="Road Surface Types"
+                       For="@(() => entity.RoadSurfaceTypeId)">
+                <ForeignKeyFormContent Context="surfaceTypeEntity">
+                    <MudItem xs="12">
+                        <AutoField @bind-Value="surfaceTypeEntity.Type"
+                                   TModel="RoadSurfaceType"
+                                   TValue="string"
+                                   TLookup="object"
+                                   Property="@(x => x.Type)"
+                                   For="@(() => surfaceTypeEntity.Type)" />
+                    </MudItem>
+                </ForeignKeyFormContent>       
+            </AutoField>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.ResponderCodeId" 
+                       TModel="Road" 
+                       TValue="int?"
+                       TLookup="RoadResponderCode"
+                       Property="@(x => x.ResponderCodeId)"
+                       LookupItems="@roadResponderCodes"
+                       LookupTextSelector="@(item => ((RoadResponderCode)item).Code ?? string.Empty)"
+                       ForeignKeyIdSelector="@(x => x.Id)"
+                       ForeignKeyNameSelector="@(x => x.Code)"
+                       OnForeignKeyCreate="@CreateRoadResponderCode"
+                       OnForeignKeyUpdate="@UpdateRoadResponderCode"
+                       OnForeignKeyDelete="@DeleteRoadResponderCode"
+                       OnForeignKeyDataChanged="@(EventCallback.Factory.Create(this, LoadRoadResponderCodes))"
+                       ForeignKeyDialogTitle="Road Responder Codes"
+                       For="@(() => entity.ResponderCodeId)">
+                <ForeignKeyFormContent Context="responderCodeEntity">
+                    <MudItem xs="12">
+                        <AutoField @bind-Value="responderCodeEntity.Code"
+                                   TModel="RoadResponderCode"
+                                   TValue="string"
+                                   TLookup="object"
+                                   Property="@(x => x.Code)"
+                                   For="@(() => responderCodeEntity.Code)" />
+                    </MudItem>
+                </ForeignKeyFormContent>       
+            </AutoField>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <AutoField @bind-Value="entity.ServiceAreaId" 
+                       TModel="Road" 
+                       TValue="int"
+                       TLookup="ServiceArea"
+                       Property="@(x => x.ServiceAreaId)"
+                       LookupItems="@serviceAreas"
+                       LookupTextSelector="@(item => ((ServiceArea)item).Name ?? "")"
+                       For="@(() => entity.ServiceAreaId)" />
+        </MudItem>
+    };
 
     // RoadName CRUD operations for foreign key management
     private async Task<bool> CreateRoadName(RoadName entity)
