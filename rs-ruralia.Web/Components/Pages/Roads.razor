@@ -330,18 +330,26 @@
                                             <MudText Typo="Typo.body2" Color="Color.Secondary">No subdivisions assigned</MudText>
                                         }
 
-                                        <MudAutocomplete T="RoadSubdivision"
-                                                           Label="Add Subdivision"
-                                                           SearchFunc="@SearchAvailableSubdivisions"
-                                                           ToStringFunc="@(s => s?.Name ?? string.Empty)"
-                                                           ValueChanged="@StageAddSubdivision"
-                                                           Variant="Variant.Outlined"
-                                                           Dense="true"
-                                                           ResetValueOnEmptyText="true"
-                                                           CoerceValue="false"
-                                                           Class="mt-3"
-                                                           Clearable="true"
-                                                           Placeholder="Search and select a subdivision to add..." />
+                                        @if (CanEditFields())
+                                        {
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-3">
+                                                <MudAutocomplete T="RoadSubdivision"
+                                                               Label="Add Subdivision"
+                                                               SearchFunc="@SearchAvailableSubdivisions"
+                                                               ToStringFunc="@(s => s?.Name ?? string.Empty)"
+                                                               ValueChanged="@StageAddSubdivision"
+                                                               Variant="Variant.Outlined"
+                                                               Dense="true"
+                                                               ResetValueOnEmptyText="true"
+                                                               CoerceValue="false"
+                                                               Clearable="true"
+                                                               Placeholder="Search and select a subdivision to add..."
+                                                               Style="flex: 1" />
+                                                <MudIconButton Icon="@Icons.Material.Filled.Settings" 
+                                                              Color="Color.Primary" 
+                                                              OnClick="OpenSubdivisionManagementDialog"
+                                                              Title="Manage Subdivisions" />
+                                            </MudStack>
 
                                             @if (subdivisionsToAdd.Any() || subdivisionsToRemove.Any())
                                             {
@@ -359,8 +367,8 @@
                                                     </MudText>
                                                 </MudAlert>
                                             }
+                                        }
                                     </MudItem>
-
                                     <MudItem xs="12" md="6">
                                         <AutoField Value="editModel.ValidFrom" 
                                                    TModel="Road" 
@@ -1363,6 +1371,77 @@
         var result = await RoadResponderCodesApi.DeleteRoadResponderCodeAsync(entity.Id);
         return result?.IsSuccess ?? false;
     }
+
+    // RoadSubdivision CRUD operations for foreign key management
+    private async Task<bool> CreateRoadSubdivision(RoadSubdivision entity)
+    {
+        var result = await RoadSubdivisionsApi.CreateRoadSubdivisionAsync(entity);
+        return result?.IsSuccess ?? false;
+    }
+
+    private async Task<bool> UpdateRoadSubdivision(RoadSubdivision entity)
+    {
+        var result = await RoadSubdivisionsApi.UpdateRoadSubdivisionAsync(entity.Id, entity);
+        return result?.IsSuccess ?? false;
+    }
+
+    private async Task<bool> DeleteRoadSubdivision(RoadSubdivision entity)
+    {
+        var result = await RoadSubdivisionsApi.DeleteRoadSubdivisionAsync(entity.Id);
+        return result?.IsSuccess ?? false;
+    }
+
+    private async Task OpenSubdivisionManagementDialog()
+    {
+        var parameters = new DialogParameters<ForeignKeyDialog<RoadSubdivision>>
+        {
+            { x => x.Items, roadSubdivisions ?? Array.Empty<RoadSubdivision>() },
+            { x => x.IdSelector, s => s.Id },
+            { x => x.NameSelector, s => s.Name ?? string.Empty },
+            { x => x.DescriptionSelector, s => s.FeatureObjectId ?? string.Empty },
+            { x => x.OnCreate, CreateRoadSubdivision },
+            { x => x.OnUpdate, UpdateRoadSubdivision },
+            { x => x.OnDelete, DeleteRoadSubdivision },
+            { x => x.FormContent, GetRoadSubdivisionFormContent() },
+            { x => x.OnDataChanged, EventCallback.Factory.Create(this, LoadRoadSubdivisions) }
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<ForeignKeyDialog<RoadSubdivision>>("Manage Road Subdivisions", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadRoadSubdivisions();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private RenderFragment<RoadSubdivision> GetRoadSubdivisionFormContent() => entity => __builder =>
+    {
+        <MudItem xs="12">
+            <AutoField @bind-Value="entity.Name"
+                       TModel="RoadSubdivision"
+                       TValue="string"
+                       TLookup="object"
+                       Property="@(x => x.Name)"
+                       For="@(() => entity.Name)" />
+        </MudItem>
+        <MudItem xs="12">
+            <AutoField @bind-Value="entity.FeatureObjectId"
+                       TModel="RoadSubdivision"
+                       TValue="string"
+                       TLookup="object"
+                       Property="@(x => x.FeatureObjectId)"
+                       For="@(() => entity.FeatureObjectId)" />
+        </MudItem>
+    };
 
     // Note creation for edit tracking
     private async Task PromptForEditNote(int roadId, string? userEmail)
