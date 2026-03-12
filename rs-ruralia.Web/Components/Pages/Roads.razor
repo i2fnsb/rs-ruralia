@@ -7,6 +7,7 @@
 @inject RoadNamesApiClient RoadNamesApi
 @inject RoadSurfaceTypesApiClient RoadSurfaceTypesApi
 @inject RoadResponderCodesApiClient RoadResponderCodesApi
+@inject RoadSubdivisionsApiClient RoadSubdivisionsApi
 @inject ServiceAreasApiClient ServiceAreasApi
 @inject NotesApiClient NotesApi
 @inject NavigationManager NavigationManager
@@ -293,6 +294,76 @@
                                                    For="@(() => editModel.ServiceAreaId)" />
                                     </MudItem>
 
+                                    <MudItem xs="12">
+                                        <MudText Typo="Typo.h6" Class="mb-2">Subdivisions</MudText>
+                                        @{
+                                            var displayedSubdivisions = GetDisplayedSubdivisions();
+                                        }
+                                        @if (displayedSubdivisions != null && displayedSubdivisions.Any())
+                                        {
+                                            <MudStack Row="true" Spacing="1">
+                                                @foreach (var subdivision in displayedSubdivisions.OrderBy(s => s.Name))
+                                                {
+                                                    var isPendingAdd = subdivisionsToAdd.Contains(subdivision.Id);
+                                                    var isPendingRemove = subdivisionsToRemove.Contains(subdivision.Id);
+
+                                                    <MudChip T="string" 
+                                                            Color="@(isPendingAdd ? Color.Success : isPendingRemove ? Color.Error : Color.Primary)" 
+                                                            Icon="@Icons.Material.Filled.LocationCity"
+                                                            OnClose="@(CanEditFields() ? () => StageRemoveSubdivision(subdivision) : null)"
+                                                            Variant="@(isPendingAdd || isPendingRemove ? Variant.Outlined : Variant.Filled)">
+                                                        @subdivision.Name
+                                                        @if (isPendingAdd)
+                                                        {
+                                                            <MudIcon Icon="@Icons.Material.Filled.Add" Size="Size.Small" Class="ms-1" />
+                                                        }
+                                                        @if (isPendingRemove)
+                                                        {
+                                                            <MudIcon Icon="@Icons.Material.Filled.Remove" Size="Size.Small" Class="ms-1" />
+                                                        }
+                                                    </MudChip>
+                                                }
+                                            </MudStack>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary">No subdivisions assigned</MudText>
+                                        }
+
+                                        @if (CanEditFields())
+                                        {
+                                            <MudAutocomplete T="RoadSubdivision"
+                                                           Label="Add Subdivision"
+                                                           SearchFunc="@SearchAvailableSubdivisions"
+                                                           ToStringFunc="@(s => s?.Name ?? string.Empty)"
+                                                           ValueChanged="@StageAddSubdivision"
+                                                           Variant="Variant.Outlined"
+                                                           Dense="true"
+                                                           ResetValueOnEmptyText="true"
+                                                           CoerceValue="false"
+                                                           Class="mt-3"
+                                                           Clearable="true"
+                                                           Placeholder="Search and select a subdivision to add..." />
+
+                                            @if (subdivisionsToAdd.Any() || subdivisionsToRemove.Any())
+                                            {
+                                                <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
+                                                    <MudText Typo="Typo.body2">
+                                                        @if (subdivisionsToAdd.Any())
+                                                        {
+                                                            <span>@subdivisionsToAdd.Count subdivision(s) will be added. </span>
+                                                        }
+                                                        @if (subdivisionsToRemove.Any())
+                                                        {
+                                                            <span>@subdivisionsToRemove.Count subdivision(s) will be removed. </span>
+                                                        }
+                                                        <strong>Click Save to apply changes.</strong>
+                                                    </MudText>
+                                                </MudAlert>
+                                            }
+                                        }
+                                    </MudItem>
+
                                     <MudItem xs="12" md="6">
                                         <AutoField Value="editModel.ValidFrom" 
                                                    TModel="Road" 
@@ -465,16 +536,49 @@
                                 </InfoCard>
                             </MudItem>
 
+                            <MudItem xs="12">
+                                <InfoCard TValue="object" TModel="RoadSubdivision"
+                                    Label="Subdivisions"
+                                    Icon="@Icons.Material.Filled.LocationCity">
+                                    <ValueContent>
+                                        @if (roadSubdivisionsForSelectedRoad != null && roadSubdivisionsForSelectedRoad.Any())
+                                        {
+                                            <MudStack Row="true" Spacing="1" Class="mt-2">
+                                                @foreach (var subdivision in roadSubdivisionsForSelectedRoad.OrderBy(s => s.Name))
+                                                {
+                                                    <MudChip T="string" 
+                                                            Color="Color.Primary" 
+                                                            Icon="@Icons.Material.Filled.LocationCity">
+                                                        @subdivision.Name
+                                                    </MudChip>
+                                                }
+                                            </MudStack>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">No subdivisions assigned</MudText>
+                                        }
+                                    </ValueContent>
+                                </InfoCard>
+                            </MudItem>
+
                             @if (!string.IsNullOrEmpty(version.RoadLocation))
                             {
                                 <MudItem xs="12">
-                                    <RoadLocationMapEditor RoadLocationWkt="@version.RoadLocation"
-                                                         ServiceAreaFeatureLayerUrl="@GetFeatureLayerUrl()"
-                                                         ServiceAreaQueryParameters="@GetServiceAreaQueryParameters()"
-                                                         ReadOnly="true"
-                                                         Latitude="64.8378"
-                                                         Longitude="-147.7164"
-                                                         ZoomLevel="12" />
+                                    <InfoCard TValue="string" TModel="Road"
+                                             Label="Road Location"
+                                             Icon="@Icons.Material.Filled.Map"
+                                             PropertyExpression="@(x => x.RoadLocation)">
+                                        <ValueContent>
+                                            <RoadLocationMapEditor RoadLocationWkt="@version.RoadLocation"
+                                                                 ServiceAreaFeatureLayerUrl="@GetFeatureLayerUrl()"
+                                                                 ServiceAreaQueryParameters="@GetServiceAreaQueryParameters()"
+                                                                 ReadOnly="true"
+                                                                 Latitude="64.8378"
+                                                                 Longitude="-147.7164"
+                                                                 ZoomLevel="12" />
+                                        </ValueContent>
+                                    </InfoCard>
                                 </MudItem>
                             }
                         </MudGrid>
@@ -579,6 +683,8 @@
     private IEnumerable<RoadName>? roadNames;
     private IEnumerable<RoadSurfaceType>? roadSurfaceTypes;
     private IEnumerable<RoadResponderCode>? roadResponderCodes;
+    private IEnumerable<RoadSubdivision>? roadSubdivisions;
+    private IEnumerable<RoadSubdivision>? roadSubdivisionsForSelectedRoad;
     private IEnumerable<ServiceArea>? serviceAreas;
     private Road? selectedRoad;
     private bool isLoading = false;
@@ -608,12 +714,17 @@
     // Map-related fields
     private double? calculatedDistanceFeet;
 
+    // Staged subdivision changes (applied on save)
+    private HashSet<int> subdivisionsToAdd = new();
+    private HashSet<int> subdivisionsToRemove = new();
+
     protected override async Task OnInitializedAsync()
     {
         await LoadRoads();
         await LoadRoadNames();
         await LoadRoadSurfaceTypes();
         await LoadRoadResponderCodes();
+        await LoadRoadSubdivisions();
         await LoadServiceAreas();
         SelectRoadFromParameters();
     }
@@ -745,6 +856,48 @@
         }
     }
 
+    private async Task LoadRoadSubdivisions()
+    {
+        try
+        {
+            var result = await RoadSubdivisionsApi.GetAllRoadSubdivisionsAsync();
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                roadSubdivisions = result.Data;
+            }
+            else
+            {
+                roadSubdivisions = Array.Empty<RoadSubdivision>();
+            }
+        }
+        catch (Exception)
+        {
+            roadSubdivisions = Array.Empty<RoadSubdivision>();
+        }
+    }
+
+    private async Task LoadSubdivisionsForRoad()
+    {
+        if (selectedRoad == null) return;
+
+        try
+        {
+            var result = await RoadsApi.GetSubdivisionsByRoadIdAsync(selectedRoad.Id);
+            if (result?.IsSuccess == true && result.Data != null)
+            {
+                roadSubdivisionsForSelectedRoad = result.Data;
+            }
+            else
+            {
+                roadSubdivisionsForSelectedRoad = Array.Empty<RoadSubdivision>();
+            }
+        }
+        catch (Exception)
+        {
+            roadSubdivisionsForSelectedRoad = Array.Empty<RoadSubdivision>();
+        }
+    }
+
     private async Task LoadServiceAreas()
     {
         try
@@ -823,6 +976,7 @@
 
             // Load related data
             await LoadRelatedRoads();
+            await LoadSubdivisionsForRoad();
         }
         catch (Exception ex)
         {
@@ -978,9 +1132,13 @@
                 UpdateEditModel(currentViewVersion);
             }
         }
-        
+
         isEditMode = true;
         ClearMessages();
+
+        // Clear staged subdivision changes when entering edit mode
+        subdivisionsToAdd.Clear();
+        subdivisionsToRemove.Clear();
     }
 
     private async Task SaveEdit()
@@ -1001,12 +1159,49 @@
                 editModel.ModifiedBy = userEmail;
             }
 
+            // Save the road first
             var result = await RoadsApi.UpdateRoadAsync(editModel.Id, editModel);
 
             if (result?.IsSuccess == true)
             {
-                successMessage = "Road updated successfully!";
+                // Now apply subdivision changes
+                var subdivisionErrors = new List<string>();
+
+                // Remove subdivisions
+                foreach (var subdivisionId in subdivisionsToRemove)
+                {
+                    var removeResult = await RoadsApi.RemoveSubdivisionFromRoadAsync(editModel.Id, subdivisionId);
+                    if (removeResult?.IsSuccess != true)
+                    {
+                        subdivisionErrors.Add($"Failed to remove subdivision ID {subdivisionId}");
+                    }
+                }
+
+                // Add subdivisions
+                foreach (var subdivisionId in subdivisionsToAdd)
+                {
+                    var addResult = await RoadsApi.AddSubdivisionToRoadAsync(editModel.Id, subdivisionId);
+                    if (addResult?.IsSuccess != true)
+                    {
+                        subdivisionErrors.Add($"Failed to add subdivision ID {subdivisionId}");
+                    }
+                }
+
+                if (subdivisionErrors.Any())
+                {
+                    successMessage = "Road updated successfully, but some subdivision changes failed.";
+                    errorMessage = string.Join("; ", subdivisionErrors);
+                }
+                else
+                {
+                    successMessage = "Road updated successfully!";
+                }
+
                 isEditMode = false;
+
+                // Clear staged changes
+                subdivisionsToAdd.Clear();
+                subdivisionsToRemove.Clear();
 
                 await LoadRoads();
                 selectedRoad = roads?.FirstOrDefault(r => r.Id == editModel.Id);
@@ -1044,6 +1239,10 @@
         }
         isEditMode = false;
         ClearMessages();
+
+        // Clear staged subdivision changes when canceling edit
+        subdivisionsToAdd.Clear();
+        subdivisionsToRemove.Clear();
     }
 
     private void ClearMessages()
@@ -1216,5 +1415,153 @@
         {
             // Silently fail - note creation is optional
         }
+    }
+
+    private void StageAddSubdivision(RoadSubdivision? subdivision)
+    {
+        if (subdivision == null) return;
+
+        // If it was marked for removal, unmark it
+        if (subdivisionsToRemove.Contains(subdivision.Id))
+        {
+            subdivisionsToRemove.Remove(subdivision.Id);
+        }
+        else if (!roadSubdivisionsForSelectedRoad?.Any(s => s.Id == subdivision.Id) ?? true)
+        {
+            // Only add to staged additions if it's not already assigned
+            subdivisionsToAdd.Add(subdivision.Id);
+        }
+
+        StateHasChanged();
+    }
+
+    private void StageRemoveSubdivision(RoadSubdivision subdivision)
+    {
+        if (subdivision == null) return;
+
+        // If it was marked for addition, just remove from that list
+        if (subdivisionsToAdd.Contains(subdivision.Id))
+        {
+            subdivisionsToAdd.Remove(subdivision.Id);
+        }
+        else
+        {
+            // Mark existing subdivision for removal
+            subdivisionsToRemove.Add(subdivision.Id);
+        }
+
+        StateHasChanged();
+    }
+
+    private IEnumerable<RoadSubdivision> GetDisplayedSubdivisions()
+    {
+        var displayed = new List<RoadSubdivision>();
+
+        // Start with currently assigned subdivisions
+        if (roadSubdivisionsForSelectedRoad != null)
+        {
+            displayed.AddRange(roadSubdivisionsForSelectedRoad.Where(s => !subdivisionsToRemove.Contains(s.Id)));
+        }
+
+        // Add staged additions
+        if (roadSubdivisions != null)
+        {
+            var toAdd = roadSubdivisions.Where(s => subdivisionsToAdd.Contains(s.Id));
+            displayed.AddRange(toAdd);
+        }
+
+        return displayed;
+    }
+
+    private async Task AddSubdivision(RoadSubdivision subdivision)
+    {
+        if (selectedRoad == null || subdivision == null) return;
+
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userEmail = user.Identity?.Name ?? user.Claims.FirstOrDefault(c => c.Type.Contains("email"))?.Value;
+
+            var result = await RoadsApi.AddSubdivisionToRoadAsync(selectedRoad.Id, subdivision.Id);
+
+            if (result?.IsSuccess == true)
+            {
+                await LoadSubdivisionsForRoad();
+                successMessage = $"Added subdivision '{subdivision.Name}' successfully!";
+                await InvokeAsync(StateHasChanged);
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to add subdivision";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error adding subdivision: {ex.Message}";
+        }
+    }
+
+    private async Task RemoveSubdivision(RoadSubdivision subdivision)
+    {
+        if (selectedRoad == null) return;
+
+        try
+        {
+            var result = await RoadsApi.RemoveSubdivisionFromRoadAsync(selectedRoad.Id, subdivision.Id);
+
+            if (result?.IsSuccess == true)
+            {
+                await LoadSubdivisionsForRoad();
+                successMessage = $"Removed subdivision '{subdivision.Name}' successfully!";
+                await InvokeAsync(StateHasChanged);
+            }
+            else
+            {
+                errorMessage = result?.ErrorMessage ?? "Failed to remove subdivision";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error removing subdivision: {ex.Message}";
+        }
+    }
+
+    private IEnumerable<RoadSubdivision> GetAvailableSubdivisions()
+    {
+        if (roadSubdivisions == null) return Array.Empty<RoadSubdivision>();
+
+        var assignedIds = new HashSet<int>();
+
+        // Add currently assigned subdivisions (unless marked for removal)
+        if (roadSubdivisionsForSelectedRoad != null)
+        {
+            assignedIds.UnionWith(roadSubdivisionsForSelectedRoad
+                .Where(s => !subdivisionsToRemove.Contains(s.Id))
+                .Select(s => s.Id));
+        }
+
+        // Add staged additions
+        assignedIds.UnionWith(subdivisionsToAdd);
+
+        return roadSubdivisions.Where(s => !assignedIds.Contains(s.Id)).OrderBy(s => s.Name);
+    }
+
+    private async Task<IEnumerable<RoadSubdivision>> SearchAvailableSubdivisions(string searchString, CancellationToken cancellationToken)
+    {
+        var available = GetAvailableSubdivisions();
+
+        await Task.Delay(0, cancellationToken); // Prevent warning about async method
+
+        if (string.IsNullOrWhiteSpace(searchString))
+        {
+            return available.Take(50);
+        }
+
+        searchString = searchString.ToLowerInvariant();
+
+        return available
+            .Where(s => s.Name?.ToLowerInvariant().Contains(searchString) == true)
+            .Take(50);
     }
 }

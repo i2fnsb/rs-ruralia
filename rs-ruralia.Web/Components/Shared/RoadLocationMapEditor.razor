@@ -3,15 +3,13 @@
 @inject IJSRuntime JS
 
 <div class="road-location-map-editor">
-    <MudPaper Elevation="2" Class="pa-3">
-        @if (ReadOnly)
-        {
-            <MudText Typo="Typo.subtitle2" Class="mb-2">
-                <MudIcon Icon="@Icons.Material.Filled.Map" Size="Size.Small" /> Road Location (View Only)
-            </MudText>
-        }
-        else
-        {
+    @if (ReadOnly)
+    {
+        <div id="@mapId" style="height: 500px; width: 100%; border-radius: 4px;"></div>
+    }
+    else
+    {
+        <MudPaper Elevation="2" Class="pa-3">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
                 <MudText Typo="Typo.subtitle2">
                     <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" /> Edit Road Location
@@ -33,39 +31,39 @@
                     </MudTooltip>
                 </MudStack>
             </MudStack>
-        }
 
-        <div id="@mapId" style="height: 500px; width: 100%; border-radius: 4px;"></div>
+            <div id="@mapId" style="height: 500px; width: 100%; border-radius: 4px;"></div>
 
-        @if (!string.IsNullOrEmpty(currentWkt))
-        {
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mt-2">
-                <MudText Typo="Typo.caption" Color="Color.Success">
-                    <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" /> Line feature defined
-                    @if (calculatedDistance > 0)
+            @if (!string.IsNullOrEmpty(currentWkt))
+            {
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mt-2">
+                    <MudText Typo="Typo.caption" Color="Color.Success">
+                        <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" /> Line feature defined
+                        @if (calculatedDistance > 0)
+                        {
+                            <span> - Distance: @calculatedDistance.ToString("N2") feet</span>
+                        }
+                    </MudText>
+                    @if (calculatedDistance > 0 && ShowApplyDistanceButton)
                     {
-                        <span> - Distance: @calculatedDistance.ToString("N2") feet</span>
+                        <MudButton Size="Size.Small" 
+                                  Variant="Variant.Outlined" 
+                                  Color="Color.Primary"
+                                  StartIcon="@Icons.Material.Filled.SwapHoriz"
+                                  OnClick="ApplyCalculatedDistance">
+                            Apply to Distance Field
+                        </MudButton>
                     }
+                </MudStack>
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Class="mt-2" Color="Color.Secondary">
+                    Click "Draw new line" to add a road location
                 </MudText>
-                @if (!ReadOnly && calculatedDistance > 0 && ShowApplyDistanceButton)
-                {
-                    <MudButton Size="Size.Small" 
-                              Variant="Variant.Outlined" 
-                              Color="Color.Primary"
-                              StartIcon="@Icons.Material.Filled.SwapHoriz"
-                              OnClick="ApplyCalculatedDistance">
-                        Apply to Distance Field
-                    </MudButton>
-                }
-            </MudStack>
-        }
-        else if (!ReadOnly)
-        {
-            <MudText Typo="Typo.caption" Class="mt-2" Color="Color.Secondary">
-                Click "Draw new line" to add a road location
-            </MudText>
-        }
-    </MudPaper>
+            }
+        </MudPaper>
+    }
 </div>
 
 @code {

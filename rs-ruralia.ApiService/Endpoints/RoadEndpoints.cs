@@ -66,6 +66,33 @@ public static class RoadEndpoints
         })
         .WithName("DeleteRoad");
 
+        group.MapGet("/{id:int}/subdivisions", async (int id, RoadService service) =>
+        {
+            var result = await service.GetSubdivisionsByRoadIdAsync(id);
+            return result.IsSuccess 
+                ? Results.Ok(result.Data) 
+                : Results.BadRequest(new { error = result.ErrorMessage, errors = result.Errors });
+        })
+        .WithName("GetSubdivisionsByRoad");
+
+        group.MapPost("/{roadId:int}/subdivisions/{subdivisionId:int}", async (int roadId, int subdivisionId, [FromBody] RoadRoadSubdivision entity, RoadService service) =>
+        {
+            var result = await service.AddSubdivisionToRoadAsync(roadId, subdivisionId, entity.ModifiedBy);
+            return result.IsSuccess 
+                ? Results.Created($"/roads/{roadId}/subdivisions/{subdivisionId}", result.Data)
+                : Results.BadRequest(new { error = result.ErrorMessage, errors = result.Errors });
+        })
+        .WithName("AddSubdivisionToRoad");
+
+        group.MapDelete("/{roadId:int}/subdivisions/{subdivisionId:int}", async (int roadId, int subdivisionId, RoadService service) =>
+        {
+            var result = await service.RemoveSubdivisionFromRoadAsync(roadId, subdivisionId);
+            return result.IsSuccess 
+                ? Results.NoContent() 
+                : Results.BadRequest(new { error = result.ErrorMessage, errors = result.Errors });
+        })
+        .WithName("RemoveSubdivisionFromRoad");
+
         return app;
     }
 }
