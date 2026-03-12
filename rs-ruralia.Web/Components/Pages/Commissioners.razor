@@ -32,6 +32,7 @@
                        SearchPlaceholder="Search commissioners..."
                        ShowSearch="true"
                        SearchString="@_searchString"
+                       CustomQuickFilter="@QuickFilterCommissioners"
                        ShowTotalCount="true"
                        TotalCount="@(GetPeopleWithCommissionerProfiles()?.Count())"
                        CountIcon="@Icons.Material.Filled.Groups"
@@ -2098,5 +2099,54 @@
     {
         // TODO: Implement create dialog
         await Task.CompletedTask;
+    }
+
+    private bool QuickFilterCommissioners(PersonProfile person, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+
+        searchString = searchString.ToLowerInvariant();
+
+        // Search in person name
+        var personName = GetPersonName(person.Id).ToLowerInvariant();
+        if (personName.Contains(searchString))
+            return true;
+
+        // Get the most recent commissioner profile for this person
+        var profile = GetMostRecentCommissionerProfile(person.Id);
+        if (profile == null)
+            return false;
+
+        // Search in seat type
+        var seat = commissionSeats?.FirstOrDefault(s => s.Id == profile.CommissionSeatId);
+        if (seat != null)
+        {
+            var seatType = commissionSeatTypes?.FirstOrDefault(t => t.Id == seat.CommissionSeatTypeId);
+            if (seatType?.Type?.ToLowerInvariant().Contains(searchString) == true)
+                return true;
+
+            var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == seat.CommissionSeatClassId);
+            if (seatClass?.Class?.ToLowerInvariant().Contains(searchString) == true)
+                return true;
+
+            var serviceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == seat.ServiceAreaId);
+            if (serviceArea?.Name?.ToLowerInvariant().Contains(searchString) == true)
+                return true;
+        }
+
+        // Search in status
+        var status = commissionerStatuses?.FirstOrDefault(s => s.Id == profile.CommissionerStatusId);
+        if (status?.Status?.ToLowerInvariant().Contains(searchString) == true)
+            return true;
+
+        // Search for "active" or "inactive"
+        var isActive = HasActiveProfile(person.Id);
+        if (isActive && "active".Contains(searchString))
+            return true;
+        if (!isActive && "inactive".Contains(searchString))
+            return true;
+
+        return false;
     }
 }
