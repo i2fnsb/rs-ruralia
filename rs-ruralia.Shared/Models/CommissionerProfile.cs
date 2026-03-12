@@ -20,7 +20,7 @@ public class CommissionerProfile
     public bool? Invoices { get; set; }
 
     [Column("resides_in_service_area")]
-    [Display(Name = "Resides in Service Area", Description = "Does the commissioner reside in the service area")]
+    [Display(Name = "Resides in Service Area", Description = "Does the commissioner reside in the service area?")]
     public bool? ResidesInServiceArea { get; set; }
 
     [Column("registered_voter")]
