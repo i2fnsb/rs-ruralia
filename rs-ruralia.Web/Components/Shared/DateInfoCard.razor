@@ -1,0 +1,35 @@
+@typeparam TModel
+@* Reusable InfoCard specifically for date fields with consistent formatting *@
+
+<InfoCard TValue="string" 
+          TModel="TModel"
+          Label="@Label" 
+          Icon="@Icon"
+          Value="@FormattedValue"
+          PropertyExpression="@PropertyExpression"
+          ValueStyle="@ValueStyle" />
+
+@code {
+    [Parameter, EditorRequired]
+    public DateTime? Value { get; set; }
+
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    [Parameter]
+    public string Icon { get; set; } = Icons.Material.Filled.CalendarToday;
+
+    [Parameter, EditorRequired]
+    public System.Linq.Expressions.Expression<Func<TModel, object?>> PropertyExpression { get; set; } = default!;
+
+    [Parameter]
+    public string DateFormat { get; set; } = "MMM d, yyyy";
+
+    [Parameter]
+    public string NullText { get; set; } = "—";
+
+    [Parameter]
+    public string? ValueStyle { get; set; }
+
+    private string FormattedValue => Value?.ToString(DateFormat) ?? NullText;
+}

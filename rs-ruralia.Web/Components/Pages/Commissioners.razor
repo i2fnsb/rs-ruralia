@@ -500,7 +500,7 @@
                                                                       Color="Color.Primary" 
                                                                       Size="Size.Small"
                                                                       StartIcon="@Icons.Material.Filled.OpenInNew"
-                                                                      OnClick="@(() => NavigationManager.NavigateTo($"/persons?id={displayVersion.PersonProfileId}"))">
+                                                                      OnClick="@(() => NavigationHelper.NavigateToEntity(NavigationManager, "/persons", displayVersion.PersonProfileId))">
                                                                 @GetPersonName(displayVersion.PersonProfileId)
                                                             </MudButton>
                                                         }
@@ -530,7 +530,7 @@
                                                                       Color="Color.Primary" 
                                                                       Size="Size.Small"
                                                                       StartIcon="@Icons.Material.Filled.OpenInNew"
-                                                                      OnClick="@(() => NavigationManager.NavigateTo($"/service-areas?id={versionServiceArea.Id}"))">
+                                                                      OnClick="@(() => NavigationHelper.NavigateToEntity(NavigationManager, "/service-areas", versionServiceArea.Id))">
                                                                 @versionServiceArea.Name
                                                             </MudButton>
                                                         }
@@ -558,7 +558,7 @@
                                                                       Color="Color.Primary" 
                                                                       Size="Size.Small"
                                                                       StartIcon="@Icons.Material.Filled.OpenInNew"
-                                                                      OnClick="@(() => NavigationManager.NavigateTo($"/commission-seats?id={versionSeatForDisplay.Id}"))">
+                                                                      OnClick="@(() => NavigationHelper.NavigateToEntity(NavigationManager, "/commission-seats", versionSeatForDisplay.Id))">
                                                                 @seatDisplay
                                                             </MudButton>
                                                         }
@@ -1352,8 +1352,7 @@
         await LoadAllVersions();
         await InvokeAsync(StateHasChanged);
 
-        var uri = NavigationManager.GetUriWithQueryParameter("id", selectedPerson.Id);
-        NavigationManager.NavigateTo(uri, replace: true);
+        NavigationHelper.UpdateUrlWithSelection(NavigationManager, selectedPerson.Id);
     }
 
     private async Task HandleRestore(CommissionerProfile historicalRecord)
@@ -1560,26 +1559,7 @@
         EntityPageHelper.ClearMessages(ref errorMessage, ref errorDetails, ref successMessage);
     }
 
-    private CommissionerProfile CloneCommissioner(CommissionerProfile source) => new()
-    {
-        Id = source.Id,
-        PersonProfileId = source.PersonProfileId,
-        CommissionSeatId = source.CommissionSeatId,
-        CommissionerStatusId = source.CommissionerStatusId,
-        AppointedDate = source.AppointedDate,
-        EndDate = source.EndDate,
-        Oath = source.Oath,
-        AssemblyMeetingDate = source.AssemblyMeetingDate,
-        EffectiveDate = source.EffectiveDate,
-        RegisteredVoter = source.RegisteredVoter,
-        RecommendedForAppointment = source.RecommendedForAppointment,
-        DoNotAppoint = source.DoNotAppoint,
-        DoNotAppointDetails = source.DoNotAppointDetails,
-        Invoices = source.Invoices,
-        ValidFrom = source.ValidFrom,
-        ValidTo = source.ValidTo,
-        ModifiedBy = source.ModifiedBy
-    };
+    private CommissionerProfile CloneCommissioner(CommissionerProfile source) => EntityCloneHelper.ShallowClone(source);
 
     private string GetPersonName(int personProfileId)
     {

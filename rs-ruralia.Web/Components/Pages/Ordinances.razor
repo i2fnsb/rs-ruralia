@@ -383,34 +383,18 @@
         isLoadingHistory = true;
         historyErrorMessage = null;
 
-        try
-        {
-            var historyResult = await OrdinancesApi.GetOrdinanceHistoryAsync(selectedOrdinance.Id);
-            var historyRecords = new List<Ordinance>();
+        var (versions, current, error) = await VersionHistoryHelper.LoadAllVersionsAsync(
+            selectedOrdinance,
+            id => OrdinancesApi.GetOrdinanceHistoryAsync(id),
+            x => x.Id,
+            x => x.ValidFrom);
 
-            if (historyResult?.IsSuccess == true && historyResult.Data != null)
-            {
-                historyRecords.AddRange(historyResult.Data);
-            }
+        allVersions = versions;
+        currentViewVersion = current;
+        historyErrorMessage = error;
+        UpdateEditModel(currentViewVersion);
 
-            var versions = new List<Ordinance> { selectedOrdinance };
-            versions.AddRange(historyRecords.Where(h => h.ValidFrom != selectedOrdinance.ValidFrom));
-            
-            allVersions = versions;
-            currentViewVersion = selectedOrdinance;
-            UpdateEditModel(currentViewVersion);
-        }
-        catch (Exception ex)
-        {
-            historyErrorMessage = $"Error loading versions: {ex.Message}";
-            allVersions = new List<Ordinance> { selectedOrdinance };
-            currentViewVersion = selectedOrdinance;
-            UpdateEditModel(currentViewVersion);
-        }
-        finally
-        {
-            isLoadingHistory = false;
-        }
+        isLoadingHistory = false;
     }
 
     private async Task OnCurrentVersionChanged(Ordinance newVersion)
@@ -455,8 +439,7 @@
         await LoadAllVersions();
         await InvokeAsync(StateHasChanged);
 
-        var uri = NavigationManager.GetUriWithQueryParameter("id", selectedOrdinance.Id);
-        NavigationManager.NavigateTo(uri, replace: true);
+        NavigationHelper.UpdateUrlWithSelection(NavigationManager, selectedOrdinance.Id);
     }
 
     private async Task HandleRestore(Ordinance historicalRecord)
@@ -466,41 +449,33 @@
         isSaving = true;
         ClearMessages();
 
-        try
-        {
-            var restoredData = CloneOrdinance(historicalRecord);
-            restoredData.Id = selectedOrdinance.Id;
+        var (success, errorMsg, errors) = await VersionHistoryHelper.HandleRestoreAsync(
+            selectedOrdinance,
+            historicalRecord,
+            CloneOrdinance,
+            (entity, id) => entity.Id = id,
+            (id, entity) => OrdinancesApi.UpdateOrdinanceAsync(id, entity),
+            x => x.Id,
+            x => x.ValidFrom);
 
-            var result = await OrdinancesApi.UpdateOrdinanceAsync(restoredData.Id, restoredData);
+        if (success)
+        {
+            successMessage = errorMsg;
+            await LoadOrdinances();
+            selectedOrdinance = ordinances?.FirstOrDefault(o => o.Id == selectedOrdinance.Id);
+            if (selectedOrdinance != null)
+            {
+                await LoadAllVersions();
+            }
+            isEditMode = false;
+        }
+        else
+        {
+            errorMessage = errorMsg;
+            errorDetails = errors;
+        }
 
-            if (result?.IsSuccess == true)
-            {
-                successMessage = $"Successfully restored version from {historicalRecord.ValidFrom:g}";
-                
-                await LoadOrdinances();
-                
-                selectedOrdinance = ordinances?.FirstOrDefault(o => o.Id == selectedOrdinance.Id);
-                if (selectedOrdinance != null)
-                {
-                    await LoadAllVersions();
-                }
-                
-                isEditMode = false;
-            }
-            else
-            {
-                errorMessage = result?.ErrorMessage ?? "Failed to restore historical version";
-                errorDetails = result?.Errors;
-            }
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Error restoring historical version: {ex.Message}";
-        }
-        finally
-        {
-            isSaving = false;
-        }
+        isSaving = false;
     }
 
     private void EnableEdit()
@@ -582,18 +557,7 @@
         EntityPageHelper.ClearMessages(ref errorMessage, ref errorDetails, ref successMessage);
     }
 
-    private Ordinance CloneOrdinance(Ordinance source) => new()
-    {
-        Id = source.Id,
-        OrdinanceName = source.OrdinanceName,
-        OrdinanceYear = source.OrdinanceYear,
-        OrdinancePassed = source.OrdinancePassed,
-        OrdinanceTypeId = source.OrdinanceTypeId,
-        ServiceAreaId = source.ServiceAreaId,
-        ValidFrom = source.ValidFrom,
-        ValidTo = source.ValidTo,
-        ModifiedBy = source.ModifiedBy
-    };
+    private Ordinance CloneOrdinance(Ordinance source) => EntityCloneHelper.ShallowClone(source);
 
     private bool OrdinancesQuickFilter(Ordinance ordinance, string searchString)
     {

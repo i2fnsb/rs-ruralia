@@ -277,6 +277,9 @@ builder.Services.AddHttpClient<CorrespondenceProfilesApiClient>(client =>
 builder.Services.AddMudServices();
 builder.Services.AddCascadingAuthenticationState();
 
+// Register Lookup Data Service (with caching)
+builder.Services.AddScoped<ILookupDataService, LookupDataService>();
+
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())

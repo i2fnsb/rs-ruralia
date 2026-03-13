@@ -585,14 +585,7 @@
                                     <MudTd DataLabel="Start Description">@context.StartDescription</MudTd>
                                     <MudTd DataLabel="End Description">@context.EndDescription</MudTd>
                                     <MudTd DataLabel="Approved">
-                                        @if (context.ApprovedForMaintenance == true)
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
-                                        }
-                                        else
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
-                                        }
+                                        <BooleanTableCell Value="@context.ApprovedForMaintenance" />
                                     </MudTd>
                                     <MudTd DataLabel="Actions">
                                         <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
@@ -794,38 +787,22 @@
         isLoadingHistory = true;
         historyErrorMessage = null;
 
-        try
-        {
-            var historyResult = await RoadsApi.GetRoadHistoryAsync(selectedRoad.Id);
-            var historyRecords = new List<Road>();
+        var (versions, current, error) = await VersionHistoryHelper.LoadAllVersionsAsync(
+            selectedRoad,
+            id => RoadsApi.GetRoadHistoryAsync(id),
+            x => x.Id,
+            x => x.ValidFrom);
 
-            if (historyResult?.IsSuccess == true && historyResult.Data != null)
-            {
-                historyRecords.AddRange(historyResult.Data);
-            }
+        allVersions = versions;
+        currentViewVersion = current;
+        historyErrorMessage = error;
+        UpdateEditModel(currentViewVersion);
 
-            var versions = new List<Road> { selectedRoad };
-            versions.AddRange(historyRecords.Where(h => h.ValidFrom != selectedRoad.ValidFrom));
+        // Load related data
+        await LoadRelatedRoads();
+        await LoadSubdivisionsForRoad();
 
-            allVersions = versions;
-            currentViewVersion = selectedRoad;
-            UpdateEditModel(currentViewVersion);
-
-            // Load related data
-            await LoadRelatedRoads();
-            await LoadSubdivisionsForRoad();
-        }
-        catch (Exception ex)
-        {
-            historyErrorMessage = $"Error loading versions: {ex.Message}";
-            allVersions = new List<Road> { selectedRoad };
-            currentViewVersion = selectedRoad;
-            UpdateEditModel(currentViewVersion);
-        }
-        finally
-        {
-            isLoadingHistory = false;
-        }
+        isLoadingHistory = false;
     }
 
     private string? GetFeatureLayerUrl()
@@ -908,8 +885,7 @@
         await LoadAllVersions();
         await InvokeAsync(StateHasChanged);
 
-        var uri = NavigationManager.GetUriWithQueryParameter("id", selectedRoad.Id);
-        NavigationManager.NavigateTo(uri, replace: true);
+        NavigationHelper.UpdateUrlWithSelection(NavigationManager, selectedRoad.Id);
     }
 
     private async Task HandleRestore(Road historicalRecord)
@@ -919,41 +895,33 @@
         isSaving = true;
         ClearMessages();
 
-        try
-        {
-            var restoredData = CloneRoad(historicalRecord);
-            restoredData.Id = selectedRoad.Id;
+        var (success, errorMsg, errors) = await VersionHistoryHelper.HandleRestoreAsync(
+            selectedRoad,
+            historicalRecord,
+            CloneRoad,
+            (entity, id) => entity.Id = id,
+            (id, entity) => RoadsApi.UpdateRoadAsync(id, entity),
+            x => x.Id,
+            x => x.ValidFrom);
 
-            var result = await RoadsApi.UpdateRoadAsync(restoredData.Id, restoredData);
+        if (success)
+        {
+            successMessage = errorMsg;
+            await LoadRoads();
+            selectedRoad = roads?.FirstOrDefault(r => r.Id == selectedRoad.Id);
+            if (selectedRoad != null)
+            {
+                await LoadAllVersions();
+            }
+            isEditMode = false;
+        }
+        else
+        {
+            errorMessage = errorMsg;
+            errorDetails = errors;
+        }
 
-            if (result?.IsSuccess == true)
-            {
-                successMessage = $"Successfully restored version from {historicalRecord.ValidFrom:g}";
-                
-                await LoadRoads();
-                
-                selectedRoad = roads?.FirstOrDefault(r => r.Id == selectedRoad.Id);
-                if (selectedRoad != null)
-                {
-                    await LoadAllVersions();
-                }
-                
-                isEditMode = false;
-            }
-            else
-            {
-                errorMessage = result?.ErrorMessage ?? "Failed to restore historical version";
-                errorDetails = result?.Errors;
-            }
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Error restoring historical version: {ex.Message}";
-        }
-        finally
-        {
-            isSaving = false;
-        }
+        isSaving = false;
     }
 
     private void EnableEdit()
@@ -1080,27 +1048,7 @@
         EntityPageHelper.ClearMessages(ref errorMessage, ref errorDetails, ref successMessage);
     }
 
-    private Road CloneRoad(Road source) => new()
-    {
-        Id = source.Id,
-        RoadNameId = source.RoadNameId,
-        Phase = source.Phase,
-        DistanceFeet = source.DistanceFeet,
-        StartDescription = source.StartDescription,
-        EndDescription = source.EndDescription,
-        StartCoordinates = source.StartCoordinates,
-        EndCoordinates = source.EndCoordinates,
-        ApprovedForMaintenance = source.ApprovedForMaintenance,
-        Mpo = source.Mpo,
-        LegacySubdivisionName = source.LegacySubdivisionName,
-        RoadSurfaceTypeId = source.RoadSurfaceTypeId,
-        ResponderCodeId = source.ResponderCodeId,
-        ServiceAreaId = source.ServiceAreaId,
-        RoadLocation = source.RoadLocation,
-        ValidFrom = source.ValidFrom,
-        ValidTo = source.ValidTo,
-        ModifiedBy = source.ModifiedBy
-    };
+    private Road CloneRoad(Road source) => EntityCloneHelper.ShallowClone(source);
 
     private string GetRoadDisplayText(Road road)
     {
@@ -1129,7 +1077,7 @@
 
     private void NavigateToRoad(Road road)
     {
-        NavigationManager.NavigateTo($"/roads?id={road.Id}");
+        NavigationHelper.NavigateToEntity(NavigationManager, "/roads", road.Id);
     }
 
     private async Task OpenCreateDialog()

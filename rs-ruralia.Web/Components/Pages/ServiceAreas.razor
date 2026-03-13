@@ -430,24 +430,14 @@
                                         <MudTd DataLabel="Ordinance">@context.OrdinanceName</MudTd>
                                         <MudTd DataLabel="Year">@context.OrdinanceYear</MudTd>
                                         <MudTd DataLabel="Type">
-                                            @{
-                                                var type = ordinanceTypes?.FirstOrDefault(t => t.Id == context.OrdinanceTypeId);
-                                                @(type != null ? $"{type.Type} - {type.Description}" : "—")
-                                            }
+                                            <LookupDisplay TLookup="OrdinanceType"
+                                                         LookupId="@context.OrdinanceTypeId"
+                                                         LookupItems="@ordinanceTypes"
+                                                         DisplaySelector="@(t => $"{t.Type} - {t.Description}")" />
                                         </MudTd>
                                         <MudTd DataLabel="Passed">
-                                            @if (context.OrdinancePassed == true)
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
-                                            }
-                                            else if (context.OrdinancePassed == false)
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Close">No</MudChip>
-                                            }
-                                            else
-                                            {
-                                                <MudText>—</MudText>
-                                            }
+                                            <BooleanTableCell Value="@context.OrdinancePassed" 
+                                                            FalseColor="Color.Error" />
                                         </MudTd>
                                         <MudTd DataLabel="Actions">
                                             <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
@@ -638,10 +628,10 @@
                                     <RowTemplate>
                                         <MudTd DataLabel="RFQ Number">@context.RfqNumber</MudTd>
                                         <MudTd DataLabel="Type">
-                                            @{
-                                                var ifbType = rfqIfbTypes?.FirstOrDefault(t => t.Id == context.RfqIfbTypeId);
-                                                @(ifbType?.Type ?? "—")
-                                            }
+                                            <LookupDisplay TLookup="RfqIfbType"
+                                                         LookupId="@context.RfqIfbTypeId"
+                                                         LookupItems="@rfqIfbTypes"
+                                                         DisplaySelector="@(t => t.Type ?? "—")" />
                                         </MudTd>
                                         <MudTd DataLabel="Project Scope">
                                             @{
@@ -653,18 +643,9 @@
                                         <MudTd DataLabel="Issue Date">@(context.IssueDate?.ToString("MMM d, yyyy") ?? "—")</MudTd>
                                         <MudTd DataLabel="Opening Date">@(context.OpeningDate?.ToString("MMM d, yyyy") ?? "—")</MudTd>
                                         <MudTd DataLabel="Completed">
-                                            @if (context.Completed == true)
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
-                                            }
-                                            else if (context.Completed == false)
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.HourglassEmpty">No</MudChip>
-                                            }
-                                            else
-                                            {
-                                                <MudText>—</MudText>
-                                            }
+                                            <BooleanTableCell Value="@context.Completed" 
+                                                            FalseColor="Color.Warning" 
+                                                            FalseIcon="@Icons.Material.Filled.HourglassEmpty" />
                                         </MudTd>
                                         <MudTd DataLabel="Actions">
                                             <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
@@ -717,28 +698,17 @@
                                     </HeaderContent>
                                     <RowTemplate>
                                         <MudTd DataLabel="Road Name">
-                                            @{
-                                                var roadName = roadNames?.FirstOrDefault(rn => rn.Id == context.RoadNameId);
-                                                @(roadName?.Name ?? "—")
-                                            }
+                                            <LookupDisplay TLookup="RoadName"
+                                                         LookupId="@context.RoadNameId"
+                                                         LookupItems="@roadNames"
+                                                         DisplaySelector="@(rn => rn.Name ?? "—")" />
                                         </MudTd>
                                         <MudTd DataLabel="Phase">@(context.Phase?.ToString() ?? "—")</MudTd>
                                         <MudTd DataLabel="Distance (Feet)">@(context.DistanceFeet?.ToString("N2") ?? "—")</MudTd>
                                         <MudTd DataLabel="Start Description">@(context.StartDescription ?? "—")</MudTd>
                                         <MudTd DataLabel="End Description">@(context.EndDescription ?? "—")</MudTd>
                                         <MudTd DataLabel="Approved for Maintenance">
-                                            @if (context.ApprovedForMaintenance == true)
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
-                                            }
-                                            else if (context.ApprovedForMaintenance == false)
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
-                                            }
-                                            else
-                                            {
-                                                <MudText>—</MudText>
-                                            }
+                                            <BooleanTableCell Value="@context.ApprovedForMaintenance" />
                                         </MudTd>
                                         <MudTd DataLabel="Actions">
                                             <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
@@ -994,45 +964,25 @@
         isLoadingHistory = true;
         historyErrorMessage = null;
 
-        try
-        {
-            // Load history
-            var historyResult = await ServiceAreasApi.GetServiceAreaHistoryAsync(selectedServiceArea.Id);
-            var historyRecords = new List<ServiceArea>();
+        var (versions, current, error) = await VersionHistoryHelper.LoadAllVersionsAsync(
+            selectedServiceArea,
+            id => ServiceAreasApi.GetServiceAreaHistoryAsync(id),
+            x => x.Id,
+            x => x.ValidFrom);
 
-            if (historyResult?.IsSuccess == true && historyResult.Data != null)
-            {
-                historyRecords.AddRange(historyResult.Data);
-            }
+        allVersions = versions;
+        currentViewVersion = current;
+        historyErrorMessage = error;
+        UpdateEditModel(currentViewVersion);
 
-            // Combine current with history
-            var versions = new List<ServiceArea> { selectedServiceArea };
-            versions.AddRange(historyRecords.Where(h => h.ValidFrom != selectedServiceArea.ValidFrom));
-            
-            allVersions = versions;
-            
-            // Set the current version as the view version
-            currentViewVersion = selectedServiceArea;
-            UpdateEditModel(currentViewVersion);
+        // Load related data for this service area
+        await LoadServiceAreaOrdinances();
+        await LoadOrdinanceTypes();
+        await LoadCommissionSeats();
+        await LoadServiceAreaRoads();
+        await LoadServiceAreaRfqs();
 
-            // Load related data for this service area
-            await LoadServiceAreaOrdinances();
-            await LoadOrdinanceTypes();
-            await LoadCommissionSeats();
-            await LoadServiceAreaRoads();
-            await LoadServiceAreaRfqs();
-        }
-        catch (Exception ex)
-        {
-            historyErrorMessage = $"Error loading versions: {ex.Message}";
-            allVersions = new List<ServiceArea> { selectedServiceArea };
-            currentViewVersion = selectedServiceArea;
-            UpdateEditModel(currentViewVersion);
-        }
-        finally
-        {
-            isLoadingHistory = false;
-        }
+        isLoadingHistory = false;
     }
 
     private async Task OnCurrentVersionChanged(ServiceArea newVersion)
@@ -1078,9 +1028,7 @@
         await LoadAllVersions();
         await InvokeAsync(StateHasChanged);
 
-        // Update URL with the selected service area ID
-        var uri = NavigationManager.GetUriWithQueryParameter("id", selectedServiceArea.Id);
-        NavigationManager.NavigateTo(uri, replace: true);
+        NavigationHelper.UpdateUrlWithSelection(NavigationManager, selectedServiceArea.Id);
     }
 
     private async Task HandleRestore(ServiceArea historicalRecord)
@@ -1090,44 +1038,33 @@
         isSaving = true;
         ClearMessages();
 
-        try
-        {
-            // Clone the historical record but keep the current ID
-            var restoredData = CloneServiceArea(historicalRecord);
-            restoredData.Id = selectedServiceArea.Id;
+        var (success, errorMsg, errors) = await VersionHistoryHelper.HandleRestoreAsync(
+            selectedServiceArea,
+            historicalRecord,
+            CloneServiceArea,
+            (entity, id) => entity.Id = id,
+            (id, entity) => ServiceAreasApi.UpdateServiceAreaAsync(id, entity),
+            x => x.Id,
+            x => x.ValidFrom);
 
-            var result = await ServiceAreasApi.UpdateServiceAreaAsync(restoredData.Id, restoredData);
+        if (success)
+        {
+            successMessage = errorMsg;
+            await LoadServiceAreas();
+            selectedServiceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == selectedServiceArea.Id);
+            if (selectedServiceArea != null)
+            {
+                await LoadAllVersions();
+            }
+            isEditMode = false;
+        }
+        else
+        {
+            errorMessage = errorMsg;
+            errorDetails = errors;
+        }
 
-            if (result?.IsSuccess == true)
-            {
-                successMessage = $"Successfully restored version from {historicalRecord.ValidFrom:g}";
-                
-                // Reload all data
-                await LoadServiceAreas();
-                
-                // Update the current selection
-                selectedServiceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == selectedServiceArea.Id);
-                if (selectedServiceArea != null)
-                {
-                    await LoadAllVersions();
-                }
-                
-                isEditMode = false;
-            }
-            else
-            {
-                errorMessage = result?.ErrorMessage ?? "Failed to restore historical version";
-                errorDetails = result?.Errors;
-            }
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Error restoring historical version: {ex.Message}";
-        }
-        finally
-        {
-            isSaving = false;
-        }
+        isSaving = false;
     }
 
     private void EnableEdit()
@@ -1211,26 +1148,7 @@
         EntityPageHelper.ClearMessages(ref errorMessage, ref errorDetails, ref successMessage);
     }
 
-    private ServiceArea CloneServiceArea(ServiceArea source) => new()
-    {
-        Id = source.Id,
-        Name = source.Name,
-        FeatureObjectId = source.FeatureObjectId,
-        OrgKey = source.OrgKey,
-        CurrentMileage = source.CurrentMileage,
-        AbolishMergeYear = source.AbolishMergeYear,
-        MaximumMillRate = source.MaximumMillRate,
-        CurrentMillRate = source.CurrentMillRate,
-        FireMillRate = source.FireMillRate,
-        MillLevy = source.MillLevy,
-        TaxAuthorityCode = source.TaxAuthorityCode,
-        InitialTaxYear = source.InitialTaxYear,
-        MatchFeatureLayer = source.MatchFeatureLayer,
-        ServiceAreaCodeId = source.ServiceAreaCodeId,
-        ValidFrom = source.ValidFrom,
-        ValidTo = source.ValidTo,
-        ModifiedBy = source.ModifiedBy
-    };
+    private ServiceArea CloneServiceArea(ServiceArea source) => EntityCloneHelper.ShallowClone(source);
 
     private async Task<bool> CreateServiceAreaCode(ServiceAreaCode entity)
     {
@@ -1278,13 +1196,12 @@
 
     private void NavigateToOrdinance(Ordinance ordinance)
     {
-        NavigationManager.NavigateTo($"/ordinances?id={ordinance.Id}");
+        NavigationHelper.NavigateToEntity(NavigationManager, "/ordinances", ordinance.Id);
     }
 
     private void NavigateToCommissionSeat(CommissionSeat seat)
     {
-        // TODO: Create Commission Seat details page
-        NavigationManager.NavigateTo($"/commission-seats?id={seat.Id}");
+        NavigationHelper.NavigateToEntity(NavigationManager, "/commission-seats", seat.Id);
     }
 
     // Helper methods for ordering and grouping
@@ -1453,7 +1370,7 @@
 
     private void NavigateToRoad(Road road)
     {
-        NavigationManager.NavigateTo($"/roads?id={road.Id}");
+        NavigationHelper.NavigateToEntity(NavigationManager, "/roads", road.Id);
     }
 
     private void CalculateCurrentMileage()
@@ -1506,7 +1423,7 @@
 
     private void NavigateToRfq(Rfq rfq)
     {
-        NavigationManager.NavigateTo($"/rfqs?id={rfq.Id}");
+        NavigationHelper.NavigateToEntity(NavigationManager, "/rfqs", rfq.Id);
     }
 
     private async Task PromptForEditNote(int serviceAreaId, string? userEmail)
@@ -1562,9 +1479,7 @@
             {
                 await LoadAllVersions();
 
-                // Update URL
-                var uri = NavigationManager.GetUriWithQueryParameter("id", selectedServiceArea.Id);
-                NavigationManager.NavigateTo(uri, replace: true);
+                NavigationHelper.UpdateUrlWithSelection(NavigationManager, selectedServiceArea.Id);
             }
 
             successMessage = $"Service area '{createdServiceArea.Name}' created successfully!";
