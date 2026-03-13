@@ -1,5 +1,6 @@
 @page "/commissioners"
 @rendermode InteractiveServer 
+@implements IDisposable
 @using rs_ruralia.Shared.Enums
 @using rs_ruralia.Web.Components.Dialogs
 @using rs_ruralia.Web.Helpers
@@ -873,6 +874,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        ViewModeService.OnViewModeChanged += HandleViewModeChanged;
         await LoadAllData();
         SelectCommissionerFromParameters();
     }
@@ -880,6 +882,31 @@
     protected override void OnParametersSet()
     {
         SelectCommissionerFromParameters();
+    }
+
+    public void Dispose()
+    {
+        ViewModeService.OnViewModeChanged -= HandleViewModeChanged;
+    }
+
+    private async void HandleViewModeChanged()
+    {
+        // Clear selection if the currently selected person is no longer visible
+        if (selectedPerson != null && !ViewModeService.IsAtLeast(ViewMode.Admin))
+        {
+            // In public view, check if selected person has an active profile
+            if (!HasActiveProfile(selectedPerson.Id))
+            {
+                selectedPerson = null;
+                selectedCommissioner = null;
+                allProfilesForPerson = null;
+            }
+        }
+
+        if (selectedPerson != null)
+            LoadAllProfilesForPerson();
+
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task LoadAllData()
@@ -1026,9 +1053,17 @@
             .Distinct()
             .ToHashSet();
 
-        // Return person profiles that have commissioner profiles, ordered by status (active first), then by name
-        return personProfiles
-            .Where(p => personIdsWithProfiles.Contains(p.Id))
+        // Start with all person profiles that have commissioner profiles
+        var profiles = personProfiles.Where(p => personIdsWithProfiles.Contains(p.Id)).AsEnumerable();
+
+        // In Public view mode, only show people with active commissioner profiles
+        if (!ViewModeService.IsAtLeast(ViewMode.Admin))
+        {
+            profiles = profiles.Where(p => HasActiveProfile(p.Id));
+        }
+
+        // Return ordered by status (active first), then by name
+        return profiles
             .OrderByDescending(p => HasActiveProfile(p.Id))  // Active profiles first
             .ThenBy(p => p.LastName ?? "")
             .ThenBy(p => p.FirstName ?? "")
@@ -1039,17 +1074,41 @@
     {
         if (commissionerProfiles == null) return null;
 
-        // First try to get an active profile
-        var activeProfile = commissionerProfiles
+        // Get all active profiles for this person (Active status AND ValidTo is null)
+        var activeProfiles = commissionerProfiles
             .Where(cp => cp.PersonProfileId == personProfileId)
-            .FirstOrDefault(cp =>
+            .Where(cp =>
             {
                 var status = commissionerStatuses?.FirstOrDefault(s => s.Id == cp.CommissionerStatusId);
                 return status?.Active == true && cp.ValidTo == null;
-            });
+            })
+            .ToList();
 
-        // If no active profile, get the most recent one
-        return activeProfile ?? commissionerProfiles
+        if (activeProfiles.Any())
+        {
+            // Prioritize "Commissioner" seat type over "Alternate Commissioner"
+            var commissionerSeatType = commissionSeatTypes?.FirstOrDefault(t => 
+                t.Type?.Equals("Commissioner", StringComparison.OrdinalIgnoreCase) == true ||
+                t.TypeCode?.Equals("COMM", StringComparison.OrdinalIgnoreCase) == true);
+
+            if (commissionerSeatType != null)
+            {
+                var commissionerProfile = activeProfiles.FirstOrDefault(cp =>
+                {
+                    var seat = commissionSeats?.FirstOrDefault(s => s.Id == cp.CommissionSeatId);
+                    return seat?.CommissionSeatTypeId == commissionerSeatType.Id;
+                });
+
+                if (commissionerProfile != null)
+                    return commissionerProfile;
+            }
+
+            // Fallback: return most recent active profile
+            return activeProfiles.OrderByDescending(cp => cp.ValidFrom).First();
+        }
+
+        // If no active profile, get the most recent one overall
+        return commissionerProfiles
             .Where(cp => cp.PersonProfileId == personProfileId)
             .OrderByDescending(cp => cp.ValidFrom)
             .FirstOrDefault();
@@ -1105,11 +1164,27 @@
     {
         if (selectedPerson == null) return;
 
-        // Get all profiles for this person, ordered by most recent first
-        allProfilesForPerson = commissionerProfiles?
-            .Where(cp => cp.PersonProfileId == selectedPerson.Id)
-            .OrderByDescending(cp => cp.ValidFrom)
-            .ThenByDescending(cp => cp.AppointedDate)
+        // Get all profiles for this person
+        var profiles = commissionerProfiles?
+            .Where(cp => cp.PersonProfileId == selectedPerson.Id);
+
+        // In Public view mode, only show profiles with active status (where CommissionerStatus.Active = true)
+        if (!ViewModeService.IsAtLeast(ViewMode.Admin))
+        {
+            var activeStatusIds = commissionerStatuses?
+                .Where(s => s.Active == true)
+                .Select(s => s.Id)
+                .ToHashSet();
+
+            if (activeStatusIds != null && activeStatusIds.Any())
+            {
+                profiles = profiles?.Where(cp => activeStatusIds.Contains(cp.CommissionerStatusId));
+            }
+        }
+
+        // Order by most recent first
+        allProfilesForPerson = profiles?
+            .OrderByDescending(cp => cp.AppointedDate)
             .ToList();
 
         // Pre-compute display data for better performance
