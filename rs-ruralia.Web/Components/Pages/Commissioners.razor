@@ -1080,38 +1080,16 @@
             .Where(cp =>
             {
                 var status = commissionerStatuses?.FirstOrDefault(s => s.Id == cp.CommissionerStatusId);
-                return status?.Active == true && cp.ValidTo == null;
+                return status?.Active == true;
             })
             .ToList();
 
-        if (activeProfiles.Any())
-        {
-            // Prioritize "Commissioner" seat type over "Alternate Commissioner"
-            var commissionerSeatType = commissionSeatTypes?.FirstOrDefault(t => 
-                t.Type?.Equals("Commissioner", StringComparison.OrdinalIgnoreCase) == true ||
-                t.TypeCode?.Equals("COMM", StringComparison.OrdinalIgnoreCase) == true);
+        // Return null if no active profiles (DataGrid will show "—")
+        if (!activeProfiles.Any())
+            return null;
 
-            if (commissionerSeatType != null)
-            {
-                var commissionerProfile = activeProfiles.FirstOrDefault(cp =>
-                {
-                    var seat = commissionSeats?.FirstOrDefault(s => s.Id == cp.CommissionSeatId);
-                    return seat?.CommissionSeatTypeId == commissionerSeatType.Id;
-                });
-
-                if (commissionerProfile != null)
-                    return commissionerProfile;
-            }
-
-            // Fallback: return most recent active profile
-            return activeProfiles.OrderByDescending(cp => cp.ValidFrom).First();
-        }
-
-        // If no active profile, get the most recent one overall
-        return commissionerProfiles
-            .Where(cp => cp.PersonProfileId == personProfileId)
-            .OrderByDescending(cp => cp.ValidFrom)
-            .FirstOrDefault();
+        // Fallback: return most recent active profile
+        return activeProfiles.OrderByDescending(cp => cp.ValidFrom).First();
     }
 
     private IEnumerable<CommissionerProfile>? GetUniquePersonProfiles()
