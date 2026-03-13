@@ -950,82 +950,71 @@
         isSaving = true;
         ClearMessages();
 
-        try
+        var userEmail = await AuthenticationHelper.SetModifiedByAsync(
+            editModel, 
+            AuthenticationStateProvider,
+            (entity, email) => entity.ModifiedBy = email);
+
+        var (success, errorMsg, errors, updatedEntity) = await VersionHistoryHelper.SaveEditAsync(
+            editModel,
+            (id, entity) => RoadsApi.UpdateRoadAsync(id, entity),
+            x => x.Id,
+            "Road updated successfully!");
+
+        if (success)
         {
-            var userEmail = await AuthenticationHelper.SetModifiedByAsync(
-                editModel, 
-                AuthenticationStateProvider,
-                (entity, email) => entity.ModifiedBy = email);
+            // Handle subdivision changes (custom logic)
+            var subdivisionErrors = new List<string>();
 
-            // Save the road first
-            var result = await RoadsApi.UpdateRoadAsync(editModel.Id, editModel);
-
-            if (result?.IsSuccess == true)
+            foreach (var subdivisionId in subdivisionsToRemove)
             {
-                // Now apply subdivision changes
-                var subdivisionErrors = new List<string>();
-
-                // Remove subdivisions
-                foreach (var subdivisionId in subdivisionsToRemove)
+                var removeResult = await RoadsApi.RemoveSubdivisionFromRoadAsync(editModel.Id, subdivisionId);
+                if (removeResult?.IsSuccess != true)
                 {
-                    var removeResult = await RoadsApi.RemoveSubdivisionFromRoadAsync(editModel.Id, subdivisionId);
-                    if (removeResult?.IsSuccess != true)
-                    {
-                        subdivisionErrors.Add($"Failed to remove subdivision ID {subdivisionId}");
-                    }
+                    subdivisionErrors.Add($"Failed to remove subdivision ID {subdivisionId}");
                 }
+            }
 
-                // Add subdivisions
-                foreach (var subdivisionId in subdivisionsToAdd)
+            foreach (var subdivisionId in subdivisionsToAdd)
+            {
+                var addResult = await RoadsApi.AddSubdivisionToRoadAsync(editModel.Id, subdivisionId);
+                if (addResult?.IsSuccess != true)
                 {
-                    var addResult = await RoadsApi.AddSubdivisionToRoadAsync(editModel.Id, subdivisionId);
-                    if (addResult?.IsSuccess != true)
-                    {
-                        subdivisionErrors.Add($"Failed to add subdivision ID {subdivisionId}");
-                    }
+                    subdivisionErrors.Add($"Failed to add subdivision ID {subdivisionId}");
                 }
+            }
 
-                if (subdivisionErrors.Any())
-                {
-                    successMessage = "Road updated successfully, but some subdivision changes failed.";
-                    errorMessage = string.Join("; ", subdivisionErrors);
-                }
-                else
-                {
-                    successMessage = "Road updated successfully!";
-                }
-
-                isEditMode = false;
-
-                // Clear staged changes
-                subdivisionsToAdd.Clear();
-                subdivisionsToRemove.Clear();
-
-                await LoadRoads();
-                selectedRoad = roads?.FirstOrDefault(r => r.Id == editModel.Id);
-
-                if (selectedRoad != null)
-                {
-                    await LoadAllVersions();
-                }
-
-                // Prompt user to add a note about the changes
-                await PromptForEditNote(editModel.Id, userEmail);
+            if (subdivisionErrors.Any())
+            {
+                successMessage = "Road updated successfully, but some subdivision changes failed.";
+                errorMessage = string.Join("; ", subdivisionErrors);
             }
             else
             {
-                errorMessage = result?.ErrorMessage ?? "Failed to update road";
-                errorDetails = result?.Errors;
+                successMessage = errorMsg;
             }
+
+            isEditMode = false;
+            subdivisionsToAdd.Clear();
+            subdivisionsToRemove.Clear();
+
+            await LoadRoads();
+            selectedRoad = roads?.FirstOrDefault(r => r.Id == editModel.Id);
+
+            if (selectedRoad != null)
+            {
+                await LoadAllVersions();
+            }
+
+            await PromptForEditNote(editModel.Id, userEmail);
         }
-        catch (Exception ex)
+        else
         {
-            errorMessage = $"Error updating road: {ex.Message}";
+            errorMessage = errorMsg;
+            errorDetails = errors;
         }
-        finally
-        {
-            isSaving = false;
-        }
+
+        isSaving = false;
     }
 
     private void CancelEdit()
@@ -1082,43 +1071,28 @@
 
     private async Task OpenCreateDialog()
     {
-        var parameters = new DialogParameters<CreateEntityDialog<Road>>
+        var createdRoad = await CreateDialogHelper.OpenCreateDialogAsync(
+            DialogService,
+            "Road",
+            "Create a new road record. All fields marked with * are required.",
+            CreateRoad,
+            GetRoadFormContent(),
+            autoSetModifiedBy: true,
+            dialogTitle: "Create New {0}");
+
+        if (createdRoad != null)
         {
-            { x => x.EntityDisplayName, "Road" },
-            { x => x.Description, "Create a new road record. All fields marked with * are required." },
-            { x => x.OnCreate, new Func<Road, Task<(bool, string?, string[]?)>>(CreateRoad) },
-            { x => x.AutoSetModifiedBy, true },
-            { x => x.FormContent, GetRoadFormContent() }
-        };
+            await CreateDialogHelper.HandlePostCreateAsync(
+                createdRoad,
+                LoadRoads,
+                id => roads?.FirstOrDefault(r => r.Id == id),
+                r => r.Id,
+                GetRoadDisplayText,
+                r => selectedRoad = r,
+                onEntitySelected: async (r) => { await LoadAllVersions(); },
+                updateUrl: (param, id) => NavigationHelper.UpdateUrlWithSelection(NavigationManager, id),
+                setSuccessMessage: msg => successMessage = msg);
 
-        var options = new DialogOptions 
-        { 
-            CloseButton = true, 
-            MaxWidth = MaxWidth.Large, 
-            FullWidth = true,
-            CloseOnEscapeKey = true
-        };
-
-        var dialog = await DialogService.ShowAsync<CreateEntityDialog<Road>>("Create New Road", parameters, options);
-        var result = await dialog.Result;
-
-        if (!result.Canceled && result.Data is Road createdRoad)
-        {
-            // Reload roads to include the new one
-            await LoadRoads();
-
-            // Select the newly created road
-            selectedRoad = roads?.FirstOrDefault(r => r.Id == createdRoad.Id);
-            if (selectedRoad != null)
-            {
-                await LoadAllVersions();
-
-                // Update URL
-                var uri = NavigationManager.GetUriWithQueryParameter("id", selectedRoad.Id);
-                NavigationManager.NavigateTo(uri, replace: true);
-            }
-
-            successMessage = $"Road '{GetRoadDisplayText(createdRoad)}' created successfully!";
             await InvokeAsync(StateHasChanged);
         }
     }

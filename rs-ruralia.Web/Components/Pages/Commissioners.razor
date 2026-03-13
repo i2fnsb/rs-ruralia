@@ -1439,107 +1439,43 @@
         isSaving = true;
         ClearMessages();
 
-        try
+        var userEmail = await AuthenticationHelper.SetModifiedByAsync(
+            editModel,
+            AuthenticationStateProvider,
+            (entity, email) => entity.ModifiedBy = email);
+
+        var (success, errorMsg, errors, updatedEntity) = await VersionHistoryHelper.SaveEditAsync(
+            editModel,
+            (id, entity) => CommissionerProfilesApi.UpdateCommissionerProfileAsync(id, entity),
+            x => x.Id,
+            "Commissioner profile updated successfully!");
+
+        if (success)
         {
-            var userEmail = await AuthenticationHelper.SetModifiedByAsync(
-                editModel,
-                AuthenticationStateProvider,
-                (entity, email) => entity.ModifiedBy = email);
+            successMessage = errorMsg;
+            editingProfileId = null;
 
-            var result = await CommissionerProfilesApi.UpdateCommissionerProfileAsync(editModel.Id, editModel);
+            await LoadCommissionerProfiles();
+            profileVersionCache.Remove(profileId);
+            LoadAllProfilesForPerson();
 
-            if (result?.IsSuccess == true)
+            var updatedProfile = allProfilesForPerson?.FirstOrDefault(p => p.Id == profileId);
+            if (updatedProfile != null)
             {
-                successMessage = "Commissioner profile updated successfully!";
-                editingProfileId = null;
-
-                // Reload commissioner profiles
-                await LoadCommissionerProfiles();
-
-                // Clear version cache to force reload
-                profileVersionCache.Remove(profileId);
-
-                // Reload all profiles for this person
-                LoadAllProfilesForPerson();
-
-                // Get the updated profile and set it as the displayed version
-                var updatedProfile = allProfilesForPerson?.FirstOrDefault(p => p.Id == profileId);
-                if (updatedProfile != null)
-                {
-                    currentlyDisplayedVersions[profileId] = updatedProfile;
-
-                    // Reload version history in background
-                    _ = LoadProfileVersionsAsync(profileId);
-                }
-
-                await InvokeAsync(StateHasChanged);
-
-                // Prompt user to add a note
-                await PromptForEditNote(profileId, userEmail);
-            }
-            else
-            {
-                errorMessage = result?.ErrorMessage ?? "Failed to update commissioner profile";
-                errorDetails = result?.Errors;
-            }
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Error updating commissioner profile: {ex.Message}";
-        }
-        finally
-        {
-            isSaving = false;
-        }
-    }
-
-    private async Task SaveEdit()
-    {
-        if (editModel == null) return;
-
-        isSaving = true;
-        ClearMessages();
-
-        try
-        {
-            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var user = authState.User;
-            var userEmail = user.Identity?.Name ?? user.Claims.FirstOrDefault(c => c.Type.Contains("email"))?.Value;
-
-            if (!string.IsNullOrEmpty(userEmail))
-            {
-                editModel.ModifiedBy = userEmail;
+                currentlyDisplayedVersions[profileId] = updatedProfile;
+                _ = LoadProfileVersionsAsync(profileId);
             }
 
-            var result = await CommissionerProfilesApi.UpdateCommissionerProfileAsync(editModel.Id, editModel);
-
-            if (result?.IsSuccess == true)
-            {
-                successMessage = "Commissioner profile updated successfully!";
-                isEditMode = false;
-
-                await LoadCommissionerProfiles();
-                selectedCommissioner = commissionerProfiles?.FirstOrDefault(c => c.Id == editModel.Id);
-
-                if (selectedCommissioner != null)
-                {
-                    await LoadAllVersions();
-                }
-            }
-            else
-            {
-                errorMessage = result?.ErrorMessage ?? "Failed to update commissioner profile";
-                errorDetails = result?.Errors;
-            }
+            await InvokeAsync(StateHasChanged);
+            await PromptForEditNote(profileId, userEmail);
         }
-        catch (Exception ex)
+        else
         {
-            errorMessage = $"Error updating commissioner profile: {ex.Message}";
+            errorMessage = errorMsg;
+            errorDetails = errors;
         }
-        finally
-        {
-            isSaving = false;
-        }
+
+        isSaving = false;
     }
 
     private void CancelEdit()
@@ -1675,33 +1611,6 @@
     private string GetPersonDisplayText(PersonProfile person)
     {
         return GetPersonName(person.Id);
-    }
-
-    private async Task PromptForNote(int profileId, string changeDescription)
-    {
-        var parameters = new DialogParameters
-        {
-            { "EntityType", "commissioner_profile" },
-            { "EntityId", profileId },
-            { "SuggestedNote", changeDescription }
-        };
-
-        var options = new DialogOptions 
-        { 
-            CloseButton = true,
-            MaxWidth = MaxWidth.Medium,
-            FullWidth = true
-        };
-
-        var dialog = await DialogService.ShowAsync<AddEditNoteDialog>("Add Note (Optional)", parameters, options);
-        var dialogResult = await dialog.Result;
-
-        // Note is saved within the dialog, we don't need to do anything here
-        // Just refresh the UI if needed
-        if (!dialogResult.Canceled)
-        {
-            await InvokeAsync(StateHasChanged);
-        }
     }
 
     private async Task PromptForEditNote(int entityId, string? userEmail)
@@ -1871,44 +1780,27 @@
 
     private async Task OpenCreateDialog()
     {
-        var parameters = new DialogParameters<CreateEntityDialog<CommissionerProfile>>
+        var createdProfile = await CreateDialogHelper.OpenCreateDialogAsync(
+            DialogService,
+            "Commissioner Profile",
+            "Create a new commissioner profile record. All fields marked with * are required.",
+            CreateCommissionerProfile,
+            GetCommissionerProfileFormContent(),
+            autoSetModifiedBy: true,
+            dialogTitle: "Create New {0}",
+            initialEntity: GetInitialCommissionerProfile());
+
+        if (createdProfile != null)
         {
-            { x => x.EntityDisplayName, "Commissioner Profile" },
-            { x => x.Description, "Create a new commissioner profile record. All fields marked with * are required." },
-            { x => x.OnCreate, new Func<CommissionerProfile, Task<(bool, string?, string[]?)>>(CreateCommissionerProfile) },
-            { x => x.AutoSetModifiedBy, true },
-            { x => x.FormContent, GetCommissionerProfileFormContent() },
-            { x => x.InitialEntity, GetInitialCommissionerProfile() }
-        };
-
-        var options = new DialogOptions 
-        { 
-            CloseButton = true, 
-            MaxWidth = MaxWidth.Large, 
-            FullWidth = true,
-            CloseOnEscapeKey = true
-        };
-
-        var dialog = await DialogService.ShowAsync<CreateEntityDialog<CommissionerProfile>>("Create New Commissioner Profile", parameters, options);
-        var result = await dialog.Result;
-
-        if (!result.Canceled && result.Data is CommissionerProfile createdProfile)
-        {
-            // Reload commissioner profiles to include the new one
             await LoadCommissionerProfiles();
 
-            // Get the person profile for this commissioner
             var person = personProfiles?.FirstOrDefault(p => p.Id == createdProfile.PersonProfileId);
             if (person != null)
             {
                 selectedPerson = person;
                 selectedCommissioner = GetMostRecentCommissionerProfile(person.Id);
-
                 await LoadAllVersions();
-
-                // Update URL
-                var uri = NavigationManager.GetUriWithQueryParameter("id", person.Id);
-                NavigationManager.NavigateTo(uri, replace: true);
+                NavigationHelper.UpdateUrlWithSelection(NavigationManager, person.Id);
             }
 
             successMessage = $"Commissioner profile for '{GetPersonName(createdProfile.PersonProfileId)}' created successfully!";

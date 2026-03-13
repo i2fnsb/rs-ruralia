@@ -1090,46 +1090,39 @@
         isSaving = true;
         ClearMessages();
 
-        try
+        var userEmail = await AuthenticationHelper.SetModifiedByAsync(
+            editModel,
+            AuthenticationStateProvider,
+            (entity, email) => entity.ModifiedBy = email);
+
+        var (success, errorMsg, errors, updatedEntity) = await VersionHistoryHelper.SaveEditAsync(
+            editModel,
+            (id, entity) => ServiceAreasApi.UpdateServiceAreaAsync(id, entity),
+            x => x.Id,
+            "Service area updated successfully!");
+
+        if (success)
         {
-            var userEmail = await AuthenticationHelper.SetModifiedByAsync(
-                editModel,
-                AuthenticationStateProvider,
-                (entity, email) => entity.ModifiedBy = email);
+            successMessage = errorMsg;
+            isEditMode = false;
 
-            var result = await ServiceAreasApi.UpdateServiceAreaAsync(editModel.Id, editModel);
+            await LoadServiceAreas();
+            selectedServiceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == editModel.Id);
 
-            if (result?.IsSuccess == true)
+            if (selectedServiceArea != null)
             {
-                successMessage = "Service area updated successfully!";
-                isEditMode = false;
-
-                // Reload data
-                await LoadServiceAreas();
-                selectedServiceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == editModel.Id);
-
-                if (selectedServiceArea != null)
-                {
-                    await LoadAllVersions();
-                }
-
-                // Prompt user to add a note about the changes
-                await PromptForEditNote(editModel.Id, userEmail);
+                await LoadAllVersions();
             }
-            else
-            {
-                errorMessage = result?.ErrorMessage ?? "Failed to update service area";
-                errorDetails = result?.Errors;
-            }
+
+            await PromptForEditNote(editModel.Id, userEmail);
         }
-        catch (Exception ex)
+        else
         {
-            errorMessage = $"Error updating service area: {ex.Message}";
+            errorMessage = errorMsg;
+            errorDetails = errors;
         }
-        finally
-        {
-            isSaving = false;
-        }
+
+        isSaving = false;
     }
 
     private void CancelEdit()
@@ -1448,41 +1441,28 @@
 
     private async Task OpenCreateDialog()
     {
-        var parameters = new DialogParameters<CreateEntityDialog<ServiceArea>>
+        var createdServiceArea = await CreateDialogHelper.OpenCreateDialogAsync(
+            DialogService,
+            "Service Area",
+            "Create a new service area record. All fields marked with * are required.",
+            CreateServiceArea,
+            GetServiceAreaFormContent(),
+            autoSetModifiedBy: true,
+            dialogTitle: "Create New {0}");
+
+        if (createdServiceArea != null)
         {
-            { x => x.EntityDisplayName, "Service Area" },
-            { x => x.Description, "Create a new service area record. All fields marked with * are required." },
-            { x => x.OnCreate, new Func<ServiceArea, Task<(bool, string?, string[]?)>>(CreateServiceArea) },
-            { x => x.AutoSetModifiedBy, true },
-            { x => x.FormContent, GetServiceAreaFormContent() }
-        };
+            await CreateDialogHelper.HandlePostCreateAsync(
+                createdServiceArea,
+                LoadServiceAreas,
+                id => serviceAreas?.FirstOrDefault(sa => sa.Id == id),
+                sa => sa.Id,
+                sa => sa.Name ?? "Service Area",
+                sa => selectedServiceArea = sa,
+                onEntitySelected: async (sa) => { await LoadAllVersions(); },
+                updateUrl: (param, id) => NavigationHelper.UpdateUrlWithSelection(NavigationManager, id),
+                setSuccessMessage: msg => successMessage = msg);
 
-        var options = new DialogOptions 
-        { 
-            CloseButton = true, 
-            MaxWidth = MaxWidth.Large, 
-            FullWidth = true,
-            CloseOnEscapeKey = true
-        };
-
-        var dialog = await DialogService.ShowAsync<CreateEntityDialog<ServiceArea>>("Create New Service Area", parameters, options);
-        var result = await dialog.Result;
-
-        if (!result.Canceled && result.Data is ServiceArea createdServiceArea)
-        {
-            // Reload service areas to include the new one
-            await LoadServiceAreas();
-
-            // Select the newly created service area
-            selectedServiceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == createdServiceArea.Id);
-            if (selectedServiceArea != null)
-            {
-                await LoadAllVersions();
-
-                NavigationHelper.UpdateUrlWithSelection(NavigationManager, selectedServiceArea.Id);
-            }
-
-            successMessage = $"Service area '{createdServiceArea.Name}' created successfully!";
             await InvokeAsync(StateHasChanged);
         }
     }

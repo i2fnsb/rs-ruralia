@@ -19,7 +19,8 @@ public static class CreateDialogHelper
         Func<TEntity, Task<(bool Success, string? ErrorMessage, string[]? Errors)>> onCreate,
         RenderFragment<TEntity> formContent,
         bool autoSetModifiedBy = true,
-        string dialogTitle = "Create New {0}")
+        string dialogTitle = "Create New {0}",
+        TEntity? initialEntity = null)
         where TEntity : class, new()
     {
         var parameters = new DialogParameters<CreateEntityDialog<TEntity>>
@@ -30,6 +31,12 @@ public static class CreateDialogHelper
             { x => x.AutoSetModifiedBy, autoSetModifiedBy },
             { x => x.FormContent, formContent }
         };
+
+        // Add InitialEntity if provided
+        if (initialEntity != null)
+        {
+            parameters.Add(x => x.InitialEntity, initialEntity);
+        }
 
         var options = new DialogOptions 
         { 

@@ -500,45 +500,39 @@
         isSaving = true;
         ClearMessages();
 
-        try
+        var userEmail = await AuthenticationHelper.SetModifiedByAsync(
+            editModel,
+            AuthenticationStateProvider,
+            (entity, email) => entity.ModifiedBy = email);
+
+        var (success, errorMsg, errors, updatedEntity) = await VersionHistoryHelper.SaveEditAsync(
+            editModel,
+            (id, entity) => OrdinancesApi.UpdateOrdinanceAsync(id, entity),
+            x => x.Id,
+            "Ordinance updated successfully!");
+
+        if (success)
         {
-            var userEmail = await AuthenticationHelper.SetModifiedByAsync(
-                editModel,
-                AuthenticationStateProvider,
-                (entity, email) => entity.ModifiedBy = email);
+            successMessage = errorMsg;
+            isEditMode = false;
 
-            var result = await OrdinancesApi.UpdateOrdinanceAsync(editModel.Id, editModel);
+            await LoadOrdinances();
+            selectedOrdinance = ordinances?.FirstOrDefault(o => o.Id == editModel.Id);
 
-            if (result?.IsSuccess == true)
+            if (selectedOrdinance != null)
             {
-                successMessage = "Ordinance updated successfully!";
-                isEditMode = false;
-
-                await LoadOrdinances();
-                selectedOrdinance = ordinances?.FirstOrDefault(o => o.Id == editModel.Id);
-
-                if (selectedOrdinance != null)
-                {
-                    await LoadAllVersions();
-                }
-
-                // Prompt user to add a note about the changes
-                await PromptForEditNote(editModel.Id, userEmail);
+                await LoadAllVersions();
             }
-            else
-            {
-                errorMessage = result?.ErrorMessage ?? "Failed to update ordinance";
-                errorDetails = result?.Errors;
-            }
+
+            await PromptForEditNote(editModel.Id, userEmail);
         }
-        catch (Exception ex)
+        else
         {
-            errorMessage = $"Error updating ordinance: {ex.Message}";
+            errorMessage = errorMsg;
+            errorDetails = errors;
         }
-        finally
-        {
-            isSaving = false;
-        }
+
+        isSaving = false;
     }
 
     private void CancelEdit()
@@ -614,40 +608,28 @@
 
     private async Task OpenCreateDialog()
     {
-        var parameters = new DialogParameters<CreateEntityDialog<Ordinance>>
+        var createdOrdinance = await CreateDialogHelper.OpenCreateDialogAsync(
+            DialogService,
+            "Ordinance",
+            "Create a new ordinance record. All fields marked with * are required.",
+            CreateOrdinance,
+            GetOrdinanceFormContent(),
+            autoSetModifiedBy: true,
+            dialogTitle: "Create New {0}");
+
+        if (createdOrdinance != null)
         {
-            { x => x.EntityDisplayName, "Ordinance" },
-            { x => x.Description, "Create a new ordinance record. All fields marked with * are required." },
-            { x => x.OnCreate, new Func<Ordinance, Task<(bool, string?, string[]?)>>(CreateOrdinance) },
-            { x => x.AutoSetModifiedBy, true },
-            { x => x.FormContent, GetOrdinanceFormContent() }
-        };
+            await CreateDialogHelper.HandlePostCreateAsync(
+                createdOrdinance,
+                LoadOrdinances,
+                id => ordinances?.FirstOrDefault(o => o.Id == id),
+                o => o.Id,
+                o => o.OrdinanceName ?? "Ordinance",
+                o => selectedOrdinance = o,
+                onEntitySelected: async (o) => { await LoadAllVersions(); },
+                updateUrl: (param, id) => NavigationHelper.UpdateUrlWithSelection(NavigationManager, id),
+                setSuccessMessage: msg => successMessage = msg);
 
-        var options = new DialogOptions 
-        { 
-            CloseButton = true, 
-            MaxWidth = MaxWidth.Large, 
-            FullWidth = true,
-            CloseOnEscapeKey = true
-        };
-
-        var dialog = await DialogService.ShowAsync<CreateEntityDialog<Ordinance>>("Create New Ordinance", parameters, options);
-        var result = await dialog.Result;
-
-        if (!result.Canceled && result.Data is Ordinance createdOrdinance)
-        {
-            await LoadOrdinances();
-
-            selectedOrdinance = ordinances?.FirstOrDefault(o => o.Id == createdOrdinance.Id);
-            if (selectedOrdinance != null)
-            {
-                await LoadAllVersions();
-
-                var uri = NavigationManager.GetUriWithQueryParameter("id", selectedOrdinance.Id);
-                NavigationManager.NavigateTo(uri, replace: true);
-            }
-
-            successMessage = $"Ordinance '{createdOrdinance.OrdinanceName}' created successfully!";
             await InvokeAsync(StateHasChanged);
         }
     }
