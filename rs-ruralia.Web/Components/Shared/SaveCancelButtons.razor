@@ -1,0 +1,45 @@
+@* Reusable Save/Cancel button group for edit forms *@
+
+<MudStack Row="true" Justify="Justify.FlexEnd" Class="@Class">
+    <MudButton Variant="Variant.Filled" 
+               Color="Color.Primary" 
+               ButtonType="ButtonType.Submit" 
+               Disabled="@IsSaving">
+        @if (IsSaving)
+        {
+            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+            <MudText Class="ms-2">@SavingText</MudText>
+        }
+        else
+        {
+            <MudIcon Icon="@Icons.Material.Filled.Save" Class="me-1" /> 
+            <MudText>@SaveText</MudText>
+        }
+    </MudButton>
+    <MudButton Variant="Variant.Outlined" 
+               Color="Color.Secondary" 
+               OnClick="@OnCancel" 
+               Disabled="@IsSaving">
+        @CancelText
+    </MudButton>
+</MudStack>
+
+@code {
+    [Parameter]
+    public bool IsSaving { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    [Parameter]
+    public string SaveText { get; set; } = "Save";
+
+    [Parameter]
+    public string SavingText { get; set; } = "Saving...";
+
+    [Parameter]
+    public string CancelText { get; set; } = "Cancel";
+
+    [Parameter]
+    public string Class { get; set; } = "mb-3";
+}

@@ -78,63 +78,16 @@
                             <EditForm EditContext="@editContext" OnValidSubmit="SaveEdit">
                                 <DataAnnotationsValidator />
                                 <MudGrid>
-                                    <MudItem xs="12">
-                                        @if (canEdit && IsViewingCurrentVersion() && ViewModeService.IsAtLeast(ViewMode.Admin))
-                                        {
-                                            @if (isEditMode)
-                                            {
-                                                <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
-                                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@isSaving">
-                                                        @if (isSaving)
-                                                        {
-                                                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
-                                                            <MudText Class="ms-2">Saving...</MudText>
-                                                        }
-                                                        else
-                                                        {
-                                                            <MudIcon Icon="@Icons.Material.Filled.Save" Class="me-1" /> <MudText>Save</MudText>
-                                                        }
-                                                    </MudButton>
-                                                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="CancelEdit" Disabled="@isSaving">
-                                                        Cancel
-                                                    </MudButton>
-                                                </MudStack>
-                                            }
-                                            else
-                                            {
-                                                <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
-                                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="EnableEdit">
-                                                        <MudIcon Icon="@Icons.Material.Filled.Edit" Class="me-1" /> Edit
-                                                    </MudButton>
-                                                </MudStack>
-                                            }
-                                        }
-                                    </MudItem>
-
-                                    @if (!string.IsNullOrEmpty(successMessage))
+                                    @if (canEdit && IsViewingCurrentVersion() && ViewModeService.IsAtLeast(ViewMode.Admin) && isEditMode)
                                     {
                                         <MudItem xs="12">
-                                            <MudAlert Severity="Severity.Success" Variant="Variant.Filled">@successMessage</MudAlert>
+                                            <SaveCancelButtons IsSaving="@isSaving" OnCancel="@CancelEdit" />
                                         </MudItem>
                                     }
 
-                                    @if (!string.IsNullOrEmpty(errorMessage))
-                                    {
-                                        <MudItem xs="12">
-                                            <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
-                                                <MudText>@errorMessage</MudText>
-                                                @if (errorDetails != null && errorDetails.Length > 0)
-                                                {
-                                                    <MudList T="string" Dense="true">
-                                                        @foreach (var detail in errorDetails)
-                                                        {
-                                                            <MudListItem>@detail</MudListItem>
-                                                        }
-                                                    </MudList>
-                                                }
-                                            </MudAlert>
-                                        </MudItem>
-                                    }
+                                    <AlertMessages SuccessMessage="@successMessage" 
+                                                  ErrorMessage="@errorMessage" 
+                                                  ErrorDetails="@errorDetails" />
 
                                     <MudItem xs="12" md="6">
                                         <AutoField @bind-Value="editModel.OrdinanceName" 
@@ -260,25 +213,12 @@
                             </MudItem>
 
                             <MudItem xs="12" md="6">
-                                <InfoCard TValue="bool?" TModel="Ordinance"
-                                         Label="Ordinance Passed" 
-                                         Icon="@Icons.Material.Filled.HowToVote"
-                                         PropertyExpression="@(x => x.OrdinancePassed)">
-                                    <ValueContent>
-                                        @if (version.OrdinancePassed == true)
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
-                                        }
-                                        else if (version.OrdinancePassed == false)
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Close">No</MudChip>
-                                        }
-                                        else
-                                        {
-                                            <MudText>—</MudText>
-                                        }
-                                    </ValueContent>
-                                </InfoCard>
+                                <BooleanInfoCard TModel="Ordinance"
+                                               Value="@version.OrdinancePassed"
+                                               Label="Ordinance Passed" 
+                                               Icon="@Icons.Material.Filled.HowToVote"
+                                               FalseColor="Color.Error"
+                                               PropertyExpression="@(x => x.OrdinancePassed)" />
                             </MudItem>
 
                             <MudItem xs="12" md="6">
@@ -391,10 +331,7 @@
 
     private void HandleEditModeCancelled()
     {
-        if (isEditMode)
-        {
-            CancelEdit();
-        }
+        EntityPageHelper.HandleEditModeCancelled(isEditMode, CancelEdit);
     }
 
     private void SelectOrdinanceFromParameters()
@@ -416,81 +353,27 @@
     private async Task LoadOrdinances()
     {
         isLoading = true;
-        errorMessage = null;
-        errorDetails = null;
-        successMessage = null;
+        ClearMessages();
 
-        try
-        {
-            var result = await OrdinancesApi.GetAllOrdinancesAsync();
+        ordinances = await DataLoaderHelper.LoadDataWithErrorHandlingAsync(
+            () => OrdinancesApi.GetAllOrdinancesAsync(),
+            onError: (error, errors) =>
+            {
+                errorMessage = error ?? "Failed to load ordinances";
+                errorDetails = errors;
+            });
 
-            if (result?.IsSuccess == true && result.Data != null)
-            {
-                ordinances = result.Data;
-            }
-            else
-            {
-                errorMessage = result?.ErrorMessage ?? "Failed to load ordinances";
-                errorDetails = result?.Errors;
-                ordinances = Array.Empty<Ordinance>();
-            }
-        }
-        catch (HttpRequestException ex)
-        {
-            errorMessage = "Network error. Please check your connection and try again.";
-            ordinances = Array.Empty<Ordinance>();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Unexpected error: {ex.Message}";
-            ordinances = Array.Empty<Ordinance>();
-        }
-        finally
-        {
-            isLoading = false;
-        }
+        isLoading = false;
     }
 
     private async Task LoadOrdinanceTypes()
     {
-        try
-        {
-            var result = await OrdinanceTypesApi.GetAllOrdinanceTypesAsync();
-
-            if (result?.IsSuccess == true && result.Data != null)
-            {
-                ordinanceTypes = result.Data;
-            }
-            else
-            {
-                ordinanceTypes = Array.Empty<OrdinanceType>();
-            }
-        }
-        catch (Exception)
-        {
-            ordinanceTypes = Array.Empty<OrdinanceType>();
-        }
+        ordinanceTypes = await DataLoaderHelper.LoadDataAsync(() => OrdinanceTypesApi.GetAllOrdinanceTypesAsync());
     }
 
     private async Task LoadServiceAreas()
     {
-        try
-        {
-            var result = await ServiceAreasApi.GetAllServiceAreasAsync();
-
-            if (result?.IsSuccess == true && result.Data != null)
-            {
-                serviceAreas = result.Data;
-            }
-            else
-            {
-                serviceAreas = Array.Empty<ServiceArea>();
-            }
-        }
-        catch (Exception)
-        {
-            serviceAreas = Array.Empty<ServiceArea>();
-        }
+        serviceAreas = await DataLoaderHelper.LoadDataAsync(() => ServiceAreasApi.GetAllServiceAreasAsync());
     }
 
     private async Task LoadAllVersions()
@@ -500,34 +383,18 @@
         isLoadingHistory = true;
         historyErrorMessage = null;
 
-        try
-        {
-            var historyResult = await OrdinancesApi.GetOrdinanceHistoryAsync(selectedOrdinance.Id);
-            var historyRecords = new List<Ordinance>();
+        var (versions, current, error) = await VersionHistoryHelper.LoadAllVersionsAsync(
+            selectedOrdinance,
+            id => OrdinancesApi.GetOrdinanceHistoryAsync(id),
+            x => x.Id,
+            x => x.ValidFrom);
 
-            if (historyResult?.IsSuccess == true && historyResult.Data != null)
-            {
-                historyRecords.AddRange(historyResult.Data);
-            }
+        allVersions = versions;
+        currentViewVersion = current;
+        historyErrorMessage = error;
+        UpdateEditModel(currentViewVersion);
 
-            var versions = new List<Ordinance> { selectedOrdinance };
-            versions.AddRange(historyRecords.Where(h => h.ValidFrom != selectedOrdinance.ValidFrom));
-            
-            allVersions = versions;
-            currentViewVersion = selectedOrdinance;
-            UpdateEditModel(currentViewVersion);
-        }
-        catch (Exception ex)
-        {
-            historyErrorMessage = $"Error loading versions: {ex.Message}";
-            allVersions = new List<Ordinance> { selectedOrdinance };
-            currentViewVersion = selectedOrdinance;
-            UpdateEditModel(currentViewVersion);
-        }
-        finally
-        {
-            isLoadingHistory = false;
-        }
+        isLoadingHistory = false;
     }
 
     private async Task OnCurrentVersionChanged(Ordinance newVersion)
@@ -556,15 +423,12 @@
 
     private bool IsViewingCurrentVersion()
     {
-        if (currentViewVersion == null || selectedOrdinance == null)
-            return true;
-
-        return currentViewVersion.ValidFrom == selectedOrdinance.ValidFrom;
+        return EntityPageHelper.IsViewingCurrentVersion(currentViewVersion, selectedOrdinance, x => x.ValidFrom);
     }
 
     private bool CanEditFields()
     {
-        return isEditMode && IsViewingCurrentVersion();
+        return EntityPageHelper.CanEditFields(isEditMode, IsViewingCurrentVersion());
     }
 
     private async Task HandleItemClick(Ordinance item)
@@ -575,8 +439,7 @@
         await LoadAllVersions();
         await InvokeAsync(StateHasChanged);
 
-        var uri = NavigationManager.GetUriWithQueryParameter("id", selectedOrdinance.Id);
-        NavigationManager.NavigateTo(uri, replace: true);
+        NavigationHelper.UpdateUrlWithSelection(NavigationManager, selectedOrdinance.Id);
     }
 
     private async Task HandleRestore(Ordinance historicalRecord)
@@ -586,41 +449,33 @@
         isSaving = true;
         ClearMessages();
 
-        try
-        {
-            var restoredData = CloneOrdinance(historicalRecord);
-            restoredData.Id = selectedOrdinance.Id;
+        var (success, errorMsg, errors) = await VersionHistoryHelper.HandleRestoreAsync(
+            selectedOrdinance,
+            historicalRecord,
+            CloneOrdinance,
+            (entity, id) => entity.Id = id,
+            (id, entity) => OrdinancesApi.UpdateOrdinanceAsync(id, entity),
+            x => x.Id,
+            x => x.ValidFrom);
 
-            var result = await OrdinancesApi.UpdateOrdinanceAsync(restoredData.Id, restoredData);
+        if (success)
+        {
+            successMessage = errorMsg;
+            await LoadOrdinances();
+            selectedOrdinance = ordinances?.FirstOrDefault(o => o.Id == selectedOrdinance.Id);
+            if (selectedOrdinance != null)
+            {
+                await LoadAllVersions();
+            }
+            isEditMode = false;
+        }
+        else
+        {
+            errorMessage = errorMsg;
+            errorDetails = errors;
+        }
 
-            if (result?.IsSuccess == true)
-            {
-                successMessage = $"Successfully restored version from {historicalRecord.ValidFrom:g}";
-                
-                await LoadOrdinances();
-                
-                selectedOrdinance = ordinances?.FirstOrDefault(o => o.Id == selectedOrdinance.Id);
-                if (selectedOrdinance != null)
-                {
-                    await LoadAllVersions();
-                }
-                
-                isEditMode = false;
-            }
-            else
-            {
-                errorMessage = result?.ErrorMessage ?? "Failed to restore historical version";
-                errorDetails = result?.Errors;
-            }
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Error restoring historical version: {ex.Message}";
-        }
-        finally
-        {
-            isSaving = false;
-        }
+        isSaving = false;
     }
 
     private void EnableEdit()
@@ -645,50 +500,39 @@
         isSaving = true;
         ClearMessages();
 
-        try
-        {
-            // Get the authenticated user's email for ModifiedBy
-            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var user = authState.User;
-            var userEmail = user.Identity?.Name ?? user.Claims.FirstOrDefault(c => c.Type.Contains("email"))?.Value;
+        var userEmail = await AuthenticationHelper.SetModifiedByAsync(
+            editModel,
+            AuthenticationStateProvider,
+            (entity, email) => entity.ModifiedBy = email);
 
-            if (!string.IsNullOrEmpty(userEmail))
+        var (success, errorMsg, errors, updatedEntity) = await VersionHistoryHelper.SaveEditAsync(
+            editModel,
+            (id, entity) => OrdinancesApi.UpdateOrdinanceAsync(id, entity),
+            x => x.Id,
+            "Ordinance updated successfully!");
+
+        if (success)
+        {
+            successMessage = errorMsg;
+            isEditMode = false;
+
+            await LoadOrdinances();
+            selectedOrdinance = ordinances?.FirstOrDefault(o => o.Id == editModel.Id);
+
+            if (selectedOrdinance != null)
             {
-                editModel.ModifiedBy = userEmail;
+                await LoadAllVersions();
             }
 
-            var result = await OrdinancesApi.UpdateOrdinanceAsync(editModel.Id, editModel);
-
-            if (result?.IsSuccess == true)
-            {
-                successMessage = "Ordinance updated successfully!";
-                isEditMode = false;
-
-                await LoadOrdinances();
-                selectedOrdinance = ordinances?.FirstOrDefault(o => o.Id == editModel.Id);
-
-                if (selectedOrdinance != null)
-                {
-                    await LoadAllVersions();
-                }
-
-                // Prompt user to add a note about the changes
-                await PromptForEditNote(editModel.Id, userEmail);
-            }
-            else
-            {
-                errorMessage = result?.ErrorMessage ?? "Failed to update ordinance";
-                errorDetails = result?.Errors;
-            }
+            await PromptForEditNote(editModel.Id, userEmail);
         }
-        catch (Exception ex)
+        else
         {
-            errorMessage = $"Error updating ordinance: {ex.Message}";
+            errorMessage = errorMsg;
+            errorDetails = errors;
         }
-        finally
-        {
-            isSaving = false;
-        }
+
+        isSaving = false;
     }
 
     private void CancelEdit()
@@ -704,23 +548,10 @@
 
     private void ClearMessages()
     {
-        errorMessage = null;
-        errorDetails = null;
-        successMessage = null;
+        EntityPageHelper.ClearMessages(ref errorMessage, ref errorDetails, ref successMessage);
     }
 
-    private Ordinance CloneOrdinance(Ordinance source) => new()
-    {
-        Id = source.Id,
-        OrdinanceName = source.OrdinanceName,
-        OrdinanceYear = source.OrdinanceYear,
-        OrdinancePassed = source.OrdinancePassed,
-        OrdinanceTypeId = source.OrdinanceTypeId,
-        ServiceAreaId = source.ServiceAreaId,
-        ValidFrom = source.ValidFrom,
-        ValidTo = source.ValidTo,
-        ModifiedBy = source.ModifiedBy
-    };
+    private Ordinance CloneOrdinance(Ordinance source) => EntityCloneHelper.ShallowClone(source);
 
     private bool OrdinancesQuickFilter(Ordinance ordinance, string searchString)
     {
@@ -758,88 +589,47 @@
 
     private async Task PromptForEditNote(int ordinanceId, string? userEmail)
     {
-        var parameters = new DialogParameters
-        {
-            { "EntityName", $"{selectedOrdinance?.OrdinanceName} ({selectedOrdinance?.OrdinanceYear})" }
-        };
-
-        var options = new DialogOptions 
-        { 
-            CloseButton = true, 
-            MaxWidth = MaxWidth.Medium, 
-            FullWidth = true 
-        };
-
-        var dialog = await DialogService.ShowAsync<AddEditNoteDialog>("Add Note About Changes", parameters, options);
-        var result = await dialog.Result;
-
-        if (!result.Canceled && result.Data is string noteText && !string.IsNullOrWhiteSpace(noteText))
-        {
-            await CreateEditNote(ordinanceId, noteText, userEmail);
-        }
+        await NotesHelper.PromptForEditNoteAsync(
+            DialogService,
+            $"{selectedOrdinance?.OrdinanceName} ({selectedOrdinance?.OrdinanceYear})",
+            OnNotesCountChanged,
+            async (id, text) => await CreateEditNote(id, text, userEmail),
+            ordinanceId,
+            userEmail);
     }
 
     private async Task CreateEditNote(int ordinanceId, string noteText, string? userEmail)
-    {
-        try
-        {
-            var note = new Note
-            {
-                NoteText = noteText,
-                OrdinanceId = ordinanceId,
-                ModifiedBy = userEmail ?? "Unknown User",
-                ValidFrom = DateTime.UtcNow
-            };
-
-            var result = await NotesApi.CreateNoteAsync(note);
-
-            if (result?.IsSuccess == true)
-            {
-                await InvokeAsync(StateHasChanged);
-            }
-        }
-        catch (Exception)
-        {
-            // Silently fail - note creation is optional
-        }
+    {    var note = NotesHelper.CreateOrdinanceNote(ordinanceId, noteText, userEmail);
+        await NotesHelper.CreateNoteAsync(
+            note,
+            NotesApi.CreateNoteAsync,
+            () => InvokeAsync(StateHasChanged));
     }
 
     private async Task OpenCreateDialog()
     {
-        var parameters = new DialogParameters<CreateEntityDialog<Ordinance>>
+        var createdOrdinance = await CreateDialogHelper.OpenCreateDialogAsync(
+            DialogService,
+            "Ordinance",
+            "Create a new ordinance record. All fields marked with * are required.",
+            CreateOrdinance,
+            GetOrdinanceFormContent(),
+            autoSetModifiedBy: true,
+            dialogTitle: "Create New {0}");
+
+        if (createdOrdinance != null)
         {
-            { x => x.EntityDisplayName, "Ordinance" },
-            { x => x.Description, "Create a new ordinance record. All fields marked with * are required." },
-            { x => x.OnCreate, new Func<Ordinance, Task<(bool, string?, string[]?)>>(CreateOrdinance) },
-            { x => x.AutoSetModifiedBy, true },
-            { x => x.FormContent, GetOrdinanceFormContent() }
-        };
+            await CreateDialogHelper.HandlePostCreateAsync(
+                createdOrdinance,
+                LoadOrdinances,
+                id => ordinances?.FirstOrDefault(o => o.Id == id),
+                o => o.Id,
+                o => o.OrdinanceName ?? "Ordinance",
+                o => selectedOrdinance = o,
+                onEntitySelected: async (o) => { await LoadAllVersions(); },
+                updateUrl: (param, id) => NavigationHelper.UpdateUrlWithSelection(NavigationManager, id),
+                setSuccessMessage: msg => successMessage = msg);
 
-        var options = new DialogOptions 
-        { 
-            CloseButton = true, 
-            MaxWidth = MaxWidth.Large, 
-            FullWidth = true,
-            CloseOnEscapeKey = true
-        };
-
-        var dialog = await DialogService.ShowAsync<CreateEntityDialog<Ordinance>>("Create New Ordinance", parameters, options);
-        var result = await dialog.Result;
-
-        if (!result.Canceled && result.Data is Ordinance createdOrdinance)
-        {
-            await LoadOrdinances();
-
-            selectedOrdinance = ordinances?.FirstOrDefault(o => o.Id == createdOrdinance.Id);
-            if (selectedOrdinance != null)
-            {
-                await LoadAllVersions();
-
-                var uri = NavigationManager.GetUriWithQueryParameter("id", selectedOrdinance.Id);
-                NavigationManager.NavigateTo(uri, replace: true);
-            }
-
-            successMessage = $"Ordinance '{createdOrdinance.OrdinanceName}' created successfully!";
             await InvokeAsync(StateHasChanged);
         }
     }

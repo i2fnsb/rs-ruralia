@@ -1,0 +1,45 @@
+@* Reusable success and error message alerts *@
+
+@if (!string.IsNullOrEmpty(SuccessMessage))
+{
+    <MudItem xs="12">
+        <MudAlert Severity="Severity.Success" Variant="Variant.Filled" CloseIcon="@Icons.Material.Filled.Close" CloseIconClicked="@(() => OnSuccessCleared.InvokeAsync())">
+            @SuccessMessage
+        </MudAlert>
+    </MudItem>
+}
+
+@if (!string.IsNullOrEmpty(ErrorMessage))
+{
+    <MudItem xs="12">
+        <MudAlert Severity="Severity.Error" Variant="Variant.Filled" CloseIcon="@Icons.Material.Filled.Close" CloseIconClicked="@(() => OnErrorCleared.InvokeAsync())">
+            <MudText>@ErrorMessage</MudText>
+            @if (ErrorDetails != null && ErrorDetails.Length > 0)
+            {
+                <MudList T="string" Dense="true">
+                    @foreach (var detail in ErrorDetails)
+                    {
+                        <MudListItem>@detail</MudListItem>
+                    }
+                </MudList>
+            }
+        </MudAlert>
+    </MudItem>
+}
+
+@code {
+    [Parameter]
+    public string? SuccessMessage { get; set; }
+
+    [Parameter]
+    public string? ErrorMessage { get; set; }
+
+    [Parameter]
+    public string[]? ErrorDetails { get; set; }
+
+    [Parameter]
+    public EventCallback OnSuccessCleared { get; set; }
+
+    [Parameter]
+    public EventCallback OnErrorCleared { get; set; }
+}

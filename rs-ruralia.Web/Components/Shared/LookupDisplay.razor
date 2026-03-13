@@ -1,0 +1,53 @@
+@typeparam TLookup where TLookup : class
+@* Reusable component for displaying lookup values in tables or cards *@
+
+@{
+    var lookupItem = LookupItems?.FirstOrDefault(item => Comparer(item, LookupId));
+    var displayText = lookupItem != null ? DisplaySelector(lookupItem) : NullText;
+}
+
+@if (AsChip)
+{
+    <MudChip T="string" Size="@ChipSize" Color="@ChipColor">@displayText</MudChip>
+}
+else
+{
+    <MudText Typo="@TextTypo" Style="@TextStyle">@displayText</MudText>
+}
+
+@code {
+    [Parameter]
+    public int? LookupId { get; set; }
+
+    [Parameter]
+    public IEnumerable<TLookup>? LookupItems { get; set; }
+
+    [Parameter, EditorRequired]
+    public Func<TLookup, string> DisplaySelector { get; set; } = default!;
+
+    [Parameter]
+    public Func<TLookup, int?, bool> Comparer { get; set; } = (item, id) => 
+    {
+        if (item == null) return false;
+        var itemId = item.GetType().GetProperty("Id")?.GetValue(item);
+        return itemId?.Equals(id) == true;
+    };
+
+    [Parameter]
+    public string NullText { get; set; } = "—";
+
+    [Parameter]
+    public bool AsChip { get; set; } = false;
+
+    [Parameter]
+    public Size ChipSize { get; set; } = Size.Small;
+
+    [Parameter]
+    public Color ChipColor { get; set; } = Color.Default;
+
+    [Parameter]
+    public Typo TextTypo { get; set; } = Typo.body1;
+
+    [Parameter]
+    public string? TextStyle { get; set; }
+}

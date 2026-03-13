@@ -93,63 +93,16 @@
                                 <EditForm EditContext="@editContext" OnValidSubmit="SaveEdit">
                                     <DataAnnotationsValidator />
                                     <MudGrid>
-                                        <MudItem xs="12">
-                                            @if (canEdit && IsViewingCurrentVersion() && ViewModeService.IsAtLeast(ViewMode.Admin))
-                                            {
-                                                @if (isEditMode)
-                                                {
-                                                    <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
-                                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@isSaving">
-                                                            @if (isSaving)
-                                                            {
-                                                                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
-                                                                <MudText Class="ms-2">Saving...</MudText>
-                                                            }
-                                                            else
-                                                            {
-                                                                <MudIcon Icon="@Icons.Material.Filled.Save" Class="me-1" /> <MudText>Save</MudText>
-                                                            }
-                                                        </MudButton>
-                                                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="CancelEdit" Disabled="@isSaving">
-                                                            Cancel
-                                                        </MudButton>
-                                                    </MudStack>
-                                                }
-                                                else
-                                                {
-                                                    <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
-                                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="EnableEdit">
-                                                            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="me-1" /> Edit
-                                                        </MudButton>
-                                                    </MudStack>
-                                                }
-                                            }
-                                        </MudItem>
-
-                                        @if (!string.IsNullOrEmpty(successMessage))
+                                        @if (canEdit && IsViewingCurrentVersion() && ViewModeService.IsAtLeast(ViewMode.Admin) && isEditMode)
                                         {
                                             <MudItem xs="12">
-                                                <MudAlert Severity="Severity.Success" Variant="Variant.Filled">@successMessage</MudAlert>
+                                                <SaveCancelButtons IsSaving="@isSaving" OnCancel="@CancelEdit" />
                                             </MudItem>
                                         }
 
-                                        @if (!string.IsNullOrEmpty(errorMessage))
-                                        {
-                                            <MudItem xs="12">
-                                                <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
-                                                    <MudText>@errorMessage</MudText>
-                                                    @if (errorDetails != null && errorDetails.Length > 0)
-                                                    {
-                                                        <MudList T="string" Dense="true">
-                                                            @foreach (var detail in errorDetails)
-                                                            {
-                                                                <MudListItem>@detail</MudListItem>
-                                                            }
-                                                        </MudList>
-                                                    }
-                                                </MudAlert>
-                                            </MudItem>
-                                        }
+                                        <AlertMessages SuccessMessage="@successMessage" 
+                                                      ErrorMessage="@errorMessage" 
+                                                      ErrorDetails="@errorDetails" />
 
                                         <MudItem xs="12" md="6">
                                             <AutoField @bind-Value="editModel.Name" TModel="ServiceArea" TValue="string" TLookup="object"
@@ -387,25 +340,11 @@
                                              PropertyExpression="@(x => x.InitialTaxYear)" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <InfoCard TValue="bool?" TModel="ServiceArea"
-                                             Label="Match Feature Layer" 
-                                             Icon="@Icons.Material.Filled.Layers"
-                                             PropertyExpression="@(x => x.MatchFeatureLayer)">
-                                        <ValueContent>
-                                            @if (version.MatchFeatureLayer == true)
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
-                                            }
-                                            else if (version.MatchFeatureLayer == false)
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
-                                            }
-                                            else
-                                            {
-                                                <MudText>—</MudText>
-                                            }
-                                        </ValueContent>
-                                    </InfoCard>
+                                    <BooleanInfoCard TModel="ServiceArea"
+                                                   Value="@version.MatchFeatureLayer"
+                                                   Label="Match Feature Layer" 
+                                                   Icon="@Icons.Material.Filled.Layers"
+                                                   PropertyExpression="@(x => x.MatchFeatureLayer)" />
                                 </MudItem>
                                 <MudItem xs="12" md="6">
                                     <InfoCard TValue="string" TModel="ServiceArea"
@@ -491,24 +430,14 @@
                                         <MudTd DataLabel="Ordinance">@context.OrdinanceName</MudTd>
                                         <MudTd DataLabel="Year">@context.OrdinanceYear</MudTd>
                                         <MudTd DataLabel="Type">
-                                            @{
-                                                var type = ordinanceTypes?.FirstOrDefault(t => t.Id == context.OrdinanceTypeId);
-                                                @(type != null ? $"{type.Type} - {type.Description}" : "—")
-                                            }
+                                            <LookupDisplay TLookup="OrdinanceType"
+                                                         LookupId="@context.OrdinanceTypeId"
+                                                         LookupItems="@ordinanceTypes"
+                                                         DisplaySelector="@(t => $"{t.Type} - {t.Description}")" />
                                         </MudTd>
                                         <MudTd DataLabel="Passed">
-                                            @if (context.OrdinancePassed == true)
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
-                                            }
-                                            else if (context.OrdinancePassed == false)
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Close">No</MudChip>
-                                            }
-                                            else
-                                            {
-                                                <MudText>—</MudText>
-                                            }
+                                            <BooleanTableCell Value="@context.OrdinancePassed" 
+                                                            FalseColor="Color.Error" />
                                         </MudTd>
                                         <MudTd DataLabel="Actions">
                                             <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
@@ -699,10 +628,10 @@
                                     <RowTemplate>
                                         <MudTd DataLabel="RFQ Number">@context.RfqNumber</MudTd>
                                         <MudTd DataLabel="Type">
-                                            @{
-                                                var ifbType = rfqIfbTypes?.FirstOrDefault(t => t.Id == context.RfqIfbTypeId);
-                                                @(ifbType?.Type ?? "—")
-                                            }
+                                            <LookupDisplay TLookup="RfqIfbType"
+                                                         LookupId="@context.RfqIfbTypeId"
+                                                         LookupItems="@rfqIfbTypes"
+                                                         DisplaySelector="@(t => t.Type ?? "—")" />
                                         </MudTd>
                                         <MudTd DataLabel="Project Scope">
                                             @{
@@ -714,18 +643,9 @@
                                         <MudTd DataLabel="Issue Date">@(context.IssueDate?.ToString("MMM d, yyyy") ?? "—")</MudTd>
                                         <MudTd DataLabel="Opening Date">@(context.OpeningDate?.ToString("MMM d, yyyy") ?? "—")</MudTd>
                                         <MudTd DataLabel="Completed">
-                                            @if (context.Completed == true)
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
-                                            }
-                                            else if (context.Completed == false)
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.HourglassEmpty">No</MudChip>
-                                            }
-                                            else
-                                            {
-                                                <MudText>—</MudText>
-                                            }
+                                            <BooleanTableCell Value="@context.Completed" 
+                                                            FalseColor="Color.Warning" 
+                                                            FalseIcon="@Icons.Material.Filled.HourglassEmpty" />
                                         </MudTd>
                                         <MudTd DataLabel="Actions">
                                             <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
@@ -778,28 +698,17 @@
                                     </HeaderContent>
                                     <RowTemplate>
                                         <MudTd DataLabel="Road Name">
-                                            @{
-                                                var roadName = roadNames?.FirstOrDefault(rn => rn.Id == context.RoadNameId);
-                                                @(roadName?.Name ?? "—")
-                                            }
+                                            <LookupDisplay TLookup="RoadName"
+                                                         LookupId="@context.RoadNameId"
+                                                         LookupItems="@roadNames"
+                                                         DisplaySelector="@(rn => rn.Name ?? "—")" />
                                         </MudTd>
                                         <MudTd DataLabel="Phase">@(context.Phase?.ToString() ?? "—")</MudTd>
                                         <MudTd DataLabel="Distance (Feet)">@(context.DistanceFeet?.ToString("N2") ?? "—")</MudTd>
                                         <MudTd DataLabel="Start Description">@(context.StartDescription ?? "—")</MudTd>
                                         <MudTd DataLabel="End Description">@(context.EndDescription ?? "—")</MudTd>
                                         <MudTd DataLabel="Approved for Maintenance">
-                                            @if (context.ApprovedForMaintenance == true)
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
-                                            }
-                                            else if (context.ApprovedForMaintenance == false)
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
-                                            }
-                                            else
-                                            {
-                                                <MudText>—</MudText>
-                                            }
+                                            <BooleanTableCell Value="@context.ApprovedForMaintenance" />
                                         </MudTd>
                                         <MudTd DataLabel="Actions">
                                             <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
@@ -929,10 +838,7 @@
 
     private void HandleEditModeCancelled()
     {
-        if (isEditMode)
-        {
-            CancelEdit();
-        }
+        EntityPageHelper.HandleEditModeCancelled(isEditMode, CancelEdit);
     }
 
     private void SelectServiceAreaFromParameters()
@@ -954,60 +860,22 @@
     private async Task LoadServiceAreas()
     {
         isLoading = true;
-        errorMessage = null;
-        errorDetails = null;
-        successMessage = null;
+        ClearMessages();
 
-        try
-        {
-            var result = await ServiceAreasApi.GetAllServiceAreasAsync();
+        serviceAreas = await DataLoaderHelper.LoadDataWithErrorHandlingAsync(
+            () => ServiceAreasApi.GetAllServiceAreasAsync(),
+            onError: (error, errors) =>
+            {
+                errorMessage = error ?? "Failed to load service areas";
+                errorDetails = errors;
+            });
 
-            if (result?.IsSuccess == true && result.Data != null)
-            {
-                serviceAreas = result.Data;
-            }
-            else
-            {
-                errorMessage = result?.ErrorMessage ?? "Failed to load service areas";
-                errorDetails = result?.Errors;
-                serviceAreas = Array.Empty<ServiceArea>();
-            }
-        }
-        catch (HttpRequestException ex)
-        {
-            errorMessage = "Network error. Please check your connection and try again.";
-            serviceAreas = Array.Empty<ServiceArea>();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Unexpected error: {ex.Message}";
-            serviceAreas = Array.Empty<ServiceArea>();
-        }
-        finally
-        {
-            isLoading = false;
-        }
+        isLoading = false;
     }
 
     private async Task LoadServiceAreaCodes()
     {
-        try
-        {
-            var result = await ServiceAreaCodesApi.GetAllServiceAreaCodesAsync();
-
-            if (result?.IsSuccess == true && result.Data != null)
-            {
-                serviceAreaCodes = result.Data;
-            }
-            else
-            {
-                serviceAreaCodes = Array.Empty<ServiceAreaCode>();
-            }
-        }
-        catch (Exception)
-        {
-            serviceAreaCodes = Array.Empty<ServiceAreaCode>();
-        }
+        serviceAreaCodes = await DataLoaderHelper.LoadDataAsync(() => ServiceAreaCodesApi.GetAllServiceAreaCodesAsync());
     }
 
     private async Task LoadServiceAreaOrdinances()
@@ -1015,49 +883,14 @@
         if (selectedServiceArea == null) return;
 
         isLoadingOrdinances = true;
-
-        try
-        {
-            var result = await OrdinancesApi.GetOrdinancesByServiceAreaAsync(selectedServiceArea.Id);
-
-            if (result?.IsSuccess == true && result.Data != null)
-            {
-                serviceAreaOrdinances = result.Data;
-            }
-            else
-            {
-                serviceAreaOrdinances = Array.Empty<Ordinance>();
-            }
-        }
-        catch (Exception)
-        {
-            serviceAreaOrdinances = Array.Empty<Ordinance>();
-        }
-        finally
-        {
-            isLoadingOrdinances = false;
-        }
+        serviceAreaOrdinances = await DataLoaderHelper.LoadDataAsync(
+            () => OrdinancesApi.GetOrdinancesByServiceAreaAsync(selectedServiceArea.Id));
+        isLoadingOrdinances = false;
     }
 
     private async Task LoadOrdinanceTypes()
     {
-        try
-        {
-            var result = await OrdinanceTypesApi.GetAllOrdinanceTypesAsync();
-
-            if (result?.IsSuccess == true && result.Data != null)
-            {
-                ordinanceTypes = result.Data;
-            }
-            else
-            {
-                ordinanceTypes = Array.Empty<OrdinanceType>();
-            }
-        }
-        catch (Exception)
-        {
-            ordinanceTypes = Array.Empty<OrdinanceType>();
-        }
+        ordinanceTypes = await DataLoaderHelper.LoadDataAsync(() => OrdinanceTypesApi.GetAllOrdinanceTypesAsync());
     }
 
     private async Task LoadCommissionSeats()
@@ -1066,52 +899,28 @@
 
         isLoadingCommissionSeats = true;
 
-        try
-        {
-            var result = await CommissionSeatsApi.GetCommissionSeatsByServiceAreaAsync(selectedServiceArea.Id);
+        commissionSeats = await DataLoaderHelper.LoadDataAsync(
+            () => CommissionSeatsApi.GetCommissionSeatsByServiceAreaAsync(selectedServiceArea.Id));
 
-            if (result?.IsSuccess == true && result.Data != null)
-            {
-                commissionSeats = result.Data;
-                await LoadCommissioners();
-            }
-            else
-            {
-                commissionSeats = Array.Empty<CommissionSeat>();
-                commissioners = Array.Empty<CommissionerProfile>();
-            }
-        }
-        catch (Exception)
+        if (commissionSeats.Any())
         {
-            commissionSeats = Array.Empty<CommissionSeat>();
+            await LoadCommissioners();
+        }
+        else
+        {
             commissioners = Array.Empty<CommissionerProfile>();
         }
-        finally
-        {
-            isLoadingCommissionSeats = false;
-        }
+
+        isLoadingCommissionSeats = false;
     }
 
     private async Task LoadCommissionSeatLookups()
     {
-        try
-        {
-            var typesTask = CommissionSeatTypesApi.GetAllCommissionSeatTypesAsync();
-            var classesTask = CommissionSeatClassesApi.GetAllCommissionSeatClassesAsync();
-            var statusesTask = CommissionSeatStatusesApi.GetAllCommissionSeatStatusesAsync();
-
-            await Task.WhenAll(typesTask, classesTask, statusesTask);
-
-            commissionSeatTypes = (await typesTask)?.Data ?? Array.Empty<CommissionSeatType>();
-            commissionSeatClasses = (await classesTask)?.Data ?? Array.Empty<CommissionSeatClass>();
-            commissionSeatStatuses = (await statusesTask)?.Data ?? Array.Empty<CommissionSeatStatus>();
-        }
-        catch (Exception)
-        {
-            commissionSeatTypes = Array.Empty<CommissionSeatType>();
-            commissionSeatClasses = Array.Empty<CommissionSeatClass>();
-            commissionSeatStatuses = Array.Empty<CommissionSeatStatus>();
-        }
+        await DataLoaderHelper.LoadMultipleAsync(
+            async () => commissionSeatTypes = await DataLoaderHelper.LoadDataAsync(() => CommissionSeatTypesApi.GetAllCommissionSeatTypesAsync()),
+            async () => commissionSeatClasses = await DataLoaderHelper.LoadDataAsync(() => CommissionSeatClassesApi.GetAllCommissionSeatClassesAsync()),
+            async () => commissionSeatStatuses = await DataLoaderHelper.LoadDataAsync(() => CommissionSeatStatusesApi.GetAllCommissionSeatStatusesAsync())
+        );
     }
 
     private async Task LoadCommissioners()
@@ -1124,87 +933,28 @@
 
         isLoadingCommissioners = true;
 
-        try
-        {
-            var allCommissionersTask = CommissionerProfilesApi.GetAllCommissionerProfilesAsync();
-            var correspondenceProfilesTask = CorrespondenceProfilesApi.GetAllCorrespondenceProfilesAsync();
-            var correspondencePhonesTask = CorrespondencePhonesApi.GetAllCorrespondencePhonesAsync();
-            var correspondenceEmailsTask = CorrespondenceEmailsApi.GetAllCorrespondenceEmailsAsync();
-            var personProfilesTask = PersonProfilesApi.GetAllPersonProfilesAsync();
-            var personHonorificsTask = PersonHonorificsApi.GetAllPersonHonorificsAsync();
-            var personSuffixesTask = PersonSuffixesApi.GetAllPersonSuffixesAsync();
-
-            await Task.WhenAll(
-                allCommissionersTask, 
-                correspondenceProfilesTask, 
-                correspondencePhonesTask, 
-                correspondenceEmailsTask,
-                personProfilesTask,
-                personHonorificsTask,
-                personSuffixesTask);
-
-            var allCommissionersResult = await allCommissionersTask;
-
-            if (allCommissionersResult?.IsSuccess == true && allCommissionersResult.Data != null)
+        // Load all data in parallel using DataLoaderHelper
+        await DataLoaderHelper.LoadMultipleAsync(
+            async () => 
             {
-                // Filter commissioners that belong to seats in this service area
+                var allCommissioners = await DataLoaderHelper.LoadDataAsync(() => CommissionerProfilesApi.GetAllCommissionerProfilesAsync());
                 var seatIds = commissionSeats.Select(s => s.Id).ToHashSet();
-                commissioners = allCommissionersResult.Data
-                    .Where(c => seatIds.Contains(c.CommissionSeatId))
-                    .ToList();
-            }
-            else
-            {
-                commissioners = Array.Empty<CommissionerProfile>();
-            }
+                commissioners = allCommissioners.Where(c => seatIds.Contains(c.CommissionSeatId)).ToList();
+            },
+            async () => correspondenceProfiles = await DataLoaderHelper.LoadDataAsync(() => CorrespondenceProfilesApi.GetAllCorrespondenceProfilesAsync()),
+            async () => correspondencePhones = await DataLoaderHelper.LoadDataAsync(() => CorrespondencePhonesApi.GetAllCorrespondencePhonesAsync()),
+            async () => correspondenceEmails = await DataLoaderHelper.LoadDataAsync(() => CorrespondenceEmailsApi.GetAllCorrespondenceEmailsAsync()),
+            async () => personProfiles = await DataLoaderHelper.LoadDataAsync(() => PersonProfilesApi.GetAllPersonProfilesAsync()),
+            async () => personHonorifics = await DataLoaderHelper.LoadDataAsync(() => PersonHonorificsApi.GetAllPersonHonorificsAsync()),
+            async () => personSuffixes = await DataLoaderHelper.LoadDataAsync(() => PersonSuffixesApi.GetAllPersonSuffixesAsync())
+        );
 
-            // Load correspondence data
-            var correspondenceProfilesResult = await correspondenceProfilesTask;
-            correspondenceProfiles = correspondenceProfilesResult?.Data ?? Array.Empty<CorrespondenceProfile>();
-
-            var correspondencePhonesResult = await correspondencePhonesTask;
-            correspondencePhones = correspondencePhonesResult?.Data ?? Array.Empty<CorrespondencePhone>();
-
-            var correspondenceEmailsResult = await correspondenceEmailsTask;
-            correspondenceEmails = correspondenceEmailsResult?.Data ?? Array.Empty<CorrespondenceEmail>();
-
-            // Load person data
-            var personProfilesResult = await personProfilesTask;
-            personProfiles = personProfilesResult?.Data ?? Array.Empty<PersonProfile>();
-
-            var personHonorificsResult = await personHonorificsTask;
-            personHonorifics = personHonorificsResult?.Data ?? Array.Empty<PersonHonorific>();
-
-            var personSuffixesResult = await personSuffixesTask;
-            personSuffixes = personSuffixesResult?.Data ?? Array.Empty<PersonSuffix>();
-        }
-        catch (Exception)
-        {
-            commissioners = Array.Empty<CommissionerProfile>();
-            correspondenceProfiles = Array.Empty<CorrespondenceProfile>();
-            correspondencePhones = Array.Empty<CorrespondencePhone>();
-            correspondenceEmails = Array.Empty<CorrespondenceEmail>();
-            personProfiles = Array.Empty<PersonProfile>();
-            personHonorifics = Array.Empty<PersonHonorific>();
-            personSuffixes = Array.Empty<PersonSuffix>();
-        }
-        finally
-        {
-            isLoadingCommissioners = false;
-        }
+        isLoadingCommissioners = false;
     }
 
     private async Task LoadCommissionerStatusLookups()
     {
-        try
-        {
-            var result = await CommissionerStatusesApi.GetAllCommissionerStatusesAsync();
-            commissionerStatuses = result?.Data ?? Array.Empty<CommissionerStatus>();
-        }
-        catch (Exception)
-        {
-            commissionerStatuses = Array.Empty<CommissionerStatus>();
-        }
+        commissionerStatuses = await DataLoaderHelper.LoadDataAsync(() => CommissionerStatusesApi.GetAllCommissionerStatusesAsync());
     }
 
     private async Task LoadAllVersions()
@@ -1214,45 +964,25 @@
         isLoadingHistory = true;
         historyErrorMessage = null;
 
-        try
-        {
-            // Load history
-            var historyResult = await ServiceAreasApi.GetServiceAreaHistoryAsync(selectedServiceArea.Id);
-            var historyRecords = new List<ServiceArea>();
+        var (versions, current, error) = await VersionHistoryHelper.LoadAllVersionsAsync(
+            selectedServiceArea,
+            id => ServiceAreasApi.GetServiceAreaHistoryAsync(id),
+            x => x.Id,
+            x => x.ValidFrom);
 
-            if (historyResult?.IsSuccess == true && historyResult.Data != null)
-            {
-                historyRecords.AddRange(historyResult.Data);
-            }
+        allVersions = versions;
+        currentViewVersion = current;
+        historyErrorMessage = error;
+        UpdateEditModel(currentViewVersion);
 
-            // Combine current with history
-            var versions = new List<ServiceArea> { selectedServiceArea };
-            versions.AddRange(historyRecords.Where(h => h.ValidFrom != selectedServiceArea.ValidFrom));
-            
-            allVersions = versions;
-            
-            // Set the current version as the view version
-            currentViewVersion = selectedServiceArea;
-            UpdateEditModel(currentViewVersion);
+        // Load related data for this service area
+        await LoadServiceAreaOrdinances();
+        await LoadOrdinanceTypes();
+        await LoadCommissionSeats();
+        await LoadServiceAreaRoads();
+        await LoadServiceAreaRfqs();
 
-            // Load related data for this service area
-            await LoadServiceAreaOrdinances();
-            await LoadOrdinanceTypes();
-            await LoadCommissionSeats();
-            await LoadServiceAreaRoads();
-            await LoadServiceAreaRfqs();
-        }
-        catch (Exception ex)
-        {
-            historyErrorMessage = $"Error loading versions: {ex.Message}";
-            allVersions = new List<ServiceArea> { selectedServiceArea };
-            currentViewVersion = selectedServiceArea;
-            UpdateEditModel(currentViewVersion);
-        }
-        finally
-        {
-            isLoadingHistory = false;
-        }
+        isLoadingHistory = false;
     }
 
     private async Task OnCurrentVersionChanged(ServiceArea newVersion)
@@ -1282,15 +1012,12 @@
 
     private bool IsViewingCurrentVersion()
     {
-        if (currentViewVersion == null || selectedServiceArea == null)
-            return true;
-
-        return currentViewVersion.ValidFrom == selectedServiceArea.ValidFrom;
+        return EntityPageHelper.IsViewingCurrentVersion(currentViewVersion, selectedServiceArea, x => x.ValidFrom);
     }
 
     private bool CanEditFields()
     {
-        return isEditMode && IsViewingCurrentVersion();
+        return EntityPageHelper.CanEditFields(isEditMode, IsViewingCurrentVersion());
     }
 
     private async Task HandleItemClick(ServiceArea item)
@@ -1301,9 +1028,7 @@
         await LoadAllVersions();
         await InvokeAsync(StateHasChanged);
 
-        // Update URL with the selected service area ID
-        var uri = NavigationManager.GetUriWithQueryParameter("id", selectedServiceArea.Id);
-        NavigationManager.NavigateTo(uri, replace: true);
+        NavigationHelper.UpdateUrlWithSelection(NavigationManager, selectedServiceArea.Id);
     }
 
     private async Task HandleRestore(ServiceArea historicalRecord)
@@ -1313,44 +1038,33 @@
         isSaving = true;
         ClearMessages();
 
-        try
-        {
-            // Clone the historical record but keep the current ID
-            var restoredData = CloneServiceArea(historicalRecord);
-            restoredData.Id = selectedServiceArea.Id;
+        var (success, errorMsg, errors) = await VersionHistoryHelper.HandleRestoreAsync(
+            selectedServiceArea,
+            historicalRecord,
+            CloneServiceArea,
+            (entity, id) => entity.Id = id,
+            (id, entity) => ServiceAreasApi.UpdateServiceAreaAsync(id, entity),
+            x => x.Id,
+            x => x.ValidFrom);
 
-            var result = await ServiceAreasApi.UpdateServiceAreaAsync(restoredData.Id, restoredData);
+        if (success)
+        {
+            successMessage = errorMsg;
+            await LoadServiceAreas();
+            selectedServiceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == selectedServiceArea.Id);
+            if (selectedServiceArea != null)
+            {
+                await LoadAllVersions();
+            }
+            isEditMode = false;
+        }
+        else
+        {
+            errorMessage = errorMsg;
+            errorDetails = errors;
+        }
 
-            if (result?.IsSuccess == true)
-            {
-                successMessage = $"Successfully restored version from {historicalRecord.ValidFrom:g}";
-                
-                // Reload all data
-                await LoadServiceAreas();
-                
-                // Update the current selection
-                selectedServiceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == selectedServiceArea.Id);
-                if (selectedServiceArea != null)
-                {
-                    await LoadAllVersions();
-                }
-                
-                isEditMode = false;
-            }
-            else
-            {
-                errorMessage = result?.ErrorMessage ?? "Failed to restore historical version";
-                errorDetails = result?.Errors;
-            }
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Error restoring historical version: {ex.Message}";
-        }
-        finally
-        {
-            isSaving = false;
-        }
+        isSaving = false;
     }
 
     private void EnableEdit()
@@ -1376,51 +1090,39 @@
         isSaving = true;
         ClearMessages();
 
-        try
-        {
-            // Get the authenticated user's email for ModifiedBy
-            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var user = authState.User;
-            var userEmail = user.Identity?.Name ?? user.Claims.FirstOrDefault(c => c.Type.Contains("email"))?.Value;
+        var userEmail = await AuthenticationHelper.SetModifiedByAsync(
+            editModel,
+            AuthenticationStateProvider,
+            (entity, email) => entity.ModifiedBy = email);
 
-            if (!string.IsNullOrEmpty(userEmail))
+        var (success, errorMsg, errors, updatedEntity) = await VersionHistoryHelper.SaveEditAsync(
+            editModel,
+            (id, entity) => ServiceAreasApi.UpdateServiceAreaAsync(id, entity),
+            x => x.Id,
+            "Service area updated successfully!");
+
+        if (success)
+        {
+            successMessage = errorMsg;
+            isEditMode = false;
+
+            await LoadServiceAreas();
+            selectedServiceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == editModel.Id);
+
+            if (selectedServiceArea != null)
             {
-                editModel.ModifiedBy = userEmail;
+                await LoadAllVersions();
             }
 
-            var result = await ServiceAreasApi.UpdateServiceAreaAsync(editModel.Id, editModel);
-
-            if (result?.IsSuccess == true)
-            {
-                successMessage = "Service area updated successfully!";
-                isEditMode = false;
-
-                // Reload data
-                await LoadServiceAreas();
-                selectedServiceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == editModel.Id);
-
-                if (selectedServiceArea != null)
-                {
-                    await LoadAllVersions();
-                }
-
-                // Prompt user to add a note about the changes
-                await PromptForEditNote(editModel.Id, userEmail);
-            }
-            else
-            {
-                errorMessage = result?.ErrorMessage ?? "Failed to update service area";
-                errorDetails = result?.Errors;
-            }
+            await PromptForEditNote(editModel.Id, userEmail);
         }
-        catch (Exception ex)
+        else
         {
-            errorMessage = $"Error updating service area: {ex.Message}";
+            errorMessage = errorMsg;
+            errorDetails = errors;
         }
-        finally
-        {
-            isSaving = false;
-        }
+
+        isSaving = false;
     }
 
     private void CancelEdit()
@@ -1436,31 +1138,10 @@
 
     private void ClearMessages()
     {
-        errorMessage = null;
-        errorDetails = null;
-        successMessage = null;
+        EntityPageHelper.ClearMessages(ref errorMessage, ref errorDetails, ref successMessage);
     }
 
-    private ServiceArea CloneServiceArea(ServiceArea source) => new()
-    {
-        Id = source.Id,
-        Name = source.Name,
-        FeatureObjectId = source.FeatureObjectId,
-        OrgKey = source.OrgKey,
-        CurrentMileage = source.CurrentMileage,
-        AbolishMergeYear = source.AbolishMergeYear,
-        MaximumMillRate = source.MaximumMillRate,
-        CurrentMillRate = source.CurrentMillRate,
-        FireMillRate = source.FireMillRate,
-        MillLevy = source.MillLevy,
-        TaxAuthorityCode = source.TaxAuthorityCode,
-        InitialTaxYear = source.InitialTaxYear,
-        MatchFeatureLayer = source.MatchFeatureLayer,
-        ServiceAreaCodeId = source.ServiceAreaCodeId,
-        ValidFrom = source.ValidFrom,
-        ValidTo = source.ValidTo,
-        ModifiedBy = source.ModifiedBy
-    };
+    private ServiceArea CloneServiceArea(ServiceArea source) => EntityCloneHelper.ShallowClone(source);
 
     private async Task<bool> CreateServiceAreaCode(ServiceAreaCode entity)
     {
@@ -1508,13 +1189,12 @@
 
     private void NavigateToOrdinance(Ordinance ordinance)
     {
-        NavigationManager.NavigateTo($"/ordinances?id={ordinance.Id}");
+        NavigationHelper.NavigateToEntity(NavigationManager, "/ordinances", ordinance.Id);
     }
 
     private void NavigateToCommissionSeat(CommissionSeat seat)
     {
-        // TODO: Create Commission Seat details page
-        NavigationManager.NavigateTo($"/commission-seats?id={seat.Id}");
+        NavigationHelper.NavigateToEntity(NavigationManager, "/commission-seats", seat.Id);
     }
 
     // Helper methods for ordering and grouping
@@ -1663,70 +1343,27 @@
         isLoadingRoads = true;
         roadsErrorMessage = null;
 
-        try
-        {
-            var result = await RoadsApi.GetAllRoadsAsync();
+        var allRoads = await DataLoaderHelper.LoadDataWithErrorHandlingAsync(
+            () => RoadsApi.GetAllRoadsAsync(),
+            onError: (error, errors) => roadsErrorMessage = error ?? "Failed to load roads");
 
-            if (result?.IsSuccess == true && result.Data != null)
-            {
-                var allRoads = result.Data.ToList();
+        serviceAreaRoads = allRoads
+            .Where(r => r.ServiceAreaId == selectedServiceArea.Id)
+            .OrderBy(r => roadNames?.FirstOrDefault(rn => rn.Id == r.RoadNameId)?.Name ?? "")
+            .ThenBy(r => r.Phase)
+            .ToList();
 
-                // Filter roads by the selected service area
-                serviceAreaRoads = allRoads
-                    .Where(r => r.ServiceAreaId == selectedServiceArea.Id)
-                    .OrderBy(r => roadNames?.FirstOrDefault(rn => rn.Id == r.RoadNameId)?.Name ?? "")
-                    .ThenBy(r => r.Phase)
-                    .ToList();
-
-                // Debug info: Log how many roads were found
-                Console.WriteLine($"Total roads from API: {allRoads.Count}, Filtered for service area {selectedServiceArea.Id}: {serviceAreaRoads.Count()}");
-            }
-            else
-            {
-                roadsErrorMessage = result?.ErrorMessage ?? "Failed to load roads";
-                serviceAreaRoads = Array.Empty<Road>();
-            }
-        }
-        catch (HttpRequestException ex)
-        {
-            roadsErrorMessage = $"Network error loading roads: {ex.Message}";
-            serviceAreaRoads = Array.Empty<Road>();
-        }
-        catch (Exception ex)
-        {
-            roadsErrorMessage = $"Error loading roads: {ex.Message}";
-            serviceAreaRoads = Array.Empty<Road>();
-        }
-        finally
-        {
-            isLoadingRoads = false;
-        }
+        isLoadingRoads = false;
     }
 
     private async Task LoadRoadNames()
     {
-        try
-        {
-            var result = await RoadNamesApi.GetAllRoadNamesAsync();
-
-            if (result?.IsSuccess == true && result.Data != null)
-            {
-                roadNames = result.Data;
-            }
-            else
-            {
-                roadNames = Array.Empty<RoadName>();
-            }
-        }
-        catch (Exception)
-        {
-            roadNames = Array.Empty<RoadName>();
-        }
+        roadNames = await DataLoaderHelper.LoadDataAsync(() => RoadNamesApi.GetAllRoadNamesAsync());
     }
 
     private void NavigateToRoad(Road road)
     {
-        NavigationManager.NavigateTo($"/roads?id={road.Id}");
+        NavigationHelper.NavigateToEntity(NavigationManager, "/roads", road.Id);
     }
 
     private void CalculateCurrentMileage()
@@ -1756,153 +1393,76 @@
         isLoadingRfqs = true;
         rfqsErrorMessage = null;
 
-        try
-        {
-            var result = await RfqsApi.GetAllRfqsAsync();
+        var allRfqs = await DataLoaderHelper.LoadDataWithErrorHandlingAsync(
+            () => RfqsApi.GetAllRfqsAsync(),
+            onError: (error, errors) => rfqsErrorMessage = error ?? "Failed to load RFQs");
 
-            if (result?.IsSuccess == true && result.Data != null)
-            {
-                // Filter RFQs by the selected service area
-                serviceAreaRfqs = result.Data
-                    .Where(r => r.ServiceAreaId == selectedServiceArea.Id)
-                    .OrderByDescending(r => r.IssueDate)
-                    .ThenBy(r => r.RfqNumber)
-                    .ToList();
-            }
-            else
-            {
-                rfqsErrorMessage = result?.ErrorMessage ?? "Failed to load RFQs";
-                serviceAreaRfqs = Array.Empty<Rfq>();
-            }
-        }
-        catch (HttpRequestException ex)
-        {
-            rfqsErrorMessage = $"Network error loading RFQs: {ex.Message}";
-            serviceAreaRfqs = Array.Empty<Rfq>();
-        }
-        catch (Exception ex)
-        {
-            rfqsErrorMessage = $"Error loading RFQs: {ex.Message}";
-            serviceAreaRfqs = Array.Empty<Rfq>();
-        }
-        finally
-        {
-            isLoadingRfqs = false;
-        }
+        serviceAreaRfqs = allRfqs
+            .Where(r => r.ServiceAreaId == selectedServiceArea.Id)
+            .OrderByDescending(r => r.IssueDate)
+            .ThenBy(r => r.RfqNumber)
+            .ToList();
+
+        isLoadingRfqs = false;
     }
 
     private async Task LoadRfqLookups()
     {
-        try
-        {
-            var ifbTypesTask = RfqIfbTypesApi.GetAllRfqIfbTypesAsync();
-            var projectScopesTask = RfqProjectScopesApi.GetAllRfqProjectScopesAsync();
-
-            await Task.WhenAll(ifbTypesTask, projectScopesTask);
-
-            rfqIfbTypes = (await ifbTypesTask)?.Data ?? Array.Empty<RfqIfbType>();
-            rfqProjectScopes = (await projectScopesTask)?.Data ?? Array.Empty<RfqProjectScope>();
-        }
-        catch (Exception)
-        {
-            rfqIfbTypes = Array.Empty<RfqIfbType>();
-            rfqProjectScopes = Array.Empty<RfqProjectScope>();
-        }
+        await DataLoaderHelper.LoadMultipleAsync(
+            async () => rfqIfbTypes = await DataLoaderHelper.LoadDataAsync(() => RfqIfbTypesApi.GetAllRfqIfbTypesAsync()),
+            async () => rfqProjectScopes = await DataLoaderHelper.LoadDataAsync(() => RfqProjectScopesApi.GetAllRfqProjectScopesAsync())
+        );
     }
 
     private void NavigateToRfq(Rfq rfq)
     {
-        NavigationManager.NavigateTo($"/rfqs?id={rfq.Id}");
+        NavigationHelper.NavigateToEntity(NavigationManager, "/rfqs", rfq.Id);
     }
 
     private async Task PromptForEditNote(int serviceAreaId, string? userEmail)
     {
-        var parameters = new DialogParameters
-        {
-            { "EntityName", selectedServiceArea?.Name ?? "Service Area" }
-        };
-
-        var options = new DialogOptions 
-        { 
-            CloseButton = true, 
-            MaxWidth = MaxWidth.Medium, 
-            FullWidth = true 
-        };
-
-        var dialog = await DialogService.ShowAsync<AddEditNoteDialog>("Add Note About Changes", parameters, options);
-        var result = await dialog.Result;
-
-        if (!result.Canceled && result.Data is string noteText && !string.IsNullOrWhiteSpace(noteText))
-        {
-            await CreateEditNote(serviceAreaId, noteText, userEmail);
-        }
+        await NotesHelper.PromptForEditNoteAsync(
+            DialogService,
+            selectedServiceArea?.Name ?? "Service Area",
+            OnNotesCountChanged,
+            async (id, text) => await CreateEditNote(id, text, userEmail),
+            serviceAreaId,
+            userEmail);
     }
 
     private async Task CreateEditNote(int serviceAreaId, string noteText, string? userEmail)
     {
-        try
-        {
-            var note = new Note
-            {
-                NoteText = noteText,
-                ServiceAreaId = serviceAreaId,
-                ModifiedBy = userEmail ?? "Unknown User",
-                ValidFrom = DateTime.UtcNow
-            };
-
-            var result = await NotesApi.CreateNoteAsync(note);
-
-            if (result?.IsSuccess == true)
-            {
-                // Note created successfully - could show a toast notification here
-                await InvokeAsync(StateHasChanged);
-            }
-        }
-        catch (Exception)
-        {
-            // Silently fail - note creation is optional
-        }
+        var note = NotesHelper.CreateServiceAreaNote(serviceAreaId, noteText, userEmail);
+        await NotesHelper.CreateNoteAsync(
+            note,
+            NotesApi.CreateNoteAsync,
+            () => InvokeAsync(StateHasChanged));
     }
 
     private async Task OpenCreateDialog()
     {
-        var parameters = new DialogParameters<CreateEntityDialog<ServiceArea>>
+        var createdServiceArea = await CreateDialogHelper.OpenCreateDialogAsync(
+            DialogService,
+            "Service Area",
+            "Create a new service area record. All fields marked with * are required.",
+            CreateServiceArea,
+            GetServiceAreaFormContent(),
+            autoSetModifiedBy: true,
+            dialogTitle: "Create New {0}");
+
+        if (createdServiceArea != null)
         {
-            { x => x.EntityDisplayName, "Service Area" },
-            { x => x.Description, "Create a new service area record. All fields marked with * are required." },
-            { x => x.OnCreate, new Func<ServiceArea, Task<(bool, string?, string[]?)>>(CreateServiceArea) },
-            { x => x.AutoSetModifiedBy, true },
-            { x => x.FormContent, GetServiceAreaFormContent() }
-        };
+            await CreateDialogHelper.HandlePostCreateAsync(
+                createdServiceArea,
+                LoadServiceAreas,
+                id => serviceAreas?.FirstOrDefault(sa => sa.Id == id),
+                sa => sa.Id,
+                sa => sa.Name ?? "Service Area",
+                sa => selectedServiceArea = sa,
+                onEntitySelected: async (sa) => { await LoadAllVersions(); },
+                updateUrl: (param, id) => NavigationHelper.UpdateUrlWithSelection(NavigationManager, id),
+                setSuccessMessage: msg => successMessage = msg);
 
-        var options = new DialogOptions 
-        { 
-            CloseButton = true, 
-            MaxWidth = MaxWidth.Large, 
-            FullWidth = true,
-            CloseOnEscapeKey = true
-        };
-
-        var dialog = await DialogService.ShowAsync<CreateEntityDialog<ServiceArea>>("Create New Service Area", parameters, options);
-        var result = await dialog.Result;
-
-        if (!result.Canceled && result.Data is ServiceArea createdServiceArea)
-        {
-            // Reload service areas to include the new one
-            await LoadServiceAreas();
-
-            // Select the newly created service area
-            selectedServiceArea = serviceAreas?.FirstOrDefault(sa => sa.Id == createdServiceArea.Id);
-            if (selectedServiceArea != null)
-            {
-                await LoadAllVersions();
-
-                // Update URL
-                var uri = NavigationManager.GetUriWithQueryParameter("id", selectedServiceArea.Id);
-                NavigationManager.NavigateTo(uri, replace: true);
-            }
-
-            successMessage = $"Service area '{createdServiceArea.Name}' created successfully!";
             await InvokeAsync(StateHasChanged);
         }
     }

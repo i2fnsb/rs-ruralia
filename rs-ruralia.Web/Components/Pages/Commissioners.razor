@@ -155,52 +155,16 @@
                                             <EditForm EditContext="@editContext" OnValidSubmit="@(() => SaveProfileEdit(profile.Id))">
                                                 <DataAnnotationsValidator />
                                                 <MudGrid>
-                                                    <MudItem xs="12">
-                                                        @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
-                                                        {
-                                                            <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
-                                                                <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@isSaving">
-                                                                    @if (isSaving)
-                                                                    {
-                                                                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
-                                                                        <MudText Class="ms-2">Saving...</MudText>
-                                                                    }
-                                                                    else
-                                                                    {
-                                                                        <MudIcon Icon="@Icons.Material.Filled.Save" Class="me-1" /> <MudText>Save</MudText>
-                                                                    }
-                                                                </MudButton>
-                                                                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="CancelEdit" Disabled="@isSaving">
-                                                                    Cancel
-                                                                </MudButton>
-                                                            </MudStack>
-                                                        }
-                                                    </MudItem>
-
-                                                    @if (!string.IsNullOrEmpty(successMessage))
+                                                    @if (canEdit && ViewModeService.IsAtLeast(ViewMode.Admin))
                                                     {
                                                         <MudItem xs="12">
-                                                            <MudAlert Severity="Severity.Success" Variant="Variant.Filled">@successMessage</MudAlert>
+                                                            <SaveCancelButtons IsSaving="@isSaving" OnCancel="@CancelEdit" />
                                                         </MudItem>
                                                     }
 
-                                                    @if (!string.IsNullOrEmpty(errorMessage))
-                                                    {
-                                                        <MudItem xs="12">
-                                                            <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
-                                                                <MudText>@errorMessage</MudText>
-                                                                @if (errorDetails != null && errorDetails.Length > 0)
-                                                                {
-                                                                    <MudList T="string" Dense="true">
-                                                                        @foreach (var detail in errorDetails)
-                                                                        {
-                                                                            <MudListItem>@detail</MudListItem>
-                                                                        }
-                                                                    </MudList>
-                                                                }
-                                                            </MudAlert>
-                                                        </MudItem>
-                                                    }
+                                                    <AlertMessages SuccessMessage="@successMessage" 
+                                                                  ErrorMessage="@errorMessage" 
+                                                                  ErrorDetails="@errorDetails" />
 
                                                     <MudItem xs="12" md="6">
                                                         <AutoField @bind-Value="editModel.PersonProfileId" 
@@ -536,7 +500,7 @@
                                                                       Color="Color.Primary" 
                                                                       Size="Size.Small"
                                                                       StartIcon="@Icons.Material.Filled.OpenInNew"
-                                                                      OnClick="@(() => NavigationManager.NavigateTo($"/persons?id={displayVersion.PersonProfileId}"))">
+                                                                      OnClick="@(() => NavigationHelper.NavigateToEntity(NavigationManager, "/persons", displayVersion.PersonProfileId))">
                                                                 @GetPersonName(displayVersion.PersonProfileId)
                                                             </MudButton>
                                                         }
@@ -566,7 +530,7 @@
                                                                       Color="Color.Primary" 
                                                                       Size="Size.Small"
                                                                       StartIcon="@Icons.Material.Filled.OpenInNew"
-                                                                      OnClick="@(() => NavigationManager.NavigateTo($"/service-areas?id={versionServiceArea.Id}"))">
+                                                                      OnClick="@(() => NavigationHelper.NavigateToEntity(NavigationManager, "/service-areas", versionServiceArea.Id))">
                                                                 @versionServiceArea.Name
                                                             </MudButton>
                                                         }
@@ -594,7 +558,7 @@
                                                                       Color="Color.Primary" 
                                                                       Size="Size.Small"
                                                                       StartIcon="@Icons.Material.Filled.OpenInNew"
-                                                                      OnClick="@(() => NavigationManager.NavigateTo($"/commission-seats?id={versionSeatForDisplay.Id}"))">
+                                                                      OnClick="@(() => NavigationHelper.NavigateToEntity(NavigationManager, "/commission-seats", versionSeatForDisplay.Id))">
                                                                 @seatDisplay
                                                             </MudButton>
                                                         }
@@ -626,91 +590,38 @@
                                             </MudItem>
 
                                             <MudItem xs="12" md="6">
-                                                <InfoCard TValue="bool?" TModel="CommissionerProfile"
-                                                         Label="Registered Voter" 
-                                                         Icon="@Icons.Material.Filled.HowToVote"
-                                                         PropertyExpression="@(x => x.RegisteredVoter)">
-                                                    <ValueContent>
-                                                        @if (displayVersion.RegisteredVoter == true)
-                                                        {
-                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
-                                                        }
-                                                        else if (displayVersion.RegisteredVoter == false)
-                                                        {
-                                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
-                                                        }
-                                                        else
-                                                        {
-                                                            <MudText>—</MudText>
-                                                        }
-                                                    </ValueContent>
-                                                </InfoCard>
+                                                <BooleanInfoCard TModel="CommissionerProfile"
+                                                               Value="@displayVersion.RegisteredVoter"
+                                                               Label="Registered Voter" 
+                                                               Icon="@Icons.Material.Filled.HowToVote"
+                                                               PropertyExpression="@(x => x.RegisteredVoter)" />
                                             </MudItem>
 
                                             <MudItem xs="12" md="6">
-                                                <InfoCard TValue="bool?" TModel="CommissionerProfile"
-                                                         Label="Resides In Service Area" 
-                                                         Icon="@Icons.Material.Filled.House"
-                                                         PropertyExpression="@(x => x.ResidesInServiceArea)">
-                                                    <ValueContent>
-                                                        @if (displayVersion.ResidesInServiceArea == true)
-                                                        {
-                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
-                                                        }
-                                                        else if (displayVersion.ResidesInServiceArea == false)
-                                                        {
-                                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
-                                                        }
-                                                        else
-                                                        {
-                                                            <MudText>—</MudText>
-                                                        }
-                                                    </ValueContent>
-                                                </InfoCard>
+                                                <BooleanInfoCard TModel="CommissionerProfile"
+                                                               Value="@displayVersion.ResidesInServiceArea"
+                                                               Label="Resides In Service Area" 
+                                                               Icon="@Icons.Material.Filled.House"
+                                                               PropertyExpression="@(x => x.ResidesInServiceArea)" />
                                             </MudItem>
 
                                             <MudItem xs="12" md="6">
-                                                <InfoCard TValue="bool?" TModel="CommissionerProfile"
-                                                         Label="Recommended For Appointment" 
-                                                         Icon="@Icons.Material.Filled.ThumbUp"
-                                                         PropertyExpression="@(x => x.RecommendedForAppointment)">
-                                                    <ValueContent>
-                                                        @if (displayVersion.RecommendedForAppointment == true)
-                                                        {
-                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
-                                                        }
-                                                        else if (displayVersion.RecommendedForAppointment == false)
-                                                        {
-                                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
-                                                        }
-                                                        else
-                                                        {
-                                                            <MudText>—</MudText>
-                                                        }
-                                                    </ValueContent>
-                                                </InfoCard>
+                                                <BooleanInfoCard TModel="CommissionerProfile"
+                                                               Value="@displayVersion.RecommendedForAppointment"
+                                                               Label="Recommended For Appointment" 
+                                                               Icon="@Icons.Material.Filled.ThumbUp"
+                                                               PropertyExpression="@(x => x.RecommendedForAppointment)" />
                                             </MudItem>
 
                                             <MudItem xs="12" md="6">
-                                                <InfoCard TValue="bool?" TModel="CommissionerProfile"
-                                                         Label="Do Not Appoint" 
-                                                         Icon="@Icons.Material.Filled.Block"
-                                                         PropertyExpression="@(x => x.DoNotAppoint)">
-                                                    <ValueContent>
-                                                        @if (displayVersion.DoNotAppoint == true)
-                                                        {
-                                                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Block">Yes</MudChip>
-                                                        }
-                                                        else if (displayVersion.DoNotAppoint == false)
-                                                        {
-                                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Check">No</MudChip>
-                                                        }
-                                                        else
-                                                        {
-                                                            <MudText>—</MudText>
-                                                        }
-                                                    </ValueContent>
-                                                </InfoCard>
+                                                <BooleanInfoCard TModel="CommissionerProfile"
+                                                               Value="@displayVersion.DoNotAppoint"
+                                                               Label="Do Not Appoint" 
+                                                               Icon="@Icons.Material.Filled.Block"
+                                                               TrueColor="Color.Error"
+                                                               TrueIcon="@Icons.Material.Filled.Block"
+                                                               FalseIcon="@Icons.Material.Filled.Check"
+                                                               PropertyExpression="@(x => x.DoNotAppoint)" />
                                             </MudItem>
 
                                             @if (displayVersion.DoNotAppoint == true)
@@ -725,47 +636,23 @@
                                             }
 
                                             <MudItem xs="12" md="6">
-                                                <InfoCard TValue="bool?" TModel="CommissionerProfile"
-                                                         Label="Oath" 
-                                                         Icon="@Icons.Material.Filled.Verified"
-                                                         PropertyExpression="@(x => x.Oath)">
-                                                    <ValueContent>
-                                                        @if (displayVersion.Oath == true)
-                                                        {
-                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Taken</MudChip>
-                                                        }
-                                                        else if (displayVersion.Oath == false)
-                                                        {
-                                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.PendingActions">Not Taken</MudChip>
-                                                        }
-                                                        else
-                                                        {
-                                                            <MudText>—</MudText>
-                                                        }
-                                                    </ValueContent>
-                                                </InfoCard>
+                                                <BooleanInfoCard TModel="CommissionerProfile"
+                                                               Value="@displayVersion.Oath"
+                                                               Label="Oath" 
+                                                               Icon="@Icons.Material.Filled.Verified"
+                                                               TrueText="Taken"
+                                                               FalseText="Not Taken"
+                                                               FalseColor="Color.Warning"
+                                                               FalseIcon="@Icons.Material.Filled.PendingActions"
+                                                               PropertyExpression="@(x => x.Oath)" />
                                             </MudItem>
 
                                             <MudItem xs="12" md="6">
-                                                <InfoCard TValue="bool?" TModel="CommissionerProfile"
-                                                         Label="Invoices" 
-                                                         Icon="@Icons.Material.Filled.Receipt"
-                                                         PropertyExpression="@(x => x.Invoices)">
-                                                    <ValueContent>
-                                                        @if (displayVersion.Invoices == true)
-                                                        {
-                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
-                                                        }
-                                                        else if (displayVersion.Invoices == false)
-                                                        {
-                                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Close">No</MudChip>
-                                                        }
-                                                        else
-                                                        {
-                                                            <MudText>—</MudText>
-                                                        }
-                                                    </ValueContent>
-                                                </InfoCard>
+                                                <BooleanInfoCard TModel="CommissionerProfile"
+                                                               Value="@displayVersion.Invoices"
+                                                               Label="Invoices" 
+                                                               Icon="@Icons.Material.Filled.Receipt"
+                                                               PropertyExpression="@(x => x.Invoices)" />
                                             </MudItem>
 
                                             <MudItem xs="12" md="6">
@@ -999,33 +886,28 @@
     {
         isLoading = true;
 
-        var tasks = new List<Task>
-        {
-            LoadCommissionerProfiles(),
-            LoadCommissionerStatuses(),
-            LoadCommissionSeats(),
-            LoadCommissionSeatTypes(),
-            LoadCommissionSeatClasses(),
-            LoadCommissionSeatStatuses(),
-            LoadServiceAreas(),
-            LoadPersonProfiles(),
-            LoadPersonHonorifics(),
-            LoadPersonSuffixes(),
-            LoadCorrespondenceProfiles(),
-            LoadCorrespondenceEmails(),
-            LoadCorrespondencePhones()
-        };
+        await DataLoaderHelper.LoadMultipleAsync(
+            LoadCommissionerProfiles,
+            LoadCommissionerStatuses,
+            LoadCommissionSeats,
+            LoadCommissionSeatTypes,
+            LoadCommissionSeatClasses,
+            LoadCommissionSeatStatuses,
+            LoadServiceAreas,
+            LoadPersonProfiles,
+            LoadPersonHonorifics,
+            LoadPersonSuffixes,
+            LoadCorrespondenceProfiles,
+            LoadCorrespondenceEmails,
+            LoadCorrespondencePhones
+        );
 
-        await Task.WhenAll(tasks);
         isLoading = false;
     }
 
     private void HandleEditModeCancelled()
     {
-        if (isEditMode)
-        {
-            CancelEdit();
-        }
+        EntityPageHelper.HandleEditModeCancelled(isEditMode, CancelEdit);
     }
 
     private void SelectCommissionerFromParameters()
@@ -1047,178 +929,67 @@
 
     private async Task LoadCommissionerProfiles()
     {
-        try
-        {
-            var result = await CommissionerProfilesApi.GetAllCommissionerProfilesAsync();
-            if (result?.IsSuccess == true && result.Data != null)
-            {
-                commissionerProfiles = result.Data;
-            }
-            else
-            {
-                commissionerProfiles = Array.Empty<CommissionerProfile>();
-            }
-        }
-        catch (Exception)
-        {
-            commissionerProfiles = Array.Empty<CommissionerProfile>();
-        }
+        commissionerProfiles = await DataLoaderHelper.LoadDataAsync(() => CommissionerProfilesApi.GetAllCommissionerProfilesAsync());
     }
 
     private async Task LoadCommissionerStatuses()
     {
-        try
-        {
-            var result = await CommissionerStatusesApi.GetAllCommissionerStatusesAsync();
-            commissionerStatuses = result?.Data ?? Array.Empty<CommissionerStatus>();
-        }
-        catch (Exception)
-        {
-            commissionerStatuses = Array.Empty<CommissionerStatus>();
-        }
+        commissionerStatuses = await DataLoaderHelper.LoadDataAsync(() => CommissionerStatusesApi.GetAllCommissionerStatusesAsync());
     }
 
     private async Task LoadCommissionSeats()
     {
-        try
-        {
-            var result = await CommissionSeatsApi.GetAllCommissionSeatsAsync();
-            commissionSeats = result?.Data ?? Array.Empty<CommissionSeat>();
-        }
-        catch (Exception)
-        {
-            commissionSeats = Array.Empty<CommissionSeat>();
-        }
+        commissionSeats = await DataLoaderHelper.LoadDataAsync(() => CommissionSeatsApi.GetAllCommissionSeatsAsync());
     }
 
     private async Task LoadCommissionSeatTypes()
     {
-        try
-        {
-            var result = await CommissionSeatTypesApi.GetAllCommissionSeatTypesAsync();
-            commissionSeatTypes = result?.Data ?? Array.Empty<CommissionSeatType>();
-        }
-        catch (Exception)
-        {
-            commissionSeatTypes = Array.Empty<CommissionSeatType>();
-        }
+        commissionSeatTypes = await DataLoaderHelper.LoadDataAsync(() => CommissionSeatTypesApi.GetAllCommissionSeatTypesAsync());
     }
 
     private async Task LoadCommissionSeatClasses()
     {
-        try
-        {
-            var result = await CommissionSeatClassesApi.GetAllCommissionSeatClassesAsync();
-            commissionSeatClasses = result?.Data ?? Array.Empty<CommissionSeatClass>();
-        }
-        catch (Exception)
-        {
-            commissionSeatClasses = Array.Empty<CommissionSeatClass>();
-        }
+        commissionSeatClasses = await DataLoaderHelper.LoadDataAsync(() => CommissionSeatClassesApi.GetAllCommissionSeatClassesAsync());
     }
 
     private async Task LoadCommissionSeatStatuses()
     {
-        try
-        {
-            var result = await CommissionSeatStatusesApi.GetAllCommissionSeatStatusesAsync();
-            commissionSeatStatuses = result?.Data ?? Array.Empty<CommissionSeatStatus>();
-        }
-        catch (Exception)
-        {
-            commissionSeatStatuses = Array.Empty<CommissionSeatStatus>();
-        }
+        commissionSeatStatuses = await DataLoaderHelper.LoadDataAsync(() => CommissionSeatStatusesApi.GetAllCommissionSeatStatusesAsync());
     }
 
     private async Task LoadServiceAreas()
     {
-        try
-        {
-            var result = await ServiceAreasApi.GetAllServiceAreasAsync();
-            serviceAreas = result?.Data ?? Array.Empty<ServiceArea>();
-        }
-        catch (Exception)
-        {
-            serviceAreas = Array.Empty<ServiceArea>();
-        }
+        serviceAreas = await DataLoaderHelper.LoadDataAsync(() => ServiceAreasApi.GetAllServiceAreasAsync());
     }
 
     private async Task LoadPersonProfiles()
     {
-        try
-        {
-            var result = await PersonProfilesApi.GetAllPersonProfilesAsync();
-            personProfiles = result?.Data ?? Array.Empty<PersonProfile>();
-        }
-        catch (Exception)
-        {
-            personProfiles = Array.Empty<PersonProfile>();
-        }
+        personProfiles = await DataLoaderHelper.LoadDataAsync(() => PersonProfilesApi.GetAllPersonProfilesAsync());
     }
 
     private async Task LoadPersonHonorifics()
     {
-        try
-        {
-            var result = await PersonHonorificsApi.GetAllPersonHonorificsAsync();
-            personHonorifics = result?.Data ?? Array.Empty<PersonHonorific>();
-        }
-        catch (Exception)
-        {
-            personHonorifics = Array.Empty<PersonHonorific>();
-        }
+        personHonorifics = await DataLoaderHelper.LoadDataAsync(() => PersonHonorificsApi.GetAllPersonHonorificsAsync());
     }
 
     private async Task LoadPersonSuffixes()
     {
-        try
-        {
-            var result = await PersonSuffixesApi.GetAllPersonSuffixesAsync();
-            personSuffixes = result?.Data ?? Array.Empty<PersonSuffix>();
-        }
-        catch (Exception)
-        {
-            personSuffixes = Array.Empty<PersonSuffix>();
-        }
+        personSuffixes = await DataLoaderHelper.LoadDataAsync(() => PersonSuffixesApi.GetAllPersonSuffixesAsync());
     }
 
     private async Task LoadCorrespondenceProfiles()
     {
-        try
-        {
-            var result = await CorrespondenceProfilesApi.GetAllCorrespondenceProfilesAsync();
-            correspondenceProfiles = result?.Data ?? Array.Empty<CorrespondenceProfile>();
-        }
-        catch (Exception)
-        {
-            correspondenceProfiles = Array.Empty<CorrespondenceProfile>();
-        }
+        correspondenceProfiles = await DataLoaderHelper.LoadDataAsync(() => CorrespondenceProfilesApi.GetAllCorrespondenceProfilesAsync());
     }
 
     private async Task LoadCorrespondenceEmails()
     {
-        try
-        {
-            var result = await CorrespondenceEmailsApi.GetAllCorrespondenceEmailsAsync();
-            correspondenceEmails = result?.Data ?? Array.Empty<CorrespondenceEmail>();
-        }
-        catch (Exception)
-        {
-            correspondenceEmails = Array.Empty<CorrespondenceEmail>();
-        }
+        correspondenceEmails = await DataLoaderHelper.LoadDataAsync(() => CorrespondenceEmailsApi.GetAllCorrespondenceEmailsAsync());
     }
 
     private async Task LoadCorrespondencePhones()
     {
-        try
-        {
-            var result = await CorrespondencePhonesApi.GetAllCorrespondencePhonesAsync();
-            correspondencePhones = result?.Data ?? Array.Empty<CorrespondencePhone>();
-        }
-        catch (Exception)
-        {
-            correspondencePhones = Array.Empty<CorrespondencePhone>();
-        }
+        correspondencePhones = await DataLoaderHelper.LoadDataAsync(() => CorrespondencePhonesApi.GetAllCorrespondencePhonesAsync());
     }
 
     private async Task LoadOtherProfilesForPerson()
@@ -1491,23 +1262,14 @@
 
         try
         {
-            // Clone the historical version data
             var restoredData = CloneCommissioner(historicalVersion);
-
-            // Keep the current profile ID (we're updating, not creating)
             restoredData.Id = profileId;
 
-            // Get user email for audit
-            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var user = authState.User;
-            var userEmail = user.Identity?.Name ?? user.Claims.FirstOrDefault(c => c.Type.Contains("email"))?.Value;
+            var userEmail = await AuthenticationHelper.SetModifiedByAsync(
+                restoredData,
+                AuthenticationStateProvider,
+                (entity, email) => entity.ModifiedBy = email);
 
-            if (!string.IsNullOrEmpty(userEmail))
-            {
-                restoredData.ModifiedBy = userEmail;
-            }
-
-            // Update the profile with historical data
             var result = await CommissionerProfilesApi.UpdateCommissionerProfileAsync(profileId, restoredData);
 
             if (result?.IsSuccess == true)
@@ -1573,15 +1335,12 @@
 
     private bool IsViewingCurrentVersion()
     {
-        if (currentViewVersion == null || selectedCommissioner == null)
-            return true;
-
-        return currentViewVersion.ValidFrom == selectedCommissioner.ValidFrom;
+        return EntityPageHelper.IsViewingCurrentVersion(currentViewVersion, selectedCommissioner, x => x.ValidFrom);
     }
 
     private bool CanEditFields()
     {
-        return isEditMode && IsViewingCurrentVersion();
+        return EntityPageHelper.CanEditFields(isEditMode, IsViewingCurrentVersion());
     }
 
     private async Task HandleItemClick(PersonProfile item)
@@ -1593,8 +1352,7 @@
         await LoadAllVersions();
         await InvokeAsync(StateHasChanged);
 
-        var uri = NavigationManager.GetUriWithQueryParameter("id", selectedPerson.Id);
-        NavigationManager.NavigateTo(uri, replace: true);
+        NavigationHelper.UpdateUrlWithSelection(NavigationManager, selectedPerson.Id);
     }
 
     private async Task HandleRestore(CommissionerProfile historicalRecord)
@@ -1681,111 +1439,43 @@
         isSaving = true;
         ClearMessages();
 
-        try
-        {
-            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var user = authState.User;
-            var userEmail = user.Identity?.Name ?? user.Claims.FirstOrDefault(c => c.Type.Contains("email"))?.Value;
+        var userEmail = await AuthenticationHelper.SetModifiedByAsync(
+            editModel,
+            AuthenticationStateProvider,
+            (entity, email) => entity.ModifiedBy = email);
 
-            if (!string.IsNullOrEmpty(userEmail))
+        var (success, errorMsg, errors, updatedEntity) = await VersionHistoryHelper.SaveEditAsync(
+            editModel,
+            (id, entity) => CommissionerProfilesApi.UpdateCommissionerProfileAsync(id, entity),
+            x => x.Id,
+            "Commissioner profile updated successfully!");
+
+        if (success)
+        {
+            successMessage = errorMsg;
+            editingProfileId = null;
+
+            await LoadCommissionerProfiles();
+            profileVersionCache.Remove(profileId);
+            LoadAllProfilesForPerson();
+
+            var updatedProfile = allProfilesForPerson?.FirstOrDefault(p => p.Id == profileId);
+            if (updatedProfile != null)
             {
-                editModel.ModifiedBy = userEmail;
+                currentlyDisplayedVersions[profileId] = updatedProfile;
+                _ = LoadProfileVersionsAsync(profileId);
             }
 
-            var result = await CommissionerProfilesApi.UpdateCommissionerProfileAsync(editModel.Id, editModel);
-
-            if (result?.IsSuccess == true)
-            {
-                successMessage = "Commissioner profile updated successfully!";
-                editingProfileId = null;
-
-                // Reload commissioner profiles
-                await LoadCommissionerProfiles();
-
-                // Clear version cache to force reload
-                profileVersionCache.Remove(profileId);
-
-                // Reload all profiles for this person
-                LoadAllProfilesForPerson();
-
-                // Get the updated profile and set it as the displayed version
-                var updatedProfile = allProfilesForPerson?.FirstOrDefault(p => p.Id == profileId);
-                if (updatedProfile != null)
-                {
-                    currentlyDisplayedVersions[profileId] = updatedProfile;
-
-                    // Reload version history in background
-                    _ = LoadProfileVersionsAsync(profileId);
-                }
-
-                await InvokeAsync(StateHasChanged);
-
-                // Prompt user to add a note
-                await PromptForEditNote(profileId, userEmail);
-            }
-            else
-            {
-                errorMessage = result?.ErrorMessage ?? "Failed to update commissioner profile";
-                errorDetails = result?.Errors;
-            }
+            await InvokeAsync(StateHasChanged);
+            await PromptForEditNote(profileId, userEmail);
         }
-        catch (Exception ex)
+        else
         {
-            errorMessage = $"Error updating commissioner profile: {ex.Message}";
+            errorMessage = errorMsg;
+            errorDetails = errors;
         }
-        finally
-        {
-            isSaving = false;
-        }
-    }
 
-    private async Task SaveEdit()
-    {
-        if (editModel == null) return;
-
-        isSaving = true;
-        ClearMessages();
-
-        try
-        {
-            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var user = authState.User;
-            var userEmail = user.Identity?.Name ?? user.Claims.FirstOrDefault(c => c.Type.Contains("email"))?.Value;
-
-            if (!string.IsNullOrEmpty(userEmail))
-            {
-                editModel.ModifiedBy = userEmail;
-            }
-
-            var result = await CommissionerProfilesApi.UpdateCommissionerProfileAsync(editModel.Id, editModel);
-
-            if (result?.IsSuccess == true)
-            {
-                successMessage = "Commissioner profile updated successfully!";
-                isEditMode = false;
-
-                await LoadCommissionerProfiles();
-                selectedCommissioner = commissionerProfiles?.FirstOrDefault(c => c.Id == editModel.Id);
-
-                if (selectedCommissioner != null)
-                {
-                    await LoadAllVersions();
-                }
-            }
-            else
-            {
-                errorMessage = result?.ErrorMessage ?? "Failed to update commissioner profile";
-                errorDetails = result?.Errors;
-            }
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Error updating commissioner profile: {ex.Message}";
-        }
-        finally
-        {
-            isSaving = false;
-        }
+        isSaving = false;
     }
 
     private void CancelEdit()
@@ -1802,31 +1492,10 @@
 
     private void ClearMessages()
     {
-        errorMessage = null;
-        errorDetails = null;
-        successMessage = null;
+        EntityPageHelper.ClearMessages(ref errorMessage, ref errorDetails, ref successMessage);
     }
 
-    private CommissionerProfile CloneCommissioner(CommissionerProfile source) => new()
-    {
-        Id = source.Id,
-        PersonProfileId = source.PersonProfileId,
-        CommissionSeatId = source.CommissionSeatId,
-        CommissionerStatusId = source.CommissionerStatusId,
-        AppointedDate = source.AppointedDate,
-        EndDate = source.EndDate,
-        Oath = source.Oath,
-        AssemblyMeetingDate = source.AssemblyMeetingDate,
-        EffectiveDate = source.EffectiveDate,
-        RegisteredVoter = source.RegisteredVoter,
-        RecommendedForAppointment = source.RecommendedForAppointment,
-        DoNotAppoint = source.DoNotAppoint,
-        DoNotAppointDetails = source.DoNotAppointDetails,
-        Invoices = source.Invoices,
-        ValidFrom = source.ValidFrom,
-        ValidTo = source.ValidTo,
-        ModifiedBy = source.ModifiedBy
-    };
+    private CommissionerProfile CloneCommissioner(CommissionerProfile source) => EntityCloneHelper.ShallowClone(source);
 
     private string GetPersonName(int personProfileId)
     {
@@ -1944,73 +1613,28 @@
         return GetPersonName(person.Id);
     }
 
-    private async Task PromptForNote(int profileId, string changeDescription)
-    {
-        var parameters = new DialogParameters
-        {
-            { "EntityType", "commissioner_profile" },
-            { "EntityId", profileId },
-            { "SuggestedNote", changeDescription }
-        };
-
-        var options = new DialogOptions 
-        { 
-            CloseButton = true,
-            MaxWidth = MaxWidth.Medium,
-            FullWidth = true
-        };
-
-        var dialog = await DialogService.ShowAsync<AddEditNoteDialog>("Add Note (Optional)", parameters, options);
-        var dialogResult = await dialog.Result;
-
-        // Note is saved within the dialog, we don't need to do anything here
-        // Just refresh the UI if needed
-        if (!dialogResult.Canceled)
-        {
-            await InvokeAsync(StateHasChanged);
-        }
-    }
-
     private async Task PromptForEditNote(int entityId, string? userEmail)
     {
         var person = personProfiles?.FirstOrDefault(p => p.Id == selectedPerson?.Id);
         var personName = person != null ? GetPersonName(person.Id) : "Commissioner";
 
-        var parameters = new DialogParameters
-        {
-            { "EntityName", $"{personName} - Commissioner Profile" }
-        };
-
-        var options = new DialogOptions 
-        { 
-            CloseButton = true,
-            MaxWidth = MaxWidth.Medium,
-            FullWidth = true
-        };
-
-        var dialog = await DialogService.ShowAsync<AddEditNoteDialog>("Add Note (Optional)", parameters, options);
-        var result = await dialog.Result;
-
-        if (!result.Canceled && result.Data is string noteText && !string.IsNullOrWhiteSpace(noteText))
-        {
-            await CreateEditNote(entityId, noteText, userEmail);
-        }
+        await NotesHelper.PromptForEditNoteAsync(
+            DialogService,
+            $"{personName} - Commissioner Profile",
+            (count) => { /* Note count handled per profile */ },
+            async (id, text) => await CreateEditNote(id, text, userEmail),
+            entityId,
+            userEmail);
     }
 
     private async Task CreateEditNote(int profileId, string noteText, string? userEmail)
     {
-        try
-        {
-            var note = new Note
-            {
-                NoteText = noteText,
-                CommissionerProfileId = profileId,
-                ModifiedBy = userEmail ?? "Unknown User",
-            };
+        var note = NotesHelper.CreateCommissionerProfileNote(profileId, noteText, userEmail);
 
-            var result = await NotesApi.CreateNoteAsync(note);
-
-            if (result?.IsSuccess == true)
+        await NotesHelper.CreateNoteAsync(
+            note,
+            NotesApi.CreateNoteAsync,
+            () =>
             {
                 // Increment refresh key to force NotesPanel to reload
                 if (notesPanelRefreshKeys.ContainsKey(profileId))
@@ -2021,14 +1645,8 @@
                 {
                     notesPanelRefreshKeys[profileId] = 1;
                 }
-
-                await InvokeAsync(StateHasChanged);
-            }
-        }
-        catch (Exception)
-        {
-            // Silently fail - note creation is optional
-        }
+                InvokeAsync(StateHasChanged);
+            });
     }
 
     private int? GetServiceAreaForProfile(int profileId)
@@ -2162,44 +1780,27 @@
 
     private async Task OpenCreateDialog()
     {
-        var parameters = new DialogParameters<CreateEntityDialog<CommissionerProfile>>
+        var createdProfile = await CreateDialogHelper.OpenCreateDialogAsync(
+            DialogService,
+            "Commissioner Profile",
+            "Create a new commissioner profile record. All fields marked with * are required.",
+            CreateCommissionerProfile,
+            GetCommissionerProfileFormContent(),
+            autoSetModifiedBy: true,
+            dialogTitle: "Create New {0}",
+            initialEntity: GetInitialCommissionerProfile());
+
+        if (createdProfile != null)
         {
-            { x => x.EntityDisplayName, "Commissioner Profile" },
-            { x => x.Description, "Create a new commissioner profile record. All fields marked with * are required." },
-            { x => x.OnCreate, new Func<CommissionerProfile, Task<(bool, string?, string[]?)>>(CreateCommissionerProfile) },
-            { x => x.AutoSetModifiedBy, true },
-            { x => x.FormContent, GetCommissionerProfileFormContent() },
-            { x => x.InitialEntity, GetInitialCommissionerProfile() }
-        };
-
-        var options = new DialogOptions 
-        { 
-            CloseButton = true, 
-            MaxWidth = MaxWidth.Large, 
-            FullWidth = true,
-            CloseOnEscapeKey = true
-        };
-
-        var dialog = await DialogService.ShowAsync<CreateEntityDialog<CommissionerProfile>>("Create New Commissioner Profile", parameters, options);
-        var result = await dialog.Result;
-
-        if (!result.Canceled && result.Data is CommissionerProfile createdProfile)
-        {
-            // Reload commissioner profiles to include the new one
             await LoadCommissionerProfiles();
 
-            // Get the person profile for this commissioner
             var person = personProfiles?.FirstOrDefault(p => p.Id == createdProfile.PersonProfileId);
             if (person != null)
             {
                 selectedPerson = person;
                 selectedCommissioner = GetMostRecentCommissionerProfile(person.Id);
-
                 await LoadAllVersions();
-
-                // Update URL
-                var uri = NavigationManager.GetUriWithQueryParameter("id", person.Id);
-                NavigationManager.NavigateTo(uri, replace: true);
+                NavigationHelper.UpdateUrlWithSelection(NavigationManager, person.Id);
             }
 
             successMessage = $"Commissioner profile for '{GetPersonName(createdProfile.PersonProfileId)}' created successfully!";
