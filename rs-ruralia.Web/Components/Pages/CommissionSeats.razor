@@ -56,7 +56,7 @@
         <TemplateColumn T="ServiceArea" Title="Total Seats" Sortable="true">
             <CellTemplate>
                 @{
-                    var seatCount = GetSeatsForServiceArea(context.Item.Id)?.Count() ?? 0;
+                    var seatCount = GetNonUknSeatsForServiceArea(context.Item.Id)?.Count() ?? 0;
                 }
                 <MudText Typo="Typo.body2">@seatCount</MudText>
             </CellTemplate>
@@ -98,9 +98,16 @@
                     var seatType = commissionSeatTypes?.FirstOrDefault(t => t.Id == seat.CommissionSeatTypeId);
                     var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == seat.CommissionSeatClassId);
                     var seatStatus = commissionSeatStatuses?.FirstOrDefault(s => s.Id == seat.CommissionSeatStatusId);
+                    var isUkn = seatClass?.Class?.Equals("UKN", StringComparison.OrdinalIgnoreCase) == true;
                     var isVacant = IsSeatVacant(seat.Id);
                     var isBecomingVacant = IsSeatBecomingVacant(seat.Id);
                     var isFirstSeat = allSeatsForServiceArea.First() == seat;
+
+                    // Skip UKN seats in Public view
+                    if (isUkn && !ViewModeService.IsAtLeast(ViewMode.Admin))
+                    {
+                        continue;
+                    }
 
                     <SectionPanel @key="seat.Id"
                                  Title="@($"{seatType?.Type} - {seatClass?.Class}")"
@@ -660,20 +667,51 @@
     {
         if (selectedServiceArea == null) return;
 
-        // Get all seats for this service area, ordered by type and class
-        allSeatsForServiceArea = commissionSeats?
+        // Get all seats for this service area
+        var seats = commissionSeats?
             .Where(s => s.ServiceAreaId == selectedServiceArea.Id)
-            .OrderBy(s =>
-            {
-                var seatType = commissionSeatTypes?.FirstOrDefault(t => t.Id == s.CommissionSeatTypeId);
-                return seatType?.Type ?? string.Empty;
-            })
-            .ThenBy(s =>
+            .ToList();
+
+        if (seats != null)
+        {
+            // Separate UKN seats from others
+            var nonUknSeats = seats.Where(s =>
             {
                 var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == s.CommissionSeatClassId);
-                return seatClass?.Class ?? string.Empty;
-            })
-            .ToList();
+                return seatClass?.Class?.Equals("UKN", StringComparison.OrdinalIgnoreCase) != true;
+            });
+
+            var uknSeats = seats.Where(s =>
+            {
+                var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == s.CommissionSeatClassId);
+                return seatClass?.Class?.Equals("UKN", StringComparison.OrdinalIgnoreCase) == true;
+            });
+
+            // Order non-UKN seats by CommissionSeatTypeId
+            var orderedNonUkn = nonUknSeats
+                .OrderBy(s => s.CommissionSeatTypeId)
+                .ThenBy(s =>
+                {
+                    var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == s.CommissionSeatClassId);
+                    return seatClass?.Class ?? string.Empty;
+                });
+
+            // Order UKN seats by CommissionSeatTypeId
+            var orderedUkn = uknSeats
+                .OrderBy(s => s.CommissionSeatTypeId)
+                .ThenBy(s =>
+                {
+                    var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == s.CommissionSeatClassId);
+                    return seatClass?.Class ?? string.Empty;
+                });
+
+            // Combine: non-UKN first, then UKN at bottom
+            allSeatsForServiceArea = orderedNonUkn.Concat(orderedUkn).ToList();
+        }
+        else
+        {
+            allSeatsForServiceArea = null;
+        }
 
         // Clear caches
         seatVersionCache.Clear();
@@ -684,6 +722,18 @@
     private IEnumerable<CommissionSeat>? GetSeatsForServiceArea(int serviceAreaId)
     {
         return commissionSeats?.Where(s => s.ServiceAreaId == serviceAreaId);
+    }
+
+    private IEnumerable<CommissionSeat>? GetNonUknSeatsForServiceArea(int serviceAreaId)
+    {
+        var seats = GetSeatsForServiceArea(serviceAreaId);
+        if (seats == null) return null;
+
+        return seats.Where(s =>
+        {
+            var seatClass = commissionSeatClasses?.FirstOrDefault(c => c.Id == s.CommissionSeatClassId);
+            return seatClass?.Class?.Equals("UKN", StringComparison.OrdinalIgnoreCase) != true;
+        });
     }
 
     private int GetVacantSeatsCount(int serviceAreaId)
