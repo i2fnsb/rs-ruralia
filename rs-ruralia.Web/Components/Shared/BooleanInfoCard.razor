@@ -1,0 +1,68 @@
+@typeparam TModel
+@* Reusable InfoCard specifically for boolean fields with Yes/No chip display *@
+
+<InfoCard TValue="bool?" 
+          TModel="TModel"
+          Label="@Label" 
+          Icon="@Icon"
+          PropertyExpression="@PropertyExpression">
+    <ValueContent>
+        @if (Value == true)
+        {
+            <MudChip T="string" 
+                    Size="Size.Small" 
+                    Color="@TrueColor" 
+                    Icon="@TrueIcon">
+                @TrueText
+            </MudChip>
+        }
+        else if (Value == false)
+        {
+            <MudChip T="string" 
+                    Size="Size.Small" 
+                    Color="@FalseColor" 
+                    Icon="@FalseIcon">
+                @FalseText
+            </MudChip>
+        }
+        else
+        {
+            <MudText>@NullText</MudText>
+        }
+    </ValueContent>
+</InfoCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public bool? Value { get; set; }
+
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public string Icon { get; set; } = Icons.Material.Filled.Info;
+
+    [Parameter, EditorRequired]
+    public System.Linq.Expressions.Expression<Func<TModel, object?>> PropertyExpression { get; set; } = default!;
+
+    [Parameter]
+    public string TrueText { get; set; } = "Yes";
+
+    [Parameter]
+    public string FalseText { get; set; } = "No";
+
+    [Parameter]
+    public string NullText { get; set; } = "—";
+
+    [Parameter]
+    public Color TrueColor { get; set; } = Color.Success;
+
+    [Parameter]
+    public Color FalseColor { get; set; } = Color.Default;
+
+    [Parameter]
+    public string TrueIcon { get; set; } = Icons.Material.Filled.Check;
+
+    [Parameter]
+    public string FalseIcon { get; set; } = Icons.Material.Filled.Close;
+}

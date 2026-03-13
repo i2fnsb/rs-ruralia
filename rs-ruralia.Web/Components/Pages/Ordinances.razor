@@ -78,63 +78,16 @@
                             <EditForm EditContext="@editContext" OnValidSubmit="SaveEdit">
                                 <DataAnnotationsValidator />
                                 <MudGrid>
-                                    <MudItem xs="12">
-                                        @if (canEdit && IsViewingCurrentVersion() && ViewModeService.IsAtLeast(ViewMode.Admin))
-                                        {
-                                            @if (isEditMode)
-                                            {
-                                                <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
-                                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@isSaving">
-                                                        @if (isSaving)
-                                                        {
-                                                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
-                                                            <MudText Class="ms-2">Saving...</MudText>
-                                                        }
-                                                        else
-                                                        {
-                                                            <MudIcon Icon="@Icons.Material.Filled.Save" Class="me-1" /> <MudText>Save</MudText>
-                                                        }
-                                                    </MudButton>
-                                                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="CancelEdit" Disabled="@isSaving">
-                                                        Cancel
-                                                    </MudButton>
-                                                </MudStack>
-                                            }
-                                            else
-                                            {
-                                                <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
-                                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="EnableEdit">
-                                                        <MudIcon Icon="@Icons.Material.Filled.Edit" Class="me-1" /> Edit
-                                                    </MudButton>
-                                                </MudStack>
-                                            }
-                                        }
-                                    </MudItem>
-
-                                    @if (!string.IsNullOrEmpty(successMessage))
+                                    @if (canEdit && IsViewingCurrentVersion() && ViewModeService.IsAtLeast(ViewMode.Admin) && isEditMode)
                                     {
                                         <MudItem xs="12">
-                                            <MudAlert Severity="Severity.Success" Variant="Variant.Filled">@successMessage</MudAlert>
+                                            <SaveCancelButtons IsSaving="@isSaving" OnCancel="@CancelEdit" />
                                         </MudItem>
                                     }
 
-                                    @if (!string.IsNullOrEmpty(errorMessage))
-                                    {
-                                        <MudItem xs="12">
-                                            <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
-                                                <MudText>@errorMessage</MudText>
-                                                @if (errorDetails != null && errorDetails.Length > 0)
-                                                {
-                                                    <MudList T="string" Dense="true">
-                                                        @foreach (var detail in errorDetails)
-                                                        {
-                                                            <MudListItem>@detail</MudListItem>
-                                                        }
-                                                    </MudList>
-                                                }
-                                            </MudAlert>
-                                        </MudItem>
-                                    }
+                                    <AlertMessages SuccessMessage="@successMessage" 
+                                                  ErrorMessage="@errorMessage" 
+                                                  ErrorDetails="@errorDetails" />
 
                                     <MudItem xs="12" md="6">
                                         <AutoField @bind-Value="editModel.OrdinanceName" 
@@ -260,25 +213,12 @@
                             </MudItem>
 
                             <MudItem xs="12" md="6">
-                                <InfoCard TValue="bool?" TModel="Ordinance"
-                                         Label="Ordinance Passed" 
-                                         Icon="@Icons.Material.Filled.HowToVote"
-                                         PropertyExpression="@(x => x.OrdinancePassed)">
-                                    <ValueContent>
-                                        @if (version.OrdinancePassed == true)
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Yes</MudChip>
-                                        }
-                                        else if (version.OrdinancePassed == false)
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Close">No</MudChip>
-                                        }
-                                        else
-                                        {
-                                            <MudText>—</MudText>
-                                        }
-                                    </ValueContent>
-                                </InfoCard>
+                                <BooleanInfoCard TModel="Ordinance"
+                                               Value="@version.OrdinancePassed"
+                                               Label="Ordinance Passed" 
+                                               Icon="@Icons.Material.Filled.HowToVote"
+                                               FalseColor="Color.Error"
+                                               PropertyExpression="@(x => x.OrdinancePassed)" />
                             </MudItem>
 
                             <MudItem xs="12" md="6">
@@ -391,10 +331,7 @@
 
     private void HandleEditModeCancelled()
     {
-        if (isEditMode)
-        {
-            CancelEdit();
-        }
+        EntityPageHelper.HandleEditModeCancelled(isEditMode, CancelEdit);
     }
 
     private void SelectOrdinanceFromParameters()
@@ -416,81 +353,27 @@
     private async Task LoadOrdinances()
     {
         isLoading = true;
-        errorMessage = null;
-        errorDetails = null;
-        successMessage = null;
+        ClearMessages();
 
-        try
-        {
-            var result = await OrdinancesApi.GetAllOrdinancesAsync();
+        ordinances = await DataLoaderHelper.LoadDataWithErrorHandlingAsync(
+            () => OrdinancesApi.GetAllOrdinancesAsync(),
+            onError: (error, errors) =>
+            {
+                errorMessage = error ?? "Failed to load ordinances";
+                errorDetails = errors;
+            });
 
-            if (result?.IsSuccess == true && result.Data != null)
-            {
-                ordinances = result.Data;
-            }
-            else
-            {
-                errorMessage = result?.ErrorMessage ?? "Failed to load ordinances";
-                errorDetails = result?.Errors;
-                ordinances = Array.Empty<Ordinance>();
-            }
-        }
-        catch (HttpRequestException ex)
-        {
-            errorMessage = "Network error. Please check your connection and try again.";
-            ordinances = Array.Empty<Ordinance>();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Unexpected error: {ex.Message}";
-            ordinances = Array.Empty<Ordinance>();
-        }
-        finally
-        {
-            isLoading = false;
-        }
+        isLoading = false;
     }
 
     private async Task LoadOrdinanceTypes()
     {
-        try
-        {
-            var result = await OrdinanceTypesApi.GetAllOrdinanceTypesAsync();
-
-            if (result?.IsSuccess == true && result.Data != null)
-            {
-                ordinanceTypes = result.Data;
-            }
-            else
-            {
-                ordinanceTypes = Array.Empty<OrdinanceType>();
-            }
-        }
-        catch (Exception)
-        {
-            ordinanceTypes = Array.Empty<OrdinanceType>();
-        }
+        ordinanceTypes = await DataLoaderHelper.LoadDataAsync(() => OrdinanceTypesApi.GetAllOrdinanceTypesAsync());
     }
 
     private async Task LoadServiceAreas()
     {
-        try
-        {
-            var result = await ServiceAreasApi.GetAllServiceAreasAsync();
-
-            if (result?.IsSuccess == true && result.Data != null)
-            {
-                serviceAreas = result.Data;
-            }
-            else
-            {
-                serviceAreas = Array.Empty<ServiceArea>();
-            }
-        }
-        catch (Exception)
-        {
-            serviceAreas = Array.Empty<ServiceArea>();
-        }
+        serviceAreas = await DataLoaderHelper.LoadDataAsync(() => ServiceAreasApi.GetAllServiceAreasAsync());
     }
 
     private async Task LoadAllVersions()
@@ -556,15 +439,12 @@
 
     private bool IsViewingCurrentVersion()
     {
-        if (currentViewVersion == null || selectedOrdinance == null)
-            return true;
-
-        return currentViewVersion.ValidFrom == selectedOrdinance.ValidFrom;
+        return EntityPageHelper.IsViewingCurrentVersion(currentViewVersion, selectedOrdinance, x => x.ValidFrom);
     }
 
     private bool CanEditFields()
     {
-        return isEditMode && IsViewingCurrentVersion();
+        return EntityPageHelper.CanEditFields(isEditMode, IsViewingCurrentVersion());
     }
 
     private async Task HandleItemClick(Ordinance item)
@@ -647,15 +527,10 @@
 
         try
         {
-            // Get the authenticated user's email for ModifiedBy
-            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var user = authState.User;
-            var userEmail = user.Identity?.Name ?? user.Claims.FirstOrDefault(c => c.Type.Contains("email"))?.Value;
-
-            if (!string.IsNullOrEmpty(userEmail))
-            {
-                editModel.ModifiedBy = userEmail;
-            }
+            var userEmail = await AuthenticationHelper.SetModifiedByAsync(
+                editModel,
+                AuthenticationStateProvider,
+                (entity, email) => entity.ModifiedBy = email);
 
             var result = await OrdinancesApi.UpdateOrdinanceAsync(editModel.Id, editModel);
 
@@ -704,9 +579,7 @@
 
     private void ClearMessages()
     {
-        errorMessage = null;
-        errorDetails = null;
-        successMessage = null;
+        EntityPageHelper.ClearMessages(ref errorMessage, ref errorDetails, ref successMessage);
     }
 
     private Ordinance CloneOrdinance(Ordinance source) => new()
@@ -758,50 +631,21 @@
 
     private async Task PromptForEditNote(int ordinanceId, string? userEmail)
     {
-        var parameters = new DialogParameters
-        {
-            { "EntityName", $"{selectedOrdinance?.OrdinanceName} ({selectedOrdinance?.OrdinanceYear})" }
-        };
-
-        var options = new DialogOptions 
-        { 
-            CloseButton = true, 
-            MaxWidth = MaxWidth.Medium, 
-            FullWidth = true 
-        };
-
-        var dialog = await DialogService.ShowAsync<AddEditNoteDialog>("Add Note About Changes", parameters, options);
-        var result = await dialog.Result;
-
-        if (!result.Canceled && result.Data is string noteText && !string.IsNullOrWhiteSpace(noteText))
-        {
-            await CreateEditNote(ordinanceId, noteText, userEmail);
-        }
+        await NotesHelper.PromptForEditNoteAsync(
+            DialogService,
+            $"{selectedOrdinance?.OrdinanceName} ({selectedOrdinance?.OrdinanceYear})",
+            OnNotesCountChanged,
+            async (id, text) => await CreateEditNote(id, text, userEmail),
+            ordinanceId,
+            userEmail);
     }
 
     private async Task CreateEditNote(int ordinanceId, string noteText, string? userEmail)
-    {
-        try
-        {
-            var note = new Note
-            {
-                NoteText = noteText,
-                OrdinanceId = ordinanceId,
-                ModifiedBy = userEmail ?? "Unknown User",
-                ValidFrom = DateTime.UtcNow
-            };
-
-            var result = await NotesApi.CreateNoteAsync(note);
-
-            if (result?.IsSuccess == true)
-            {
-                await InvokeAsync(StateHasChanged);
-            }
-        }
-        catch (Exception)
-        {
-            // Silently fail - note creation is optional
-        }
+    {    var note = NotesHelper.CreateOrdinanceNote(ordinanceId, noteText, userEmail);
+        await NotesHelper.CreateNoteAsync(
+            note,
+            NotesApi.CreateNoteAsync,
+            () => InvokeAsync(StateHasChanged));
     }
 
     private async Task OpenCreateDialog()
