@@ -123,4 +123,18 @@ public static class NotesHelper
             ValidFrom = DateTime.UtcNow
         };
     }
+
+    /// <summary>
+    /// Creates a note object for a commission seat entity
+    /// </summary>
+    public static Note CreateCommissionSeatNote(int commissionSeatId, string noteText, string? userEmail)
+    {
+        return new Note
+        {
+            NoteText = noteText,
+            CommissionSeatId = commissionSeatId,
+            ModifiedBy = userEmail ?? "Unknown User",
+            ValidFrom = DateTime.UtcNow
+        };
+    }
 }
